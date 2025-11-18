@@ -590,7 +590,29 @@ func Main() {
 	// Parse command line flags
 	serverURL := flag.String("server", "wss://localhost/ws", "Server WebSocket URL (use wss:// for HTTPS)")
 	autoStart := flag.Bool("autostart", false, "Enable auto-start on boot")
+	daemon := flag.Bool("daemon", false, "Run as background daemon/service")
 	flag.Parse()
+
+	// Run as daemon if requested
+	if *daemon && !IsDaemon() {
+		log.Println("Starting as background daemon...")
+		if err := Daemonize(); err != nil {
+			log.Fatalf("Failed to daemonize: %v", err)
+		}
+		// Daemonize() exits the parent process, so this won't be reached
+		return
+	}
+
+	// If running as daemon, set environment variable for detection
+	if *daemon {
+		os.Setenv("DAEMON_MODE", "1")
+		// Redirect logs to a file when running as daemon
+		logFile, err := os.OpenFile("client.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+		if err == nil {
+			log.SetOutput(logFile)
+			defer logFile.Close()
+		}
+	}
 
 	// Generate machine ID automatically
 	idGen := NewMachineIDGenerator()

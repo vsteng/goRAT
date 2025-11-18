@@ -24,6 +24,7 @@ var upgrader = websocket.Upgrader{
 // Server represents the main server
 type Server struct {
 	manager           *ClientManager
+	store             *ClientStore
 	config            *Config
 	authenticator     *Authenticator
 	webHandler        *WebHandler
@@ -51,6 +52,12 @@ func NewServer(config *Config) *Server {
 	sessionMgr := NewSessionManager(24 * time.Hour)
 	terminalProxy := NewTerminalProxy(manager, sessionMgr)
 
+	// Initialize client store
+	store, err := NewClientStore("clients.db")
+	if err != nil {
+		log.Fatalf("Failed to create client store: %v", err)
+	}
+
 	webConfig := &WebConfig{
 		Username: config.WebUsername,
 		Password: config.WebPassword,
@@ -63,6 +70,7 @@ func NewServer(config *Config) *Server {
 
 	server := &Server{
 		manager:           manager,
+		store:             store,
 		config:            config,
 		authenticator:     NewAuthenticator(config.AuthToken),
 		webHandler:        webHandler,
@@ -75,12 +83,21 @@ func NewServer(config *Config) *Server {
 	// Set server reference in web handler
 	webHandler.server = server
 
+	// Set store reference in manager for merged client list
+	manager.SetStore(store)
+
 	return server
 }
 
 // Start starts the server
 func (s *Server) Start() error {
 	go s.manager.Run()
+
+	// Start background task to mark offline clients
+	go s.monitorClientStatus()
+
+	// Load previously saved clients from database
+	go s.loadSavedClients()
 
 	mux := http.NewServeMux()
 
@@ -473,4 +490,41 @@ func (s *Server) ClearScreenshotResult(clientID string) {
 	s.resultsMu.Lock()
 	defer s.resultsMu.Unlock()
 	delete(s.screenshotResults, clientID)
+}
+
+// monitorClientStatus monitors client status and updates database
+func (s *Server) monitorClientStatus() {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		// Save all currently connected clients to database
+		clients := s.manager.GetClients()
+		for _, metadata := range clients {
+			if err := s.store.SaveClient(metadata); err != nil {
+				log.Printf("Error saving client %s: %v", metadata.ID, err)
+			}
+		}
+
+		// Mark clients as offline if not seen recently (2 minutes)
+		if err := s.store.MarkOffline(2 * time.Minute); err != nil {
+			log.Printf("Error marking offline clients: %v", err)
+		}
+	}
+}
+
+// loadSavedClients loads previously saved clients from database on startup
+func (s *Server) loadSavedClients() {
+	log.Println("Loading saved clients from database...")
+	clients, err := s.store.GetAllClients()
+	if err != nil {
+		log.Printf("Error loading saved clients: %v", err)
+		return
+	}
+
+	log.Printf("Loaded %d clients from database", len(clients))
+	for _, client := range clients {
+		log.Printf("  - %s (%s) - %s - Last seen: %s",
+			client.ID, client.Hostname, client.Status, client.LastSeen.Format(time.RFC3339))
+	}
 }

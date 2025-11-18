@@ -25,6 +25,7 @@ type ClientManager struct {
 	register   chan *Client
 	unregister chan *Client
 	broadcast  chan *common.Message
+	store      *ClientStore // Reference to persistent storage
 	mu         sync.RWMutex
 }
 
@@ -36,6 +37,11 @@ func NewClientManager() *ClientManager {
 		unregister: make(chan *Client),
 		broadcast:  make(chan *common.Message, 256),
 	}
+}
+
+// SetStore sets the client store reference
+func (m *ClientManager) SetStore(store *ClientStore) {
+	m.store = store
 }
 
 // Run starts the client manager
@@ -150,13 +156,64 @@ func (m *ClientManager) IsClientIDRegistered(clientID string) bool {
 // GetClients returns metadata for all connected clients
 func (m *ClientManager) GetClients() []*common.ClientMetadata {
 	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	metadata := make([]*common.ClientMetadata, 0, len(m.clients))
+	connectedClients := make(map[string]*common.ClientMetadata)
 	for _, client := range m.clients {
 		client.mu.RLock()
-		metadata = append(metadata, client.Metadata)
+		connectedClients[client.ID] = client.Metadata
 		client.mu.RUnlock()
 	}
+	m.mu.RUnlock()
+
+	// If we have a store, merge with saved clients
+	if m.store != nil {
+		savedClients, err := m.store.GetAllClients()
+		if err == nil {
+			// Create a map to merge clients
+			allClients := make(map[string]*common.ClientMetadata)
+
+			// First add all saved clients
+			for _, saved := range savedClients {
+				allClients[saved.ID] = saved
+			}
+
+			// Override with connected clients (they have latest data)
+			for id, connected := range connectedClients {
+				allClients[id] = connected
+			}
+
+			// Convert to slice and sort by last_seen (most recent first)
+			metadata := make([]*common.ClientMetadata, 0, len(allClients))
+			for _, client := range allClients {
+				metadata = append(metadata, client)
+			}
+
+			// Sort by last_seen descending
+			sortClientsByLastSeen(metadata)
+
+			return metadata
+		}
+	}
+
+	// Fallback: return only connected clients
+	metadata := make([]*common.ClientMetadata, 0, len(connectedClients))
+	for _, client := range connectedClients {
+		metadata = append(metadata, client)
+	}
+
+	// Sort by last_seen descending
+	sortClientsByLastSeen(metadata)
+
 	return metadata
+}
+
+// sortClientsByLastSeen sorts clients by last_seen in descending order
+func sortClientsByLastSeen(clients []*common.ClientMetadata) {
+	// Simple bubble sort for small datasets
+	for i := 0; i < len(clients); i++ {
+		for j := i + 1; j < len(clients); j++ {
+			if clients[i].LastSeen.Before(clients[j].LastSeen) {
+				clients[i], clients[j] = clients[j], clients[i]
+			}
+		}
+	}
 }
