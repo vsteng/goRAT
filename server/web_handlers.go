@@ -330,6 +330,112 @@ func (wh *WebHandler) HandleFileDownload(w http.ResponseWriter, r *http.Request)
 	json.NewEncoder(w).Encode(map[string]string{"status": "download_initiated"})
 }
 
+// HandleGlobalUpdate handles global update requests for all clients
+func (wh *WebHandler) HandleGlobalUpdate(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Version  string            `json:"version"`
+		URLs     map[string]string `json:"urls"`      // platform -> URL mapping
+		Checksum map[string]string `json:"checksums"` // platform -> checksum mapping
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request", http.StatusBadRequest)
+		return
+	}
+
+	// Validate inputs
+	if req.Version == "" {
+		http.Error(w, "Version is required", http.StatusBadRequest)
+		return
+	}
+
+	if len(req.URLs) == 0 {
+		http.Error(w, "At least one platform URL is required", http.StatusBadRequest)
+		return
+	}
+
+	log.Printf("Global update initiated: version=%s, platforms=%d", req.Version, len(req.URLs))
+
+	// Get all online clients
+	clients := wh.clientMgr.GetClients()
+	onlineClients := []*common.ClientMetadata{}
+	for _, client := range clients {
+		if client.Status == "online" {
+			onlineClients = append(onlineClients, client)
+		}
+	}
+
+	if len(onlineClients) == 0 {
+		http.Error(w, "No online clients to update", http.StatusBadRequest)
+		return
+	}
+
+	// Send platform-specific update to each client
+	successCount := 0
+	failCount := 0
+	skippedCount := 0
+	platformStats := make(map[string]int)
+
+	for _, client := range onlineClients {
+		// Build platform identifier (e.g., "windows/amd64", "linux/amd64")
+		platform := client.OS + "/" + client.Arch
+		platformStats[platform]++
+
+		// Get URL for this platform
+		downloadURL, hasURL := req.URLs[platform]
+		if !hasURL {
+			log.Printf("No URL provided for platform %s, skipping client %s", platform, client.ID)
+			skippedCount++
+			continue
+		}
+
+		// Get checksum for this platform (optional)
+		checksum := ""
+		if req.Checksum != nil {
+			checksum = req.Checksum[platform]
+		}
+
+		// Create platform-specific update payload
+		updatePayload := common.UpdatePayload{
+			Version:     req.Version,
+			DownloadURL: downloadURL,
+			Checksum:    checksum,
+		}
+
+		msg, err := common.NewMessage(common.MsgTypeUpdate, updatePayload)
+		if err != nil {
+			log.Printf("Failed to create message for client %s: %v", client.ID, err)
+			failCount++
+			continue
+		}
+
+		if err := wh.clientMgr.SendToClient(client.ID, msg); err != nil {
+			log.Printf("Failed to send update to client %s (%s): %v", client.ID, platform, err)
+			failCount++
+		} else {
+			log.Printf("Update sent to client %s (%s)", client.ID, platform)
+			successCount++
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"status":         "success",
+		"total_clients":  len(onlineClients),
+		"success_count":  successCount,
+		"fail_count":     failCount,
+		"skipped_count":  skippedCount,
+		"version":        req.Version,
+		"platform_stats": platformStats,
+		"message":        "Update command sent to online clients",
+	})
+}
+
 // RegisterWebRoutes registers all web UI routes
 func (wh *WebHandler) RegisterWebRoutes(mux *http.ServeMux) {
 	// Public routes
@@ -351,4 +457,5 @@ func (wh *WebHandler) RegisterWebRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/files/browse", wh.requireAuth(wh.HandleFileBrowse))
 	mux.HandleFunc("/api/files/download", wh.requireAuth(wh.HandleFileDownload))
 	mux.HandleFunc("/api/screenshot", wh.requireAuth(wh.HandleScreenshotRequest))
+	mux.HandleFunc("/api/update/global", wh.requireAuth(wh.HandleGlobalUpdate))
 }

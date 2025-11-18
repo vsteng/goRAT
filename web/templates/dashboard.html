@@ -138,6 +138,95 @@
         .refresh-btn:hover {
             background: #138496;
         }
+        .update-section {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            padding: 30px;
+            margin-bottom: 30px;
+        }
+        .update-section h2 {
+            margin-bottom: 20px;
+            color: #333;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            color: #555;
+            font-weight: 500;
+        }
+        .form-group input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        .form-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        .update-btn {
+            background: #e74c3c;
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            margin-top: 10px;
+        }
+        .update-btn:hover {
+            background: #c0392b;
+        }
+        .update-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .info-text {
+            color: #888;
+            font-size: 13px;
+            margin-top: 5px;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 9999;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal.active {
+            display: flex;
+        }
+        .modal-content {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            max-width: 500px;
+            width: 90%;
+        }
+        .modal-content h3 {
+            margin-top: 0;
+            color: #333;
+        }
+        .modal-close {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 15px;
+        }
     </style>
 </head>
 <body>
@@ -160,6 +249,75 @@
                 <div class="value" id="offlineClients">0</div>
             </div>
         </div>
+        
+        <div class="update-section">
+            <h2>🔄 Global Client Update</h2>
+            <p class="info-text">Push platform-specific updates to all online clients. URLs must use HTTPS.</p>
+            <div class="form-group">
+                <label for="updateVersion">Version</label>
+                <input type="text" id="updateVersion" placeholder="e.g., 1.0.1" />
+            </div>
+            
+            <h3 style="margin-top: 20px; margin-bottom: 10px; font-size: 16px;">Platform-Specific URLs</h3>
+            
+            <div class="form-group">
+                <label for="urlWindowsAmd64">Windows AMD64 (64-bit)</label>
+                <input type="url" id="urlWindowsAmd64" placeholder="https://example.com/client-windows-amd64.exe" />
+            </div>
+            <div class="form-group">
+                <label for="checksumWindowsAmd64">SHA-256 Checksum (Optional)</label>
+                <input type="text" id="checksumWindowsAmd64" placeholder="64-character hex string" />
+            </div>
+            
+            <div class="form-group">
+                <label for="urlWindows386">Windows 386 (32-bit)</label>
+                <input type="url" id="urlWindows386" placeholder="https://example.com/client-windows-386.exe" />
+            </div>
+            <div class="form-group">
+                <label for="checksumWindows386">SHA-256 Checksum (Optional)</label>
+                <input type="text" id="checksumWindows386" placeholder="64-character hex string" />
+            </div>
+            
+            <div class="form-group">
+                <label for="urlLinuxAmd64">Linux AMD64 (64-bit)</label>
+                <input type="url" id="urlLinuxAmd64" placeholder="https://example.com/client-linux-amd64" />
+            </div>
+            <div class="form-group">
+                <label for="checksumLinuxAmd64">SHA-256 Checksum (Optional)</label>
+                <input type="text" id="checksumLinuxAmd64" placeholder="64-character hex string" />
+            </div>
+            
+            <div class="form-group">
+                <label for="urlLinux386">Linux 386 (32-bit)</label>
+                <input type="url" id="urlLinux386" placeholder="https://example.com/client-linux-386" />
+            </div>
+            <div class="form-group">
+                <label for="checksumLinux386">SHA-256 Checksum (Optional)</label>
+                <input type="text" id="checksumLinux386" placeholder="64-character hex string" />
+            </div>
+            
+            <div class="form-group">
+                <label for="urlDarwinAmd64">macOS AMD64 (Intel)</label>
+                <input type="url" id="urlDarwinAmd64" placeholder="https://example.com/client-darwin-amd64" />
+            </div>
+            <div class="form-group">
+                <label for="checksumDarwinAmd64">SHA-256 Checksum (Optional)</label>
+                <input type="text" id="checksumDarwinAmd64" placeholder="64-character hex string" />
+            </div>
+            
+            <div class="form-group">
+                <label for="urlDarwinArm64">macOS ARM64 (Apple Silicon)</label>
+                <input type="url" id="urlDarwinArm64" placeholder="https://example.com/client-darwin-arm64" />
+            </div>
+            <div class="form-group">
+                <label for="checksumDarwinArm64">SHA-256 Checksum (Optional)</label>
+                <input type="text" id="checksumDarwinArm64" placeholder="64-character hex string" />
+            </div>
+            
+            <p class="info-text" style="margin-top: 15px;">Only platforms with URLs will be updated. Empty fields will be skipped.</p>
+            <button class="update-btn" onclick="pushGlobalUpdate()">📤 Push Update to All Clients</button>
+        </div>
+        
         <div class="clients-section">
             <h2>Connected Clients</h2>
             <button class="refresh-btn" onclick="loadClients()">🔄 Refresh</button>
@@ -186,6 +344,15 @@
             </table>
         </div>
     </div>
+    
+    <div id="updateModal" class="modal">
+        <div class="modal-content">
+            <h3 id="modalTitle">Update Status</h3>
+            <p id="modalMessage"></p>
+            <button class="modal-close" onclick="closeModal()">Close</button>
+        </div>
+    </div>
+    
     <script>
         async function loadClients() {
             try {
@@ -329,6 +496,138 @@
             if (!dateStr) return 'N/A';
             const date = new Date(dateStr);
             return date.toLocaleString();
+        }
+        
+        async function pushGlobalUpdate() {
+            const version = document.getElementById('updateVersion').value.trim();
+            
+            // Validation
+            if (!version) {
+                showModal('Validation Error', 'Please enter a version number');
+                return;
+            }
+            
+            // Collect platform URLs and checksums
+            const platforms = [
+                { key: 'windows/amd64', url: 'urlWindowsAmd64', checksum: 'checksumWindowsAmd64', name: 'Windows AMD64' },
+                { key: 'windows/386', url: 'urlWindows386', checksum: 'checksumWindows386', name: 'Windows 386' },
+                { key: 'linux/amd64', url: 'urlLinuxAmd64', checksum: 'checksumLinuxAmd64', name: 'Linux AMD64' },
+                { key: 'linux/386', url: 'urlLinux386', checksum: 'checksumLinux386', name: 'Linux 386' },
+                { key: 'darwin/amd64', url: 'urlDarwinAmd64', checksum: 'checksumDarwinAmd64', name: 'macOS AMD64' },
+                { key: 'darwin/arm64', url: 'urlDarwinArm64', checksum: 'checksumDarwinArm64', name: 'macOS ARM64' }
+            ];
+            
+            const urls = {};
+            const checksums = {};
+            const providedPlatforms = [];
+            
+            for (const platform of platforms) {
+                const url = document.getElementById(platform.url).value.trim();
+                const checksum = document.getElementById(platform.checksum).value.trim();
+                
+                if (url) {
+                    // Validate HTTPS
+                    if (!url.startsWith('https://')) {
+                        showModal('Validation Error', `${platform.name} URL must use HTTPS for security`);
+                        return;
+                    }
+                    
+                    urls[platform.key] = url;
+                    providedPlatforms.push(platform.name);
+                    
+                    // Validate checksum if provided
+                    if (checksum) {
+                        if (!/^[a-fA-F0-9]{64}$/.test(checksum)) {
+                            showModal('Validation Error', `${platform.name} checksum must be a 64-character hexadecimal string (SHA-256)`);
+                            return;
+                        }
+                        checksums[platform.key] = checksum;
+                    }
+                }
+            }
+            
+            // Check if at least one platform URL is provided
+            if (Object.keys(urls).length === 0) {
+                showModal('Validation Error', 'Please provide at least one platform URL');
+                return;
+            }
+            
+            // Confirmation
+            const onlineCount = parseInt(document.getElementById('onlineClients').textContent);
+            if (onlineCount === 0) {
+                showModal('No Clients', 'There are no online clients to update');
+                return;
+            }
+            
+            const platformList = providedPlatforms.join(', ');
+            if (!confirm(`This will push version ${version} to online clients.\n\nPlatforms: ${platformList}\n\nContinue?`)) {
+                return;
+            }
+            
+            // Disable button
+            const btn = event.target;
+            btn.disabled = true;
+            btn.textContent = 'Pushing update...';
+            
+            try {
+                const response = await fetch('/api/update/global', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        version: version,
+                        urls: urls,
+                        checksums: Object.keys(checksums).length > 0 ? checksums : null
+                    })
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    
+                    let platformStatsText = '';
+                    if (result.platform_stats) {
+                        platformStatsText = '\\n\\nPlatform breakdown:\\n';
+                        for (const [platform, count] of Object.entries(result.platform_stats)) {
+                            platformStatsText += `  ${platform}: ${count} client(s)\\n`;
+                        }
+                    }
+                    
+                    showModal(
+                        'Update Sent Successfully',
+                        `Update command sent to ${result.success_count} of ${result.total_clients} online clients.\\n` +
+                        `Version: ${result.version}\\n` +
+                        (result.skipped_count > 0 ? `Skipped: ${result.skipped_count} (no URL for platform)\\n` : '') +
+                        (result.fail_count > 0 ? `Failed: ${result.fail_count} clients\\n` : '') +
+                        platformStatsText
+                    );
+                    
+                    // Clear form
+                    document.getElementById('updateVersion').value = '';
+                    for (const platform of platforms) {
+                        document.getElementById(platform.url).value = '';
+                        document.getElementById(platform.checksum).value = '';
+                    }
+                } else {
+                    const error = await response.text();
+                    showModal('Update Failed', error);
+                }
+            } catch (err) {
+                showModal('Error', 'Failed to send update: ' + err.message);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '📤 Push Update to All Clients';
+            }
+        }
+        
+        function showModal(title, message) {
+            document.getElementById('modalTitle').textContent = title;
+            document.getElementById('modalMessage').textContent = message;
+            document.getElementById('updateModal').classList.add('active');
+        }
+        
+        function closeModal() {
+            document.getElementById('updateModal').classList.remove('active');
         }
         
         // Load clients on page load

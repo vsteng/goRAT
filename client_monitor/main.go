@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"flag"
 	"log"
 	"os"
@@ -18,39 +17,23 @@ func main() {
 	checkInterval := flag.Duration("interval", 10*time.Second, "Health check interval")
 	restartDelay := flag.Duration("delay", 5*time.Second, "Delay between restarts")
 	maxRestarts := flag.Int("max-restarts", -1, "Maximum restart attempts (-1 for unlimited)")
-	configFile := flag.String("config", "", "Configuration file path")
 	flag.Parse()
 
-	var config *Config
+	// Get absolute path to client
+	absClientPath, err := filepath.Abs(*clientPath)
+	if err != nil {
+		log.Fatalf("Failed to get absolute path: %v", err)
+	}
 
-	// Load config from file if specified
-	if *configFile != "" {
-		file, err := os.ReadFile(*configFile)
-		if err != nil {
-			log.Fatalf("Failed to read config file: %v", err)
-		}
+	// Collect remaining args for client
+	clientArgs := flag.Args()
 
-		config = &Config{}
-		if err := json.Unmarshal(file, config); err != nil {
-			log.Fatalf("Failed to parse config file: %v", err)
-		}
-	} else {
-		// Get absolute path to client
-		absClientPath, err := filepath.Abs(*clientPath)
-		if err != nil {
-			log.Fatalf("Failed to get absolute path: %v", err)
-		}
-
-		// Collect remaining args for client
-		clientArgs := flag.Args()
-
-		config = &Config{
-			ClientPath:    absClientPath,
-			ClientArgs:    clientArgs,
-			CheckInterval: *checkInterval,
-			RestartDelay:  *restartDelay,
-			MaxRestarts:   *maxRestarts,
-		}
+	config := &Config{
+		ClientPath:    absClientPath,
+		ClientArgs:    clientArgs,
+		CheckInterval: *checkInterval,
+		RestartDelay:  *restartDelay,
+		MaxRestarts:   *maxRestarts,
 	}
 
 	log.Printf("Client Monitor Starting...")
