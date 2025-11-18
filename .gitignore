@@ -1,0 +1,118 @@
+# ---------------------------
+# Go Build Artifacts
+# ---------------------------
+bin/
+build/
+dist/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+
+# Go cache / temp files
+*.tmp
+*.temp
+*.out
+
+# ---------------------------
+# OS Specific
+# ---------------------------
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+desktop.ini
+
+# Linux
+*.swp
+*.swo
+
+# ---------------------------
+# Logs
+# ---------------------------
+*.log
+logs/
+client/logs/
+server/logs/
+client_monitor/logs/
+
+# ---------------------------
+# Client Data Files
+# ---------------------------
+
+# Screenshots captured by client
+client/screenshots/
+*.png
+*.jpg
+
+# Keylogger output
+client/keys/
+*.keylog
+*.keystrokes
+*.kbd
+
+# File browser temp outputs
+client/tmp/
+
+# ---------------------------
+# Auto-start scripts
+# ---------------------------
+
+# Windows startup shortcuts
+*.lnk
+
+# Linux systemd service files
+*.service
+
+# Generated updater/backup files
+client/update/
+client/backup/
+
+# ---------------------------
+# IDE / Editor files
+# ---------------------------
+# GoLand / JetBrains IDE
+.idea/
+*.iml
+
+# VS Code
+.vscode/
+
+# Sublime
+*.sublime-workspace
+*.sublime-project
+
+# ---------------------------
+# Module / Dependencies
+# ---------------------------
+vendor/
+go.sum
+
+# ---------------------------
+# Security (avoid accidental commit)
+# ---------------------------
+# Any config files containing secrets, tokens, or certificates
+config.json
+*.pem
+*.crt
+*.key
+*.pfx
+*.cert
+
+# Client auth tokens
+client/auth/
+*.token
+
+# ---------------------------
+# Build scripts
+# ---------------------------
+*.sh
+*.bat
+build.sh
+build.bat
+run.sh
+run.bat
+readme.txt

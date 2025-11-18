@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Terminal - {{.ClientID}}</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Courier New', monospace;
+            background: #1e1e1e;
+            color: #d4d4d4;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .header {
+            background: #2d2d30;
+            padding: 10px 20px;
+            border-bottom: 1px solid #3e3e42;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .header h1 {
+            font-size: 14px;
+            color: #cccccc;
+        }
+        .status {
+            font-size: 12px;
+            padding: 4px 10px;
+            border-radius: 3px;
+        }
+        .status.connected {
+            background: #14532d;
+            color: #4ade80;
+        }
+        .status.disconnected {
+            background: #7f1d1d;
+            color: #f87171;
+        }
+        #terminal {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+        .output-line {
+            margin: 2px 0;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        .error {
+            color: #f48771;
+        }
+        .success {
+            color: #89d185;
+        }
+        .info {
+            color: #75beff;
+        }
+        .input-container {
+            background: #2d2d30;
+            border-top: 1px solid #3e3e42;
+            padding: 10px 20px;
+            display: flex;
+            align-items: center;
+        }
+        .prompt {
+            color: #89d185;
+            margin-right: 10px;
+        }
+        #commandInput {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: #d4d4d4;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            outline: none;
+        }
+        .toolbar {
+            background: #2d2d30;
+            padding: 8px 20px;
+            border-bottom: 1px solid #3e3e42;
+            display: flex;
+            gap: 10px;
+        }
+        .toolbar button {
+            background: #0e639c;
+            color: white;
+            border: none;
+            padding: 5px 12px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .toolbar button:hover {
+            background: #1177bb;
+        }
+        .toolbar button.danger {
+            background: #c72e2e;
+        }
+        .toolbar button.danger:hover {
+            background: #e03e3e;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Terminal: {{.ClientID}}</h1>
+        <span class="status connected" id="status">Connected</span>
+    </div>
+    <div class="toolbar">
+        <button onclick="clearTerminal()">Clear</button>
+        <button onclick="interruptCommand()" class="danger">Interrupt (Ctrl+C)</button>
+    </div>
+    <div id="terminal"></div>
+    <div class="input-container">
+        <span class="prompt">$</span>
+        <input type="text" id="commandInput" placeholder="Type a command..." autocomplete="off">
+    </div>
+    <script>
+        const clientId = '{{.ClientID}}';
+        const terminal = document.getElementById('terminal');
+        const commandInput = document.getElementById('commandInput');
+        const statusEl = document.getElementById('status');
+        let ws;
+        let commandHistory = [];
+        let historyIndex = -1;
+        
+        function connect() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/api/terminal?client=${encodeURIComponent(clientId)}`;
+            
+            ws = new WebSocket(wsUrl);
+            
+            ws.onopen = () => {
+                updateStatus('connected');
+                addOutput('Connected to terminal session', 'success');
+            };
+            
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                
+                if (data.type === 'output') {
+                    addOutput(data.data);
+                } else if (data.type === 'error') {
+                    addOutput(data.data, 'error');
+                } else if (data.type === 'exit') {
+                    addOutput(`Process exited with code ${data.code}`, 'info');
+                }
+            };
+            
+            ws.onerror = (error) => {
+                addOutput('WebSocket error occurred', 'error');
+                console.error('WebSocket error:', error);
+            };
+            
+            ws.onclose = () => {
+                updateStatus('disconnected');
+                addOutput('Disconnected from terminal session', 'error');
+                setTimeout(() => {
+                    addOutput('Attempting to reconnect...', 'info');
+                    connect();
+                }, 3000);
+            };
+        }
+        
+        function updateStatus(status) {
+            statusEl.className = `status ${status}`;
+            statusEl.textContent = status === 'connected' ? 'Connected' : 'Disconnected';
+        }
+        
+        function addOutput(text, className = '') {
+            const line = document.createElement('div');
+            line.className = `output-line ${className}`;
+            line.textContent = text;
+            terminal.appendChild(line);
+            terminal.scrollTop = terminal.scrollHeight;
+        }
+        
+        function sendCommand(command) {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                addOutput('Not connected to server', 'error');
+                return;
+            }
+            
+            addOutput(`$ ${command}`, 'info');
+            ws.send(JSON.stringify({
+                type: 'input',
+                data: command + '\n'
+            }));
+            
+            commandHistory.unshift(command);
+            if (commandHistory.length > 100) {
+                commandHistory.pop();
+            }
+            historyIndex = -1;
+        }
+        
+        function clearTerminal() {
+            terminal.innerHTML = '';
+        }
+        
+        function interruptCommand() {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                addOutput('Not connected to server', 'error');
+                return;
+            }
+            
+            ws.send(JSON.stringify({
+                type: 'interrupt'
+            }));
+            addOutput('^C', 'info');
+        }
+        
+        commandInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                const command = commandInput.value.trim();
+                if (command) {
+                    sendCommand(command);
+                    commandInput.value = '';
+                }
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                if (historyIndex < commandHistory.length - 1) {
+                    historyIndex++;
+                    commandInput.value = commandHistory[historyIndex];
+                }
+            } else if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                if (historyIndex > 0) {
+                    historyIndex--;
+                    commandInput.value = commandHistory[historyIndex];
+                } else {
+                    historyIndex = -1;
+                    commandInput.value = '';
+                }
+            }
+        });
+        
+        // Focus input on load
+        commandInput.focus();
+        
+        // Connect to WebSocket
+        connect();
+    </script>
+</body>
+</html>

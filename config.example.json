@@ -1,0 +1,22 @@
+{
+  "server": {
+    "address": ":8443",
+    "cert_file": "certs/server.crt",
+    "key_file": "certs/server.key",
+    "auth_token": "your-secret-token-change-this"
+  },
+  "client": {
+    "server_url": "wss://your-server:8443/ws",
+    "client_id": "client-001",
+    "auth_token": "your-secret-token-change-this",
+    "tls_skip_verify": false,
+    "auto_start": false
+  },
+  "monitor": {
+    "client_path": "/path/to/client",
+    "client_args": ["-config", "/path/to/client-config.json"],
+    "check_interval": "10s",
+    "restart_delay": "5s",
+    "max_restarts": -1
+  }
+}

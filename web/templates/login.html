@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Server Manager - Login</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        .login-container {
+            background: white;
+            padding: 40px;
+            border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            width: 100%;
+            max-width: 400px;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+            font-size: 28px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #555;
+            font-weight: 500;
+        }
+        input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e1e1e1;
+            border-radius: 5px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+        input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        button {
+            width: 100%;
+            padding: 12px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        button:hover {
+            transform: translateY(-2px);
+        }
+        .error {
+            background: #fee;
+            color: #c33;
+            padding: 12px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            display: none;
+        }
+        .error.show {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <h1>🔐 Server Manager</h1>
+        <div class="error" id="error"></div>
+        <form id="loginForm">
+            <div class="form-group">
+                <label for="username">Username</label>
+                <input type="text" id="username" name="username" required autocomplete="username">
+            </div>
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password" required autocomplete="current-password">
+            </div>
+            <button type="submit">Login</button>
+        </form>
+    </div>
+    <script>
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const error = document.getElementById('error');
+            error.classList.remove('show');
+            
+            const formData = new FormData(e.target);
+            const data = {
+                username: formData.get('username'),
+                password: formData.get('password')
+            };
+            
+            try {
+                const response = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                if (response.ok) {
+                    window.location.href = '/dashboard';
+                } else {
+                    const result = await response.json();
+                    error.textContent = result.error || 'Invalid credentials';
+                    error.classList.add('show');
+                }
+            } catch (err) {
+                error.textContent = 'Connection error. Please try again.';
+                error.classList.add('show');
+            }
+        });
+    </script>
+</body>
+</html>
