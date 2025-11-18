@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"flag"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"runtime"
@@ -170,17 +171,30 @@ func (c *Client) connect() error {
 	return nil
 }
 
+// getLocalIP gets the local IP address
+func (c *Client) getLocalIP() string {
+	conn, err := net.Dial("udp", "8.8.8.8:80")
+	if err != nil {
+		return ""
+	}
+	defer conn.Close()
+
+	localAddr := conn.LocalAddr().(*net.UDPAddr)
+	return localAddr.IP.String()
+}
+
 // authenticate performs authentication with the server
 func (c *Client) authenticate() error {
 	hostname, _ := os.Hostname()
+	localIP := c.getLocalIP()
 
 	authPayload := &common.AuthPayload{
 		ClientID: c.config.ClientID,
-		Token:    c.config.AuthToken,
+		Token:    c.config.ClientID, // Use machine ID as token
 		OS:       runtime.GOOS,
 		Arch:     runtime.GOARCH,
 		Hostname: hostname,
-		IP:       "", // Will be determined by server
+		IP:       localIP,
 	}
 
 	authMsg, err := common.NewMessage(common.MsgTypeAuth, authPayload)
@@ -575,7 +589,6 @@ func (c *Client) sendHeartbeat() {
 func Main() {
 	// Parse command line flags
 	serverURL := flag.String("server", "wss://localhost/ws", "Server WebSocket URL (use wss:// for HTTPS)")
-	authToken := flag.String("token", "your-secret-token", "Authentication token")
 	autoStart := flag.Bool("autostart", false, "Enable auto-start on boot")
 	flag.Parse()
 
@@ -587,11 +600,12 @@ func Main() {
 	}
 
 	log.Printf("Machine ID: %s", machineID)
+	log.Printf("Authentication: Using machine ID (no token required)")
 
 	config := &Config{
 		ServerURL: *serverURL,
 		ClientID:  machineID,
-		AuthToken: *authToken,
+		AuthToken: machineID, // Use machine ID as authentication
 		AutoStart: *autoStart,
 	}
 

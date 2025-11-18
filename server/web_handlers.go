@@ -6,6 +6,9 @@ import (
 	"log"
 	"net/http"
 	"path/filepath"
+	"time"
+
+	"mww2.com/server_manager/common"
 )
 
 // WebConfig holds web UI configuration
@@ -20,6 +23,7 @@ type WebHandler struct {
 	clientMgr  *ClientManager
 	config     *WebConfig
 	templates  *template.Template
+	server     *Server // Reference to main server for result access
 }
 
 // NewWebHandler creates a new web handler
@@ -177,6 +181,26 @@ func (wh *WebHandler) HandleTerminalPage(w http.ResponseWriter, r *http.Request)
 	}
 }
 
+// HandleFilesPage serves the file manager page
+func (wh *WebHandler) HandleFilesPage(w http.ResponseWriter, r *http.Request) {
+	clientID := r.URL.Query().Get("client")
+	if clientID == "" {
+		http.Error(w, "Client ID required", http.StatusBadRequest)
+		return
+	}
+
+	data := struct {
+		ClientID string
+	}{
+		ClientID: clientID,
+	}
+
+	if err := wh.templates.ExecuteTemplate(w, "files.html", data); err != nil {
+		log.Printf("Error rendering files template: %v", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+	}
+}
+
 // HandleClientsAPI returns the list of connected clients (protected by auth)
 func (wh *WebHandler) HandleClientsAPI(w http.ResponseWriter, r *http.Request) {
 	// Check authentication
@@ -200,6 +224,112 @@ func (wh *WebHandler) HandleClientsAPI(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(clients)
 }
 
+// HandleFileBrowse handles file browsing requests
+func (wh *WebHandler) HandleFileBrowse(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		ClientID string `json:"client_id"`
+		Path     string `json:"path"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request", http.StatusBadRequest)
+		return
+	}
+
+	// Get client
+	client, ok := wh.clientMgr.GetClient(req.ClientID)
+	if !ok || client == nil {
+		http.Error(w, "Client not found", http.StatusNotFound)
+		return
+	}
+
+	// Clear any previous result
+	wh.server.ClearFileListResult(req.ClientID)
+
+	// Send file browse request
+	msg, err := common.NewMessage(common.MsgTypeBrowseFiles, common.BrowseFilesPayload{
+		Path: req.Path,
+	})
+	if err != nil {
+		http.Error(w, "Failed to create message", http.StatusInternalServerError)
+		return
+	}
+
+	if err := wh.clientMgr.SendToClient(req.ClientID, msg); err != nil {
+		http.Error(w, "Failed to send request", http.StatusInternalServerError)
+		return
+	}
+
+	// Wait for response with timeout
+	timeout := time.After(30 * time.Second)
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-timeout:
+			http.Error(w, "Request timeout", http.StatusRequestTimeout)
+			return
+		case <-ticker.C:
+			if result, exists := wh.server.GetFileListResult(req.ClientID); exists {
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(result)
+				wh.server.ClearFileListResult(req.ClientID)
+				return
+			}
+		}
+	}
+}
+
+// HandleFileDownload handles file download requests
+func (wh *WebHandler) HandleFileDownload(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		ClientID string `json:"client_id"`
+		Path     string `json:"path"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request", http.StatusBadRequest)
+		return
+	}
+
+	// Get client
+	client, ok := wh.clientMgr.GetClient(req.ClientID)
+	if !ok || client == nil {
+		http.Error(w, "Client not found", http.StatusNotFound)
+		return
+	}
+
+	// Send file download request
+	msg, err := common.NewMessage(common.MsgTypeDownloadFile, common.FileDataPayload{
+		Path: req.Path,
+	})
+	if err != nil {
+		http.Error(w, "Failed to create message", http.StatusInternalServerError)
+		return
+	}
+
+	if err := wh.clientMgr.SendToClient(req.ClientID, msg); err != nil {
+		http.Error(w, "Failed to send request", http.StatusInternalServerError)
+		return
+	}
+
+	// Note: For file downloads, we'd need to implement a chunked response system
+	// For now, acknowledge the request was sent
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "download_initiated"})
+}
+
 // RegisterWebRoutes registers all web UI routes
 func (wh *WebHandler) RegisterWebRoutes(mux *http.ServeMux) {
 	// Public routes
@@ -217,4 +347,8 @@ func (wh *WebHandler) RegisterWebRoutes(mux *http.ServeMux) {
 	})
 	mux.HandleFunc("/dashboard", wh.requireAuth(wh.HandleDashboard))
 	mux.HandleFunc("/terminal", wh.requireAuth(wh.HandleTerminalPage))
+	mux.HandleFunc("/files", wh.requireAuth(wh.HandleFilesPage))
+	mux.HandleFunc("/api/files/browse", wh.requireAuth(wh.HandleFileBrowse))
+	mux.HandleFunc("/api/files/download", wh.requireAuth(wh.HandleFileDownload))
+	mux.HandleFunc("/api/screenshot", wh.requireAuth(wh.HandleScreenshotRequest))
 }
