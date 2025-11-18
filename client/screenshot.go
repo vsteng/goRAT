@@ -1,5 +1,5 @@
-//go:build !noscreenshot
-// +build !noscreenshot
+//go:build !windows && !noscreenshot
+// +build !windows,!noscreenshot
 
 package client
 

