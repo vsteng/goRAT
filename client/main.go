@@ -27,6 +27,7 @@ type Client struct {
 	conn          *websocket.Conn
 	authenticated bool
 	running       bool
+	instanceMgr   *InstanceManager
 
 	// Component handlers
 	commandExec *CommandExecutor
@@ -51,7 +52,7 @@ type Config struct {
 }
 
 // NewClient creates a new client instance
-func NewClient(config *Config) *Client {
+func NewClient(config *Config, instanceMgr *InstanceManager) *Client {
 	log.Printf("[DEBUG] NewClient: Starting client creation")
 	log.Printf("[DEBUG] NewClient: Creating terminal manager")
 	terminalMgr := NewTerminalManager()
@@ -81,6 +82,7 @@ func NewClient(config *Config) *Client {
 		terminalMgr: terminalMgr,
 		sendChan:    make(chan *common.Message, 256),
 		stopChan:    make(chan bool),
+		instanceMgr: instanceMgr,
 	}
 	log.Printf("[DEBUG] NewClient: Client created successfully")
 
@@ -110,6 +112,11 @@ func (c *Client) Start() error {
 	log.Printf("Starting client version %s", ClientVersion)
 	log.Printf("Client ID: %s", c.config.ClientID)
 	log.Printf("Server URL: %s", c.config.ServerURL)
+
+	// Write PID file (single instance enforcement occurs before this call)
+	if err := c.instanceMgr.WritePID(); err != nil {
+		log.Printf("Warning: failed to write PID file: %v", err)
+	}
 
 	// Setup auto-start if configured
 	if c.config.AutoStart {
@@ -150,6 +157,7 @@ func (c *Client) Stop() {
 		c.conn.Close()
 	}
 
+	c.instanceMgr.RemovePID()
 	log.Printf("Client stopped")
 }
 
@@ -619,7 +627,50 @@ func Main() {
 	log.Printf("[DEBUG] Main: Starting client initialization")
 	log.Printf("[DEBUG] Main: Go version: %s, OS: %s, Arch: %s", runtime.Version(), runtime.GOOS, runtime.GOARCH)
 
-	// Parse command line flags
+	// Handle subcommands: start|stop|restart|status (default: start)
+	command := "start"
+	if len(os.Args) > 1 {
+		first := os.Args[1]
+		if first == "start" || first == "stop" || first == "restart" || first == "status" {
+			command = first
+			// Remove subcommand from args before flag parsing
+			os.Args = append([]string{os.Args[0]}, os.Args[2:]...)
+		}
+	}
+
+	instanceMgr := NewInstanceManager()
+	if command != "start" { // For stop/status/restart we only need instance manager
+		switch command {
+		case "status":
+			if running, pid := instanceMgr.IsRunning(); running {
+				fmt.Printf("Client running (PID %d)\n", pid)
+			} else {
+				fmt.Println("Client not running")
+			}
+			return
+		case "stop":
+			if err := instanceMgr.Kill(); err != nil {
+				fmt.Printf("Stop failed: %v\n", err)
+			} else {
+				fmt.Println("Client stopped")
+			}
+			return
+		case "restart":
+			_ = instanceMgr.Kill() // Ignore error; may not be running
+			// Continue to start below.
+			fmt.Println("Restarting client...")
+		}
+	}
+
+	// Enforce single instance before full start (except when restart bypassed)
+	if command == "start" {
+		if running, pid := instanceMgr.IsRunning(); running {
+			fmt.Printf("Client already running (PID %d)\n", pid)
+			return
+		}
+	}
+
+	// Parse command line flags (after removing subcommand)
 	serverURL := flag.String("server", "wss://localhost/ws", "Server WebSocket URL (use wss:// for HTTPS)")
 	autoStart := flag.Bool("autostart", false, "Enable auto-start on boot")
 	daemon := flag.Bool("daemon", false, "Run as background daemon/service")
@@ -674,7 +725,7 @@ func Main() {
 
 	// Create and start client
 	log.Printf("[DEBUG] Main: Creating client instance")
-	client := NewClient(config)
+	client := NewClient(config, instanceMgr)
 	log.Printf("[DEBUG] Main: Client created, starting connection loop")
 	for {
 		if err := client.Start(); err != nil {
@@ -686,6 +737,11 @@ func Main() {
 	}
 
 	log.Printf("[DEBUG] Main: Client started successfully, entering wait loop")
-	// Wait for termination signal
-	select {}
+	// Wait until process killed externally; simple sleep loop to allow Stop() to run on termination
+	for {
+		if !client.running {
+			break
+		}
+		time.Sleep(5 * time.Second)
+	}
 }

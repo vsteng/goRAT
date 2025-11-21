@@ -180,19 +180,29 @@ Log in with the credentials specified in `-web-user` and `-web-pass` flags.
 
 **Basic Usage:**
 ```bash
-# Production (with nginx using HTTPS)
-./bin/client -server wss://your-domain.com/ws -token your-secret-token
+# Start (default command)
+./bin/client start -server wss://your-domain.com/ws
+
+# Stop running instance
+./bin/client stop
+
+# Restart
+./bin/client restart -server wss://your-domain.com/ws
+
+# Status
+./bin/client status
 
 # Development (direct TLS connection)
-./bin/client -server wss://localhost:8443/ws -token your-secret-token
+./bin/client start -server wss://localhost:8443/ws
 ```
 
 **Command-line Flags:**
-- `-server` - WebSocket server URL (required)
-- `-token` - Authentication token (required)
+- `start|stop|restart|status` - Optional subcommand (default `start`)
+- `-server` - WebSocket server URL (required for start/restart)
 - `-autostart` - Configure auto-start on boot (optional)
+- `-daemon` - Run as background daemon/service (non-Windows typical)
 
-**Machine ID Generation:**
+**Single Instance & Machine ID:**
 The client automatically generates a unique identifier from:
 - Hostname
 - Host UUID (from SMBIOS/DMI)
@@ -202,6 +212,7 @@ The client automatically generates a unique identifier from:
   - macOS: IOPlatformUUID
 
 The ID is cached in:
+Single-instance enforcement uses a PID file stored alongside the cached machine ID. Use `client stop` or `client restart` to control a running instance cleanly—avoid killing from Task Manager when possible.
 - Windows: `%APPDATA%\ServerManager\machine-id`
 - Linux: `~/.config/servermanager/machine-id`
 - macOS: `~/Library/Application Support/servermanager/machine-id`
