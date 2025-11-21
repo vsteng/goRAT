@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"runtime"
+	"strings"
 	"time"
 
 	"mww2.com/server_manager/common"
@@ -170,6 +171,15 @@ func (c *Client) connect() error {
 	// Connect to WebSocket
 	conn, _, err := dialer.Dial(c.config.ServerURL, http.Header{})
 	if err != nil {
+		// Provide more diagnostic info for common Windows TLS issues
+		log.Printf("Connection failed: %v", err)
+		if strings.Contains(err.Error(), "x509") {
+			log.Printf("TLS verification error detected. If using a self-signed certificate, import the CA into the Windows Trusted Root Certification Authorities store.")
+			log.Printf("For development, ensure you started server with valid certs or use nginx with a publicly trusted certificate.")
+		}
+		if strings.Contains(err.Error(), "handshake") {
+			log.Printf("Handshake failed. Verify that the server URL scheme (ws:// vs wss://) matches server configuration (HTTP or TLS).")
+		}
 		return err
 	}
 
