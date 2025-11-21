@@ -138,6 +138,20 @@
         .refresh-btn:hover {
             background: #138496;
         }
+        .toggle-update-btn {
+            background: #e74c3c;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-bottom: 20px;
+            margin-left: 10px;
+        }
+        .toggle-update-btn:hover {
+            background: #c0392b;
+        }
         .update-section {
             background: white;
             border-radius: 10px;
@@ -250,7 +264,7 @@
             </div>
         </div>
         
-        <div class="update-section">
+        <div class="update-section" id="updateSection" style="display: none;">
             <h2>🔄 Global Client Update</h2>
             <p class="info-text">Push platform-specific updates to all online clients. URLs must use HTTPS.</p>
             <div class="form-group">
@@ -321,6 +335,7 @@
         <div class="clients-section">
             <h2>Connected Clients</h2>
             <button class="refresh-btn" onclick="loadClients()">🔄 Refresh</button>
+            <button class="toggle-update-btn" onclick="toggleUpdateSection()">🔄 Global Update</button>
             <table>
                 <thead>
                     <tr>
@@ -628,6 +643,20 @@
         
         function closeModal() {
             document.getElementById('updateModal').classList.remove('active');
+        }
+        
+        function toggleUpdateSection() {
+            const section = document.getElementById('updateSection');
+            const btn = event.target;
+            if (section.style.display === 'none') {
+                section.style.display = 'block';
+                btn.textContent = '✖️ Hide Global Update';
+                // Scroll to the update section
+                section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            } else {
+                section.style.display = 'none';
+                btn.textContent = '🔄 Global Update';
+            }
         }
         
         // Load clients on page load

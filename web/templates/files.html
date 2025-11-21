@@ -223,16 +223,20 @@
                 return;
             }
             
-            drivesList.innerHTML = drivesCache.map(drive => `
-                <div class=\"drive-card\" onclick=\"browseDrive('${escapeHtml(drive.name)}')\">
-                    <div class=\"drive-name\">💾 ${escapeHtml(drive.name)}</div>
-                    <div class=\"drive-label\">${escapeHtml(drive.label || 'Local Disk')}</div>
-                    <div class=\"drive-space\">
-                        ${drive.type} | 
-                        ${formatSize(drive.free_size)} free of ${formatSize(drive.total_size)}
+            drivesList.innerHTML = drivesCache.map(drive => {
+                // Properly escape the drive path for JavaScript
+                const escapedPath = drive.name.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+                return `
+                    <div class=\"drive-card\" onclick=\"browseDrive('${escapedPath}')\">
+                        <div class=\"drive-name\">💾 ${escapeHtml(drive.name)}</div>
+                        <div class=\"drive-label\">${escapeHtml(drive.label || 'Local Disk')}</div>
+                        <div class=\"drive-space\">
+                            ${drive.type} | 
+                            ${formatSize(drive.free_size)} free of ${formatSize(drive.total_size)}
+                        </div>
                     </div>
-                </div>
-            `).join('');
+                `;
+            }).join('');
         }
         
         function browseDrive(drivePath) {
@@ -282,19 +286,23 @@
                 return;
             }
             
-            tbody.innerHTML = files.map(file => `
-                <tr>
-                    <td>
-                        <span class="file-icon">${file.is_dir ? '📁' : '📄'}</span>
-                        <span class="file-name" onclick="handleFileClick('${escapeHtml(file.path)}', ${file.is_dir})">${escapeHtml(file.name)}</span>
-                    </td>
-                    <td>${file.is_dir ? '-' : formatSize(file.size)}</td>
-                    <td>${formatDate(file.mod_time)}</td>
-                    <td>
-                        ${!file.is_dir ? `<button class="action-btn" onclick="downloadFile('${escapeHtml(file.path)}')">Download</button>` : ''}
-                    </td>
-                </tr>
-            `).join('');
+            tbody.innerHTML = files.map(file => {
+                // Properly escape paths for JavaScript in onclick handlers
+                const escapedPath = file.path.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+                return `
+                    <tr>
+                        <td>
+                            <span class="file-icon">${file.is_dir ? '📁' : '📄'}</span>
+                            <span class="file-name" onclick="handleFileClick('${escapedPath}', ${file.is_dir})">${escapeHtml(file.name)}</span>
+                        </td>
+                        <td>${file.is_dir ? '-' : formatSize(file.size)}</td>
+                        <td>${formatDate(file.mod_time)}</td>
+                        <td>
+                            ${!file.is_dir ? `<button class="action-btn" onclick="downloadFile('${escapedPath}')">Download</button>` : ''}
+                        </td>
+                    </tr>
+                `;
+            }).join('');
         }
         
         function handleFileClick(path, isDir) {
@@ -328,7 +336,9 @@
                 const url = window.URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
-                a.download = path.split('/').pop();
+                // Extract filename from path (handle both / and \\ separators)
+                const fileName = path.split(/[\\/]/).pop();
+                a.download = fileName;
                 document.body.appendChild(a);
                 a.click();
                 window.URL.revokeObjectURL(url);
