@@ -9,6 +9,7 @@ import (
 	"image"
 	"image/jpeg"
 	"image/png"
+	"log"
 	"syscall"
 	"time"
 	"unsafe"
@@ -33,11 +34,16 @@ var (
 )
 
 func initScreenshotDLLs() {
+	log.Printf("[DEBUG] initScreenshotDLLs: Starting DLL initialization")
 	if user32 != nil {
+		log.Printf("[DEBUG] initScreenshotDLLs: Already initialized")
 		return // Already initialized
 	}
+	log.Printf("[DEBUG] initScreenshotDLLs: Loading user32.dll")
 	user32 = syscall.NewLazyDLL("user32.dll")
+	log.Printf("[DEBUG] initScreenshotDLLs: Loading gdi32.dll")
 	gdi32 = syscall.NewLazyDLL("gdi32.dll")
+	log.Printf("[DEBUG] initScreenshotDLLs: Loading procs")
 	procGetDC = user32.NewProc("GetDC")
 	procReleaseDC = user32.NewProc("ReleaseDC")
 	procGetSystemMetrics = user32.NewProc("GetSystemMetrics")
@@ -48,6 +54,7 @@ func initScreenshotDLLs() {
 	procDeleteObject = gdi32.NewProc("DeleteObject")
 	procDeleteDC = gdi32.NewProc("DeleteDC")
 	procGetDIBits = gdi32.NewProc("GetDIBits")
+	log.Printf("[DEBUG] initScreenshotDLLs: Completed successfully")
 }
 
 const (
@@ -82,6 +89,7 @@ type ScreenshotCapture struct{}
 
 // NewScreenshotCapture creates a new screenshot capture
 func NewScreenshotCapture() *ScreenshotCapture {
+	log.Printf("[DEBUG] NewScreenshotCapture: Creating screenshot capture instance")
 	return &ScreenshotCapture{}
 }
 

