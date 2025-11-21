@@ -13,39 +13,34 @@ import (
 
 // Daemonize runs the client as a background service on Windows
 func Daemonize() error {
-	// Check if we're already running detached
-	if isRunningDetached() {
-		return nil
-	}
+	// Always spawn a new detached child. The parent should not set DAEMON_MODE.
 
-	// Get the executable path
 	execPath, err := os.Executable()
 	if err != nil {
 		return fmt.Errorf("failed to get executable path: %v", err)
 	}
 
-	// Prepare command to run ourselves detached
+	// Pass through remaining args
 	cmd := exec.Command(execPath, os.Args[1:]...)
 
-	// Set process attributes to run detached
+	// Ensure child knows it's running in daemon mode
+	cmd.Env = append(os.Environ(), "DAEMON_MODE=1")
+
+	// Detach window / run in background (CREATE_NO_WINDOW)
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		HideWindow:    true,
-		CreationFlags: 0x08000000, // CREATE_NO_WINDOW
+		CreationFlags: 0x08000000,
 	}
 
-	// Don't inherit stdio
 	cmd.Stdin = nil
 	cmd.Stdout = nil
 	cmd.Stderr = nil
 
-	// Start the detached process
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("failed to start detached process: %v", err)
 	}
 
-	log.Printf("Started detached process with PID: %d", cmd.Process.Pid)
-
-	// Parent process exits, detached process continues
+	log.Printf("[daemon] Spawned detached child PID=%d", cmd.Process.Pid)
 	os.Exit(0)
 	return nil
 }

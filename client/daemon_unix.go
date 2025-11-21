@@ -52,5 +52,8 @@ func Daemonize() error {
 
 // IsDaemon checks if the process is running as a daemon
 func IsDaemon() bool {
+	if os.Getenv("DAEMON_MODE") == "1" {
+		return true
+	}
 	return os.Getppid() == 1
 }

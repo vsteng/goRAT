@@ -832,9 +832,8 @@ func Main() {
 		log.Printf("[DEBUG] Appended /ws to server URL: %s", *serverURL)
 	}
 
-	// Run as daemon if requested (set env before spawning child so child can detect)
+	// Run as daemon if requested
 	if *daemon && !IsDaemon() {
-		os.Setenv("DAEMON_MODE", "1")
 		log.Println("Starting as background daemon...")
 		if err := Daemonize(); err != nil {
 			log.Fatalf("Failed to daemonize: %v", err)
