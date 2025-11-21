@@ -189,10 +189,23 @@ func (wh *WebHandler) HandleFilesPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Get client metadata to determine OS
+	client, exists := wh.clientMgr.GetClient(clientID)
+	clientOS := "linux" // default to linux/unix
+	if exists && client != nil {
+		client.mu.RLock()
+		if client.Metadata != nil && client.Metadata.OS != "" {
+			clientOS = client.Metadata.OS
+		}
+		client.mu.RUnlock()
+	}
+
 	data := struct {
 		ClientID string
+		ClientOS string
 	}{
 		ClientID: clientID,
+		ClientOS: clientOS,
 	}
 
 	if err := wh.templates.ExecuteTemplate(w, "files.html", data); err != nil {

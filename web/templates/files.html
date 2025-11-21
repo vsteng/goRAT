@@ -109,7 +109,7 @@
         <h1>📁 File Manager - {{.ClientID}}</h1>
     </div>
     <div class="toolbar">
-        <input type="text" id="currentPath" value="/" readonly>
+        <input type="text" id="currentPath" value="" readonly>
         <button onclick="browsePath()">Go</button>
         <button onclick="goUp()">⬆ Up</button>
         <button onclick="goHome()">🏠 Home</button>
@@ -134,7 +134,9 @@
     </div>
     <script>
         const clientId = '{{.ClientID}}';
-        let currentPath = '/';
+        const clientOS = '{{.ClientOS}}';
+        // Set initial path based on OS: C:\\ for Windows, / for Unix-like systems
+        let currentPath = clientOS.toLowerCase() === 'windows' ? 'C:\\\\' : '/';
         
         async function browsePath(path) {
             if (path) {
@@ -235,16 +237,28 @@
         }
         
         function goUp() {
-            const parts = currentPath.split('/').filter(p => p);
-            if (parts.length > 0) {
-                parts.pop();
-                currentPath = '/' + parts.join('/');
-                browsePath(currentPath);
+            // Handle both Windows and Unix paths
+            if (clientOS.toLowerCase() === 'windows') {
+                // Windows path handling (C:\path\to\dir)
+                const parts = currentPath.split('\\').filter(p => p);
+                if (parts.length > 1) {  // Keep at least the drive letter (e.g., C:)
+                    parts.pop();
+                    currentPath = parts.join('\\') + '\\';
+                    browsePath(currentPath);
+                }
+            } else {
+                // Unix path handling
+                const parts = currentPath.split('/').filter(p => p);
+                if (parts.length > 0) {
+                    parts.pop();
+                    currentPath = '/' + parts.join('/');
+                    browsePath(currentPath);
+                }
             }
         }
         
         function goHome() {
-            currentPath = '/';
+            currentPath = clientOS.toLowerCase() === 'windows' ? 'C:\\\\' : '/';
             browsePath(currentPath);
         }
         
@@ -272,8 +286,9 @@
             return date.toLocaleString();
         }
         
-        // Load initial directory
-        browsePath('/');
+        // Load initial directory based on OS
+        document.getElementById('currentPath').value = currentPath;
+        browsePath(currentPath);
     </script>
 </body>
 </html>
