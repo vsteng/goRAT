@@ -127,20 +127,68 @@ func (c *Client) Start() error {
 		}
 	}
 
-	// Connect to server
-	if err := c.connect(); err != nil {
-		return err
-	}
-
 	c.running = true
 
-	// Start message handler goroutines
-	go c.readPump()
-	go c.writePump()
-	go c.heartbeatLoop()
+	// Start connection loop in background
+	go c.connectionLoop()
 
 	log.Printf("Client started successfully")
 	return nil
+}
+
+// connectionLoop manages connection lifecycle with automatic reconnection
+func (c *Client) connectionLoop() {
+	reconnectDelay := 5 * time.Second
+	maxReconnectDelay := 60 * time.Second
+
+	for c.running {
+		// Attempt to connect
+		log.Printf("Attempting to connect to server...")
+		if err := c.connect(); err != nil {
+			log.Printf("Connection failed: %v", err)
+			log.Printf("Retrying in %v...", reconnectDelay)
+			time.Sleep(reconnectDelay)
+
+			// Exponential backoff for reconnect delay
+			reconnectDelay *= 2
+			if reconnectDelay > maxReconnectDelay {
+				reconnectDelay = maxReconnectDelay
+			}
+			continue
+		}
+
+		// Connection successful, reset delay
+		reconnectDelay = 5 * time.Second
+		log.Printf("Connected successfully")
+
+		// Create a session-specific disconnect channel for this connection
+		disconnectChan := make(chan bool, 1)
+
+		// Start message pumps
+		go c.readPump(disconnectChan)
+		go c.writePump(disconnectChan)
+		go c.heartbeatLoop(disconnectChan)
+
+		// Wait for disconnection or stop signal
+		select {
+		case <-disconnectChan:
+			log.Printf("Connection lost, will reconnect...")
+			if c.conn != nil {
+				c.conn.Close()
+			}
+			// Drain any remaining signals
+			select {
+			case <-disconnectChan:
+			default:
+			}
+		case <-c.stopChan:
+			log.Printf("Stop signal received")
+			if c.conn != nil {
+				c.conn.Close()
+			}
+			return
+		}
+	}
 }
 
 // Stop stops the client
@@ -264,9 +312,14 @@ func (c *Client) authenticate() error {
 }
 
 // readPump reads messages from the server
-func (c *Client) readPump() {
+func (c *Client) readPump(disconnectChan chan bool) {
 	defer func() {
-		c.Stop()
+		log.Printf("readPump: Connection lost, signaling disconnection")
+		// Signal disconnection
+		select {
+		case disconnectChan <- true:
+		default:
+		}
 	}()
 
 	c.conn.SetReadDeadline(time.Now().Add(60 * time.Second))
@@ -291,16 +344,27 @@ func (c *Client) readPump() {
 }
 
 // writePump writes messages to the server
-func (c *Client) writePump() {
+func (c *Client) writePump(disconnectChan chan bool) {
 	ticker := time.NewTicker(54 * time.Second)
 	defer func() {
 		ticker.Stop()
-		c.conn.Close()
+		if c.conn != nil {
+			c.conn.Close()
+		}
+		log.Printf("writePump: Connection lost, signaling disconnection")
+		// Signal disconnection
+		select {
+		case disconnectChan <- true:
+		default:
+		}
 	}()
 
 	for {
 		select {
 		case message, ok := <-c.sendChan:
+			if c.conn == nil {
+				return
+			}
 			c.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
 			if !ok {
 				c.conn.WriteMessage(websocket.CloseMessage, []byte{})
@@ -313,6 +377,9 @@ func (c *Client) writePump() {
 			}
 
 		case <-ticker.C:
+			if c.conn == nil {
+				return
+			}
 			c.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
 			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 				return
@@ -585,7 +652,7 @@ func (c *Client) sendMessage(msgType common.MessageType, payload interface{}) {
 }
 
 // heartbeatLoop sends periodic heartbeat messages
-func (c *Client) heartbeatLoop() {
+func (c *Client) heartbeatLoop(disconnectChan chan bool) {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 
@@ -593,6 +660,8 @@ func (c *Client) heartbeatLoop() {
 		select {
 		case <-ticker.C:
 			c.sendHeartbeat()
+		case <-disconnectChan:
+			return
 		case <-c.stopChan:
 			return
 		}
