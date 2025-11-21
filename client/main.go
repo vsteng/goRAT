@@ -627,6 +627,9 @@ func Main() {
 	log.Printf("[DEBUG] Main: Starting client initialization")
 	log.Printf("[DEBUG] Main: Go version: %s, OS: %s, Arch: %s", runtime.Version(), runtime.GOOS, runtime.GOARCH)
 
+	// Preserve original args for diagnostics and manual fallback parsing
+	origArgs := append([]string{}, os.Args...)
+
 	// Handle subcommands: start|stop|restart|status (default: start)
 	command := "start"
 	if len(os.Args) > 1 {
@@ -637,6 +640,8 @@ func Main() {
 			os.Args = append([]string{os.Args[0]}, os.Args[2:]...)
 		}
 	}
+	log.Printf("[DEBUG] Args original: %v", origArgs)
+	log.Printf("[DEBUG] Args after subcommand strip: %v", os.Args)
 
 	instanceMgr := NewInstanceManager()
 	if command != "start" { // For stop/status/restart we only need instance manager
@@ -671,12 +676,47 @@ func Main() {
 	}
 
 	// Parse command line flags (after removing subcommand)
-	serverURL := flag.String("server", "wss://localhost/ws", "Server WebSocket URL (use wss:// for HTTPS)")
+	serverURL := flag.String("server", "wss://localhost/ws", "Server WebSocket URL (must include /ws path; use wss:// for HTTPS)")
 	autoStart := flag.Bool("autostart", false, "Enable auto-start on boot")
 	daemon := flag.Bool("daemon", false, "Run as background daemon/service")
 	log.Printf("[DEBUG] Main: Parsing command line flags")
 	flag.Parse()
 	log.Printf("[DEBUG] Main: Flags parsed - server=%s, autostart=%v, daemon=%v", *serverURL, *autoStart, *daemon)
+
+	// Manual fallback parsing if flag failed to capture value (some Windows shells edge cases)
+	if *serverURL == "wss://localhost/ws" { // unchanged from default
+		for i, a := range origArgs {
+			if a == "-server" || a == "--server" {
+				if i+1 < len(origArgs) {
+					*serverURL = origArgs[i+1]
+					log.Printf("[DEBUG] Manual flag recovery: server=%s", *serverURL)
+				}
+			}
+			if strings.HasPrefix(a, "-server=") || strings.HasPrefix(a, "--server=") {
+				parts := strings.SplitN(a, "=", 2)
+				if len(parts) == 2 && parts[1] != "" {
+					*serverURL = parts[1]
+					log.Printf("[DEBUG] Manual flag recovery (inline): server=%s", *serverURL)
+				}
+			}
+		}
+	}
+
+	// Environment override (lowest priority after explicit flags)
+	if envServer := os.Getenv("SERVER_URL"); envServer != "" && (*serverURL == "" || *serverURL == "wss://localhost/ws") {
+		*serverURL = envServer
+		log.Printf("[DEBUG] SERVER_URL env override applied: %s", *serverURL)
+	}
+
+	// Ensure /ws suffix (server expects /ws endpoint); if missing, append
+	if *serverURL != "" && !strings.Contains(*serverURL, "/ws") {
+		if strings.HasSuffix(*serverURL, "/") {
+			*serverURL = strings.TrimRight(*serverURL, "/") + "/ws"
+		} else {
+			*serverURL = *serverURL + "/ws"
+		}
+		log.Printf("[DEBUG] Appended /ws to server URL: %s", *serverURL)
+	}
 
 	// Run as daemon if requested
 	if *daemon && !IsDaemon() {
@@ -736,7 +776,7 @@ func Main() {
 		break
 	}
 
-	log.Printf("[DEBUG] Main: Client started successfully, entering wait loop")
+	log.Printf("[DEBUG] Main: Client started successfully, entering wait loop (server=%s)", config.ServerURL)
 	// Wait until process killed externally; simple sleep loop to allow Stop() to run on termination
 	for {
 		if !client.running {
