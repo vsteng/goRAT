@@ -1,3 +1,6 @@
+//go:build !windows
+// +build !windows
+
 package client
 
 import (
@@ -115,9 +118,9 @@ func (m *MachineIDGenerator) readLinuxMachineID() (string, error) {
 }
 
 // readWindowsMachineID reads the Windows machine GUID
+// Windows-specific implementation supplied in machine_id_windows.go
+// This stub is excluded from Windows build.
 func (m *MachineIDGenerator) readWindowsMachineID() (string, error) {
-	// This is a placeholder - Windows implementation would use registry
-	// For now, we rely on host.Info().HostID which gets this on Windows
 	return "", fmt.Errorf("not implemented")
 }
 

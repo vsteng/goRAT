@@ -3,6 +3,7 @@ package client
 import (
 	"crypto/tls"
 	"flag"
+	"fmt"
 	"log"
 	"net"
 	"net/http"
@@ -618,7 +619,10 @@ func Main() {
 	idGen := NewMachineIDGenerator()
 	machineID, err := idGen.GetMachineID()
 	if err != nil {
-		log.Fatalf("Failed to generate machine ID: %v", err)
+		// Fallback: use hostname + time-based hash to avoid exit
+		host, _ := os.Hostname()
+		machineID = fmt.Sprintf("fallback-%s-%d", host, time.Now().Unix())
+		log.Printf("Warning: using fallback machine ID: %s (error: %v)", machineID, err)
 	}
 
 	log.Printf("Machine ID: %s", machineID)
@@ -633,8 +637,13 @@ func Main() {
 
 	// Create and start client
 	client := NewClient(config)
-	if err := client.Start(); err != nil {
-		log.Fatalf("Failed to start client: %v", err)
+	for {
+		if err := client.Start(); err != nil {
+			log.Printf("Failed to start client: %v (retrying in 10s)", err)
+			time.Sleep(10 * time.Second)
+			continue
+		}
+		break
 	}
 
 	// Wait for termination signal
