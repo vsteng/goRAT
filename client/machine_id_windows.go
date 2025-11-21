@@ -12,7 +12,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/shirou/gopsutil/v3/host"
 	"golang.org/x/sys/windows/registry"
 )
 
@@ -44,20 +43,21 @@ func (m *MachineIDGenerator) GetMachineID() (string, error) {
 
 func (m *MachineIDGenerator) generateMachineID() (string, error) {
 	var parts []string
+
+	// Get hostname
 	if hostname, err := os.Hostname(); err == nil {
 		parts = append(parts, hostname)
 	}
-	if info, err := host.Info(); err == nil {
-		if info.HostID != "" {
-			parts = append(parts, info.HostID)
-		}
-	}
+
+	// Get Windows MachineGuid (most reliable)
 	if id, err := m.readWindowsMachineID(); err == nil && id != "" {
 		parts = append(parts, id)
 	}
+
 	if len(parts) == 0 {
 		return "", fmt.Errorf("unable to generate machine ID: no identifiers found")
 	}
+
 	combined := strings.Join(parts, "-")
 	hash := sha256.Sum256([]byte(combined))
 	return hex.EncodeToString(hash[:16]), nil

@@ -14,9 +14,6 @@ import (
 	"mww2.com/server_manager/common"
 
 	"github.com/gorilla/websocket"
-	"github.com/shirou/gopsutil/v3/cpu"
-	"github.com/shirou/gopsutil/v3/disk"
-	"github.com/shirou/gopsutil/v3/mem"
 )
 
 const (
@@ -575,19 +572,13 @@ func (c *Client) heartbeatLoop() {
 
 // sendHeartbeat sends a heartbeat message with system stats
 func (c *Client) sendHeartbeat() {
-	cpuPercent, _ := cpu.Percent(time.Second, false)
-	memStats, _ := mem.VirtualMemory()
-	diskStats, _ := disk.Usage("/")
-
 	var cpuUsage, memUsage, diskUsage float64
-	if len(cpuPercent) > 0 {
-		cpuUsage = cpuPercent[0]
-	}
-	if memStats != nil {
-		memUsage = memStats.UsedPercent
-	}
-	if diskStats != nil {
-		diskUsage = diskStats.UsedPercent
+
+	// Safely get stats with error handling
+	if stats := getSafeSystemStats(); stats != nil {
+		cpuUsage = stats["cpu"]
+		memUsage = stats["mem"]
+		diskUsage = stats["disk"]
 	}
 
 	payload := &common.HeartbeatPayload{
