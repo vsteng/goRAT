@@ -643,6 +643,39 @@ func Main() {
 	log.Printf("[DEBUG] Args original: %v", origArgs)
 	log.Printf("[DEBUG] Args after subcommand strip: %v", os.Args)
 
+	// Normalize boolean flags like `-daemon false` to `-daemon=false` before flag.Parse
+	if command == "start" || command == "restart" { // only relevant for start-like commands
+		normalized := []string{os.Args[0]}
+		for i := 1; i < len(os.Args); i++ {
+			arg := os.Args[i]
+			if arg == "-daemon" || arg == "--daemon" {
+				if i+1 < len(os.Args) && (os.Args[i+1] == "false" || os.Args[i+1] == "0" || os.Args[i+1] == "true" || os.Args[i+1] == "1") {
+					val := os.Args[i+1]
+					normalized = append(normalized, "-daemon="+val)
+					i++
+					continue
+				}
+				// No explicit value present; treat presence as true
+				normalized = append(normalized, "-daemon=true")
+				continue
+			}
+			if arg == "-autostart" || arg == "--autostart" {
+				if i+1 < len(os.Args) && (os.Args[i+1] == "false" || os.Args[i+1] == "0" || os.Args[i+1] == "true" || os.Args[i+1] == "1") {
+					val := os.Args[i+1]
+					normalized = append(normalized, "-autostart="+val)
+					i++
+					continue
+				}
+				normalized = append(normalized, "-autostart=true")
+				continue
+			}
+			// Leave other args unchanged
+			normalized = append(normalized, arg)
+		}
+		os.Args = normalized
+		log.Printf("[DEBUG] Args normalized: %v", os.Args)
+	}
+
 	instanceMgr := NewInstanceManager()
 	if command != "start" { // For stop/status/restart we only need instance manager
 		switch command {
@@ -718,13 +751,13 @@ func Main() {
 		log.Printf("[DEBUG] Appended /ws to server URL: %s", *serverURL)
 	}
 
-	// Run as daemon if requested
+	// Run as daemon if requested (set env before spawning child so child can detect)
 	if *daemon && !IsDaemon() {
+		os.Setenv("DAEMON_MODE", "1")
 		log.Println("Starting as background daemon...")
 		if err := Daemonize(); err != nil {
 			log.Fatalf("Failed to daemonize: %v", err)
 		}
-		// Daemonize() exits the parent process, so this won't be reached
 		return
 	}
 
