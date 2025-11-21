@@ -2,6 +2,7 @@ package client
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"io"
 	"log"
@@ -9,6 +10,8 @@ import (
 	"runtime"
 	"sync"
 
+	"golang.org/x/text/encoding/simplifiedchinese"
+	"golang.org/x/text/transform"
 	"mww2.com/server_manager/common"
 )
 
@@ -198,7 +201,9 @@ func (tm *TerminalManager) readOutput(session *TerminalSession) {
 		// Send output in chunks or when newline is encountered
 		if b == '\n' || len(buffer) >= 512 {
 			if tm.onOutput != nil {
-				tm.onOutput(session.ID, string(buffer))
+				// Decode output based on OS encoding
+				decodedOutput := tm.decodeOutput(buffer)
+				tm.onOutput(session.ID, decodedOutput)
 			}
 			buffer = buffer[:0]
 		}
@@ -206,7 +211,8 @@ func (tm *TerminalManager) readOutput(session *TerminalSession) {
 
 	// Send any remaining data
 	if len(buffer) > 0 && tm.onOutput != nil {
-		tm.onOutput(session.ID, string(buffer))
+		decodedOutput := tm.decodeOutput(buffer)
+		tm.onOutput(session.ID, decodedOutput)
 	}
 
 	if err := scanner.Err(); err != nil {
@@ -220,7 +226,9 @@ func (tm *TerminalManager) readError(session *TerminalSession) {
 
 	for scanner.Scan() {
 		if tm.onError != nil {
-			tm.onError(session.ID, scanner.Text())
+			// Decode error output based on OS encoding
+			decodedError := tm.decodeOutput(scanner.Bytes())
+			tm.onError(session.ID, decodedError)
 		}
 	}
 
@@ -243,6 +251,26 @@ func (tm *TerminalManager) monitorProcess(session *TerminalSession) {
 	if tm.onOutput != nil {
 		tm.onOutput(session.ID, "\r\nSession ended\r\n")
 	}
+}
+
+// decodeOutput decodes terminal output based on OS encoding
+func (tm *TerminalManager) decodeOutput(data []byte) string {
+	if len(data) == 0 {
+		return ""
+	}
+
+	// On Windows, try to detect and convert from GBK to UTF-8
+	if runtime.GOOS == "windows" {
+		// Try GBK decoding
+		reader := transform.NewReader(bytes.NewReader(data), simplifiedchinese.GBK.NewDecoder())
+		decoded, err := io.ReadAll(reader)
+		if err == nil {
+			return string(decoded)
+		}
+	}
+
+	// Default: assume UTF-8
+	return string(data)
 }
 
 // HandleStartTerminal handles a start terminal message
