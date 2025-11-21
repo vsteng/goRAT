@@ -17,19 +17,38 @@ import (
 )
 
 var (
-	user32                     = syscall.NewLazyDLL("user32.dll")
-	gdi32                      = syscall.NewLazyDLL("gdi32.dll")
-	procGetDC                  = user32.NewProc("GetDC")
-	procReleaseDC              = user32.NewProc("ReleaseDC")
-	procGetSystemMetrics       = user32.NewProc("GetSystemMetrics")
-	procCreateCompatibleDC     = gdi32.NewProc("CreateCompatibleDC")
-	procCreateCompatibleBitmap = gdi32.NewProc("CreateCompatibleBitmap")
-	procSelectObject           = gdi32.NewProc("SelectObject")
-	procBitBlt                 = gdi32.NewProc("BitBlt")
-	procDeleteObject           = gdi32.NewProc("DeleteObject")
-	procDeleteDC               = gdi32.NewProc("DeleteDC")
-	procGetDIBits              = gdi32.NewProc("GetDIBits")
+	user32 *syscall.LazyDLL
+	gdi32  *syscall.LazyDLL
+
+	procGetDC                  *syscall.LazyProc
+	procReleaseDC              *syscall.LazyProc
+	procGetSystemMetrics       *syscall.LazyProc
+	procCreateCompatibleDC     *syscall.LazyProc
+	procCreateCompatibleBitmap *syscall.LazyProc
+	procSelectObject           *syscall.LazyProc
+	procBitBlt                 *syscall.LazyProc
+	procDeleteObject           *syscall.LazyProc
+	procDeleteDC               *syscall.LazyProc
+	procGetDIBits              *syscall.LazyProc
 )
+
+func initScreenshotDLLs() {
+	if user32 != nil {
+		return // Already initialized
+	}
+	user32 = syscall.NewLazyDLL("user32.dll")
+	gdi32 = syscall.NewLazyDLL("gdi32.dll")
+	procGetDC = user32.NewProc("GetDC")
+	procReleaseDC = user32.NewProc("ReleaseDC")
+	procGetSystemMetrics = user32.NewProc("GetSystemMetrics")
+	procCreateCompatibleDC = gdi32.NewProc("CreateCompatibleDC")
+	procCreateCompatibleBitmap = gdi32.NewProc("CreateCompatibleBitmap")
+	procSelectObject = gdi32.NewProc("SelectObject")
+	procBitBlt = gdi32.NewProc("BitBlt")
+	procDeleteObject = gdi32.NewProc("DeleteObject")
+	procDeleteDC = gdi32.NewProc("DeleteDC")
+	procGetDIBits = gdi32.NewProc("GetDIBits")
+}
 
 const (
 	SM_CXSCREEN    = 0
@@ -167,6 +186,7 @@ func (sc *ScreenshotCapture) CaptureRegion(x, y, width, height int, payload *com
 // captureScreen captures the entire screen using Windows GDI API
 // This works in both RDP sessions and console sessions
 func (sc *ScreenshotCapture) captureScreen() (image.Image, error) {
+	initScreenshotDLLs()
 	// Get screen dimensions
 	width, _, _ := procGetSystemMetrics.Call(SM_CXSCREEN)
 	height, _, _ := procGetSystemMetrics.Call(SM_CYSCREEN)

