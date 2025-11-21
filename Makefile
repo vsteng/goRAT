@@ -17,15 +17,37 @@ server:
 	@mkdir -p bin
 	@go build -o $(SERVER_BIN) cmd/server/main.go
 
-# Build client
+# Build client (release version by default)
 client:
-	@echo "Building client..."
+	@echo "Building client (release)..."
 	@mkdir -p bin
 	@if [ "$$(uname)" = "Darwin" ] && [ "$$(sw_vers -productVersion | cut -d'.' -f1)" -ge 15 ]; then \
 		echo "  Note: Screenshot functionality disabled on macOS 15+ (library incompatibility)"; \
 		go build -tags noscreenshot -o $(CLIENT_BIN) cmd/client/main.go; \
 	else \
 		go build -o $(CLIENT_BIN) cmd/client/main.go; \
+	fi
+
+# Build debug client
+client-debug:
+	@echo "Building client (debug)..."
+	@mkdir -p bin
+	@if [ "$$(uname)" = "Darwin" ] && [ "$$(sw_vers -productVersion | cut -d'.' -f1)" -ge 15 ]; then \
+		echo "  Note: Screenshot functionality disabled on macOS 15+ (library incompatibility)"; \
+		go build -tags "debug noscreenshot" -o bin/client-debug cmd/client/main.go; \
+	else \
+		go build -tags debug -o bin/client-debug cmd/client/main.go; \
+	fi
+
+# Build release client (explicit)
+client-release:
+	@echo "Building client (release)..."
+	@mkdir -p bin
+	@if [ "$$(uname)" = "Darwin" ] && [ "$$(sw_vers -productVersion | cut -d'.' -f1)" -ge 15 ]; then \
+		echo "  Note: Screenshot functionality disabled on macOS 15+ (library incompatibility)"; \
+		go build -tags noscreenshot -o bin/client-release cmd/client/main.go; \
+	else \
+		go build -o bin/client-release cmd/client/main.go; \
 	fi
 
 # Build monitor
@@ -41,21 +63,24 @@ build-linux:
 	@echo "Building for Linux..."
 	@mkdir -p bin/linux
 	@GOOS=linux GOARCH=amd64 go build -o bin/linux/server cmd/server/main.go
-	@GOOS=linux GOARCH=amd64 go build -o bin/linux/client cmd/client/main.go
+	@GOOS=linux GOARCH=amd64 go build -o bin/linux/client-release cmd/client/main.go
+	@GOOS=linux GOARCH=amd64 go build -tags debug -o bin/linux/client-debug cmd/client/main.go
 	@GOOS=linux GOARCH=amd64 go build -o bin/linux/client_monitor ./client_monitor
 
 build-windows:
 	@echo "Building for Windows..."
 	@mkdir -p bin/windows
 	@GOOS=windows GOARCH=amd64 go build -o bin/windows/server.exe cmd/server/main.go
-	@GOOS=windows GOARCH=amd64 go build -o bin/windows/client.exe cmd/client/main.go
+	@GOOS=windows GOARCH=amd64 go build -o bin/windows/client-release.exe cmd/client/main.go
+	@GOOS=windows GOARCH=amd64 go build -tags debug -o bin/windows/client-debug.exe cmd/client/main.go
 	@GOOS=windows GOARCH=amd64 go build -o bin/windows/client_monitor.exe ./client_monitor
 
 build-darwin:
 	@echo "Building for macOS..."
 	@mkdir -p bin/darwin
 	@GOOS=darwin GOARCH=amd64 go build -o bin/darwin/server cmd/server/main.go
-	@GOOS=darwin GOARCH=amd64 go build -tags noscreenshot -o bin/darwin/client cmd/client/main.go
+	@GOOS=darwin GOARCH=amd64 go build -tags noscreenshot -o bin/darwin/client-release cmd/client/main.go
+	@GOOS=darwin GOARCH=amd64 go build -tags "debug noscreenshot" -o bin/darwin/client-debug cmd/client/main.go
 	@GOOS=darwin GOARCH=amd64 go build -o bin/darwin/client_monitor ./client_monitor
 	@echo "  Note: macOS client built without screenshot support"
 
@@ -108,9 +133,11 @@ help:
 	@echo "  all          - Build all components (default)"
 	@echo "  build        - Build all binaries"
 	@echo "  server       - Build server"
-	@echo "  client       - Build client"
+	@echo "  client       - Build client (release version)"
+	@echo "  client-debug - Build client (debug version with logging)"
+	@echo "  client-release - Build client (release version, explicit)"
 	@echo "  monitor      - Build client monitor"
-	@echo "  build-all    - Build for all platforms"
+	@echo "  build-all    - Build for all platforms (both debug and release)"
 	@echo "  build-linux  - Build for Linux"
 	@echo "  build-windows - Build for Windows"
 	@echo "  build-darwin - Build for macOS"

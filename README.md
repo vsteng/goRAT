@@ -81,13 +81,47 @@ A comprehensive Go-based solution for managing multiple Windows and Linux server
 
 ### Build
 
+The client has two build configurations for different use cases:
+
+**Debug Version** (development/troubleshooting):
 ```bash
-# Build all components
+make client-debug
+# Default: daemon=false, autostart=false, logging=enabled
+# Logs to stderr or client_debug.log if daemon
+```
+
+**Release Version** (production):
+```bash
+make client-release
+# OR
+make client  # (default is release)
+# Default: daemon=true, autostart=false, logging=disabled
+# Silent operation, ideal for deployment
+```
+
+**Build all components:**
+```bash
+# Build server, client (release), and monitor
 make build
 
-# Or build individually
+# Build both debug and release for all platforms
+make build-all
+```
+
+For detailed information about build versions, see [BUILD_VERSIONS.md](BUILD_VERSIONS.md).
+
+**Build individually:**
+```bash
+# Server
 go build -o bin/server cmd/server/main.go
+
+# Client (release)
 go build -o bin/client cmd/client/main.go
+
+# Client (debug)
+go build -tags debug -o bin/client-debug cmd/client/main.go
+
+# Monitor
 go build -o bin/client_monitor client_monitor/*.go
 ```
 

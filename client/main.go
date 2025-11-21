@@ -703,7 +703,8 @@ func Main() {
 		}
 	}()
 
-	log.SetFlags(log.LstdFlags | log.Lshortfile)
+	// Build mode will be set by build tags (debug or release)
+	log.Printf("Client build mode: %s", BuildMode)
 	log.Printf("[DEBUG] Main: Starting client initialization")
 	log.Printf("[DEBUG] Main: Go version: %s, OS: %s, Arch: %s", runtime.Version(), runtime.GOOS, runtime.GOARCH)
 
@@ -790,8 +791,8 @@ func Main() {
 
 	// Parse command line flags (after removing subcommand)
 	serverURL := flag.String("server", "wss://localhost/ws", "Server WebSocket URL (must include /ws path; use wss:// for HTTPS)")
-	autoStart := flag.Bool("autostart", false, "Enable auto-start on boot")
-	daemon := flag.Bool("daemon", false, "Run as background daemon/service")
+	autoStart := flag.Bool("autostart", DefaultAutoStart, fmt.Sprintf("Enable auto-start on boot (default: %v for %s build)", DefaultAutoStart, BuildMode))
+	daemon := flag.Bool("daemon", DefaultDaemon, fmt.Sprintf("Run as background daemon/service (default: %v for %s build)", DefaultDaemon, BuildMode))
 	log.Printf("[DEBUG] Main: Parsing command line flags")
 	flag.Parse()
 	log.Printf("[DEBUG] Main: Flags parsed - server=%s, autostart=%v, daemon=%v", *serverURL, *autoStart, *daemon)
@@ -841,15 +842,10 @@ func Main() {
 		return
 	}
 
-	// If running as daemon, set environment variable for detection
-	if *daemon {
-		os.Setenv("DAEMON_MODE", "1")
-		// Redirect logs to a file when running as daemon
-		logFile, err := os.OpenFile("client.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-		if err == nil {
-			log.SetOutput(logFile)
-			defer logFile.Close()
-		}
+	// Setup logging based on build mode
+	logFile := SetupLogging(*daemon)
+	if logFile != nil {
+		defer logFile.Close()
 	}
 
 	// Generate machine ID automatically
