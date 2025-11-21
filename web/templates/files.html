@@ -102,6 +102,32 @@
             padding: 40px;
             color: #888;
         }
+        .drive-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        .drive-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+        }
+        .drive-name {
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        .drive-label {
+            font-size: 14px;
+            opacity: 0.9;
+            margin-bottom: 10px;
+        }
+        .drive-space {
+            font-size: 12px;
+            opacity: 0.8;
+        }
     </style>
 </head>
 <body>
@@ -114,6 +140,13 @@
         <button onclick="goUp()">⬆ Up</button>
         <button onclick="goHome()">🏠 Home</button>
         <button onclick="refresh()">🔄 Refresh</button>
+        <button id="drivesBtn" onclick="showDrives()" style="display:none;">💾 Drives</button>
+    </div>
+    <div id="drivesPanel" style="display:none; background:white; padding:15px; margin:20px; border-radius:10px; box-shadow:0 2px 10px rgba(0,0,0,0.05);">
+        <h3>Available Drives</h3>
+        <div id="drivesList" style="display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:10px; margin-top:10px;">
+            <div style="text-align:center; padding:20px; color:#888;">Loading drives...</div>
+        </div>
     </div>
     <div class="file-list">
         <table>
@@ -137,6 +170,75 @@
         const clientOS = '{{.ClientOS}}';
         // Set initial path based on OS: C:\\ for Windows, / for Unix-like systems
         let currentPath = clientOS.toLowerCase() === 'windows' ? 'C:\\\\' : '/';
+        let drivesCache = null;
+        
+        // Show drives button for Windows clients
+        if (clientOS.toLowerCase() === 'windows') {
+            document.getElementById('drivesBtn').style.display = 'inline-block';
+            // Load drives on startup for Windows
+            loadDrives();
+        }
+        
+        async function loadDrives() {
+            if (clientOS.toLowerCase() !== 'windows') return;
+            
+            try {
+                const response = await fetch('/api/files/drives', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        client_id: clientId
+                    })
+                });
+                
+                if (!response.ok) {
+                    throw new Error('Failed to get drives');
+                }
+                
+                const result = await response.json();
+                drivesCache = result.drives || [];
+            } catch (err) {
+                console.error('Error loading drives:', err);
+            }
+        }
+        
+        function showDrives() {
+            const panel = document.getElementById('drivesPanel');
+            const isVisible = panel.style.display !== 'none';
+            
+            if (isVisible) {
+                panel.style.display = 'none';
+                return;
+            }
+            
+            // Show panel
+            panel.style.display = 'block';
+            
+            const drivesList = document.getElementById('drivesList');
+            
+            if (!drivesCache || drivesCache.length === 0) {
+                drivesList.innerHTML = '<div style=\"text-align:center; padding:20px; color:#888;\">No drives found</div>';
+                return;
+            }
+            
+            drivesList.innerHTML = drivesCache.map(drive => `
+                <div class=\"drive-card\" onclick=\"browseDrive('${escapeHtml(drive.name)}')\">
+                    <div class=\"drive-name\">💾 ${escapeHtml(drive.name)}</div>
+                    <div class=\"drive-label\">${escapeHtml(drive.label || 'Local Disk')}</div>
+                    <div class=\"drive-space\">
+                        ${drive.type} | 
+                        ${formatSize(drive.free_size)} free of ${formatSize(drive.total_size)}
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        function browseDrive(drivePath) {
+            document.getElementById('drivesPanel').style.display = 'none';
+            browsePath(drivePath);
+        }
         
         async function browsePath(path) {
             if (path) {

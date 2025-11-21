@@ -4,6 +4,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"runtime"
 
 	"mww2.com/server_manager/common"
 )
@@ -14,6 +15,25 @@ type FileBrowser struct{}
 // NewFileBrowser creates a new file browser
 func NewFileBrowser() *FileBrowser {
 	return &FileBrowser{}
+}
+
+// GetDrives returns a list of available drives (Windows-specific)
+func (fb *FileBrowser) GetDrives() *common.DriveListPayload {
+	result := &common.DriveListPayload{
+		Drives: []common.DriveInfo{},
+	}
+
+	// Only applicable for Windows
+	if runtime.GOOS != "windows" {
+		result.Error = "Drive listing only available on Windows"
+		return result
+	}
+
+	// On Windows, check drives from A-Z
+	drives := getDrivesWindows()
+	result.Drives = drives
+
+	return result
 }
 
 // Browse lists files in a directory

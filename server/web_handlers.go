@@ -299,6 +299,65 @@ func (wh *WebHandler) HandleFileBrowse(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// HandleGetDrives handles drive listing requests (Windows)
+func (wh *WebHandler) HandleGetDrives(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		ClientID string `json:"client_id"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request", http.StatusBadRequest)
+		return
+	}
+
+	// Get client
+	client, ok := wh.clientMgr.GetClient(req.ClientID)
+	if !ok || client == nil {
+		http.Error(w, "Client not found", http.StatusNotFound)
+		return
+	}
+
+	// Clear any previous result
+	wh.server.ClearDriveListResult(req.ClientID)
+
+	// Send drive list request
+	msg, err := common.NewMessage(common.MsgTypeGetDrives, nil)
+	if err != nil {
+		http.Error(w, "Failed to create message", http.StatusInternalServerError)
+		return
+	}
+
+	if err := wh.clientMgr.SendToClient(req.ClientID, msg); err != nil {
+		http.Error(w, "Failed to send request", http.StatusInternalServerError)
+		return
+	}
+
+	// Wait for response with timeout
+	timeout := time.After(10 * time.Second)
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-timeout:
+			http.Error(w, "Request timeout", http.StatusRequestTimeout)
+			return
+		case <-ticker.C:
+			if result, exists := wh.server.GetDriveListResult(req.ClientID); exists {
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(result)
+				wh.server.ClearDriveListResult(req.ClientID)
+				return
+			}
+		}
+	}
+}
+
 // HandleFileDownload handles file download requests
 func (wh *WebHandler) HandleFileDownload(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -468,6 +527,7 @@ func (wh *WebHandler) RegisterWebRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/terminal", wh.requireAuth(wh.HandleTerminalPage))
 	mux.HandleFunc("/files", wh.requireAuth(wh.HandleFilesPage))
 	mux.HandleFunc("/api/files/browse", wh.requireAuth(wh.HandleFileBrowse))
+	mux.HandleFunc("/api/files/drives", wh.requireAuth(wh.HandleGetDrives))
 	mux.HandleFunc("/api/files/download", wh.requireAuth(wh.HandleFileDownload))
 	mux.HandleFunc("/api/screenshot", wh.requireAuth(wh.HandleScreenshotRequest))
 	mux.HandleFunc("/api/update/global", wh.requireAuth(wh.HandleGlobalUpdate))

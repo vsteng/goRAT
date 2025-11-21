@@ -31,6 +31,7 @@ type Server struct {
 	terminalProxy     *TerminalProxy
 	commandResults    map[string]*common.CommandResultPayload
 	fileListResults   map[string]*common.FileListPayload
+	driveListResults  map[string]*common.DriveListPayload
 	screenshotResults map[string]*common.ScreenshotDataPayload
 	resultsMu         sync.RWMutex
 }
@@ -77,6 +78,7 @@ func NewServer(config *Config) *Server {
 		terminalProxy:     terminalProxy,
 		commandResults:    make(map[string]*common.CommandResultPayload),
 		fileListResults:   make(map[string]*common.FileListPayload),
+		driveListResults:  make(map[string]*common.DriveListPayload),
 		screenshotResults: make(map[string]*common.ScreenshotDataPayload),
 	}
 
@@ -351,6 +353,17 @@ func (s *Server) handleMessage(client *Client, msg *common.Message) {
 			log.Printf("File list from %s", client.ID)
 		}
 
+	case common.MsgTypeDriveList:
+		var dl common.DriveListPayload
+		if err := msg.ParsePayload(&dl); err == nil {
+			log.Printf("Drive list from %s: %d drives", client.ID, len(dl.Drives))
+			s.resultsMu.Lock()
+			s.driveListResults[client.ID] = &dl
+			s.resultsMu.Unlock()
+		} else {
+			log.Printf("Drive list from %s", client.ID)
+		}
+
 	case common.MsgTypeScreenshotData:
 		var sd common.ScreenshotDataPayload
 		if err := msg.ParsePayload(&sd); err == nil {
@@ -475,6 +488,21 @@ func (s *Server) ClearFileListResult(clientID string) {
 	s.resultsMu.Lock()
 	defer s.resultsMu.Unlock()
 	delete(s.fileListResults, clientID)
+}
+
+// GetDriveListResult retrieves stored drive list result for a client
+func (s *Server) GetDriveListResult(clientID string) (*common.DriveListPayload, bool) {
+	s.resultsMu.RLock()
+	defer s.resultsMu.RUnlock()
+	result, exists := s.driveListResults[clientID]
+	return result, exists
+}
+
+// ClearDriveListResult removes stored drive list result
+func (s *Server) ClearDriveListResult(clientID string) {
+	s.resultsMu.Lock()
+	defer s.resultsMu.Unlock()
+	delete(s.driveListResults, clientID)
 }
 
 // GetScreenshotResult retrieves stored screenshot result for a client

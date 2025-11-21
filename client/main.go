@@ -335,6 +335,9 @@ func (c *Client) handleMessage(msg *common.Message) {
 	case common.MsgTypeBrowseFiles:
 		c.handleBrowseFiles(msg)
 
+	case common.MsgTypeGetDrives:
+		c.handleGetDrives(msg)
+
 	case common.MsgTypeDownloadFile:
 		c.handleDownloadFile(msg)
 
@@ -396,6 +399,14 @@ func (c *Client) handleBrowseFiles(msg *common.Message) {
 	result := c.fileBrowser.Browse(&payload)
 
 	c.sendMessage(common.MsgTypeFileList, result)
+}
+
+// handleGetDrives handles drive listing requests (Windows)
+func (c *Client) handleGetDrives(msg *common.Message) {
+	log.Printf("Getting drive list")
+	result := c.fileBrowser.GetDrives()
+
+	c.sendMessage(common.MsgTypeDriveList, result)
 }
 
 // handleDownloadFile handles file download requests

@@ -20,6 +20,8 @@ const (
 	// File browser messages
 	MsgTypeBrowseFiles  MessageType = "browse_files"
 	MsgTypeFileList     MessageType = "file_list"
+	MsgTypeGetDrives    MessageType = "get_drives"
+	MsgTypeDriveList    MessageType = "drive_list"
 	MsgTypeDownloadFile MessageType = "download_file"
 	MsgTypeUploadFile   MessageType = "upload_file"
 	MsgTypeFileData     MessageType = "file_data"
@@ -114,6 +116,21 @@ type FileListPayload struct {
 	Path  string     `json:"path"`
 	Files []FileInfo `json:"files"`
 	Error string     `json:"error,omitempty"`
+}
+
+// DriveInfo represents drive/volume information
+type DriveInfo struct {
+	Name      string `json:"name"`       // Drive letter (e.g., "C:", "D:")
+	Label     string `json:"label"`      // Volume label
+	Type      string `json:"type"`       // Drive type (fixed, removable, etc.)
+	TotalSize int64  `json:"total_size"` // Total size in bytes
+	FreeSize  int64  `json:"free_size"`  // Free size in bytes
+}
+
+// DriveListPayload contains list of drives
+type DriveListPayload struct {
+	Drives []DriveInfo `json:"drives"`
+	Error  string      `json:"error,omitempty"`
 }
 
 // FileDataPayload contains file content
