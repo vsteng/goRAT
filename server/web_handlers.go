@@ -375,17 +375,14 @@ func (wh *WebHandler) HandleFileDownload(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Get client
 	client, ok := wh.clientMgr.GetClient(req.ClientID)
 	if !ok || client == nil {
 		http.Error(w, "Client not found", http.StatusNotFound)
 		return
 	}
 
-	// Clear any previous result
 	wh.server.ClearFileDataResult(req.ClientID)
 
-	// Send file download request
 	msg, err := common.NewMessage(common.MsgTypeDownloadFile, common.FileDataPayload{
 		Path: req.Path,
 	})
@@ -399,8 +396,7 @@ func (wh *WebHandler) HandleFileDownload(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Wait for response with timeout
-	timeout := time.After(60 * time.Second) // Longer timeout for downloads
+	timeout := time.After(60 * time.Second)
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 
@@ -417,8 +413,9 @@ func (wh *WebHandler) HandleFileDownload(w http.ResponseWriter, r *http.Request)
 					return
 				}
 
-				w.Header().Set("Content-Type", "application/json")
-				json.NewEncoder(w).Encode(result)
+				w.Header().Set("Content-Disposition", "attachment; filename=\""+filepath.Base(result.Path)+"\"")
+				w.Header().Set("Content-Type", "application/octet-stream")
+				w.Write(result.Data)
 				wh.server.ClearFileDataResult(req.ClientID)
 				return
 			}
