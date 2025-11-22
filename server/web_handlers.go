@@ -382,6 +382,9 @@ func (wh *WebHandler) HandleFileDownload(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	// Clear any previous result
+	wh.server.ClearFileDataResult(req.ClientID)
+
 	// Send file download request
 	msg, err := common.NewMessage(common.MsgTypeDownloadFile, common.FileDataPayload{
 		Path: req.Path,
@@ -396,10 +399,31 @@ func (wh *WebHandler) HandleFileDownload(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Note: For file downloads, we'd need to implement a chunked response system
-	// For now, acknowledge the request was sent
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "download_initiated"})
+	// Wait for response with timeout
+	timeout := time.After(60 * time.Second) // Longer timeout for downloads
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-timeout:
+			http.Error(w, "Request timeout", http.StatusRequestTimeout)
+			return
+		case <-ticker.C:
+			if result, exists := wh.server.GetFileDataResult(req.ClientID); exists {
+				if result.Error != "" {
+					http.Error(w, result.Error, http.StatusInternalServerError)
+					wh.server.ClearFileDataResult(req.ClientID)
+					return
+				}
+
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(result)
+				wh.server.ClearFileDataResult(req.ClientID)
+				return
+			}
+		}
+	}
 }
 
 // HandleGlobalUpdate handles global update requests for all clients
