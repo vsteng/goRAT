@@ -1,8 +1,13 @@
 package server
 
 import (
+	"context"
 	"flag"
 	"log"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 )
 
 func Main() {
@@ -26,8 +31,14 @@ func Main() {
 		WebPassword: *webPassword,
 	}
 
-	// Create and start server
-	srv := NewServer(config)
+	// Create server with error recovery
+	srv, err := NewServerWithRecovery(config)
+	if err != nil {
+		log.Printf("WARNING: Server initialization error: %v", err)
+		log.Println("Attempting to continue with limited functionality...")
+		return
+	}
+
 	if config.UseTLS {
 		log.Printf("Starting server with TLS on %s", *addr)
 	} else {
@@ -37,7 +48,86 @@ func Main() {
 	log.Printf("Web UI credentials - Username: %s, Password: %s", *webUsername, *webPassword)
 	log.Printf("Authentication: Clients use machine ID (no token required)")
 
-	if err := srv.Start(); err != nil {
-		log.Fatalf("Server error: %v", err)
+	// Setup signal handling for graceful shutdown
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM, syscall.SIGQUIT)
+
+	// Start server in a goroutine
+	errorChan := make(chan error, 1)
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("PANIC RECOVERED in server: %v", r)
+				log.Println("Server will attempt to restart...")
+				// Signal error to restart
+				errorChan <- nil
+			}
+		}()
+
+		if err := srv.Start(); err != nil {
+			log.Printf("Server error: %v", err)
+			errorChan <- err
+		}
+	}()
+
+	log.Println("Server is running. Press Ctrl+C to stop.")
+
+	// Wait for shutdown signal or error
+	for {
+		select {
+		case sig := <-sigChan:
+			log.Printf("Received signal: %v", sig)
+			log.Println("Shutting down server gracefully...")
+
+			// Create shutdown context with timeout
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+
+			if err := srv.Shutdown(ctx); err != nil {
+				log.Printf("Error during shutdown: %v", err)
+			}
+			log.Println("Server stopped.")
+			return
+
+		case err := <-errorChan:
+			if err != nil {
+				log.Printf("Server encountered error: %v", err)
+				log.Println("Attempting to restart server in 5 seconds...")
+				time.Sleep(5 * time.Second)
+
+				// Restart server
+				go func() {
+					defer func() {
+						if r := recover(); r != nil {
+							log.Printf("PANIC RECOVERED in server restart: %v", r)
+							errorChan <- nil
+						}
+					}()
+
+					if err := srv.Start(); err != nil {
+						log.Printf("Server restart error: %v", err)
+						errorChan <- err
+					}
+				}()
+			} else {
+				log.Println("Server recovered from panic, restarting...")
+				time.Sleep(2 * time.Second)
+
+				// Restart after panic
+				go func() {
+					defer func() {
+						if r := recover(); r != nil {
+							log.Printf("PANIC RECOVERED in server restart: %v", r)
+							errorChan <- nil
+						}
+					}()
+
+					if err := srv.Start(); err != nil {
+						log.Printf("Server restart error: %v", err)
+						errorChan <- err
+					}
+				}()
+			}
+		}
 	}
 }

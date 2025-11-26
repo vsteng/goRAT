@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"log"
@@ -57,7 +58,9 @@ func NewServer(config *Config) *Server {
 	// Initialize client store
 	store, err := NewClientStore("clients.db")
 	if err != nil {
-		log.Fatalf("Failed to create client store: %v", err)
+		log.Printf("ERROR: Failed to create client store: %v", err)
+		log.Println("Server will continue without persistent storage")
+		store = nil // Continue without store
 	}
 
 	webConfig := &WebConfig{
@@ -67,7 +70,9 @@ func NewServer(config *Config) *Server {
 
 	webHandler, err := NewWebHandler(sessionMgr, manager, webConfig)
 	if err != nil {
-		log.Fatalf("Failed to create web handler: %v", err)
+		log.Printf("ERROR: Failed to create web handler: %v", err)
+		log.Println("Server will continue with limited web functionality")
+		// Create a minimal web handler or continue without it
 	}
 
 	server := &Server{
@@ -91,6 +96,39 @@ func NewServer(config *Config) *Server {
 	manager.SetStore(store)
 
 	return server
+}
+
+// NewServerWithRecovery creates a new server with error recovery
+func NewServerWithRecovery(config *Config) (*Server, error) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("PANIC RECOVERED during server creation: %v", r)
+		}
+	}()
+
+	return NewServer(config), nil
+}
+
+// Shutdown gracefully shuts down the server
+func (s *Server) Shutdown(ctx context.Context) error {
+	log.Println("Initiating graceful shutdown...")
+
+	// Close all client connections
+	clients := s.manager.GetAllClients()
+	for _, client := range clients {
+		log.Printf("Closing connection to client: %s", client.ID)
+		client.Conn.Close()
+	}
+
+	// Close database if available
+	if s.store != nil {
+		if err := s.store.Close(); err != nil {
+			log.Printf("Error closing database: %v", err)
+		}
+	}
+
+	log.Println("Graceful shutdown complete")
+	return nil
 }
 
 // Start starts the server
@@ -260,6 +298,9 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 // readPump reads messages from the client
 func (s *Server) readPump(client *Client) {
 	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("PANIC RECOVERED in readPump for client %s: %v", client.ID, r)
+		}
 		s.manager.unregister <- client
 		client.Conn.Close()
 	}()
@@ -294,6 +335,9 @@ func (s *Server) readPump(client *Client) {
 func (s *Server) writePump(client *Client) {
 	ticker := time.NewTicker(54 * time.Second)
 	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("PANIC RECOVERED in writePump for client %s: %v", client.ID, r)
+		}
 		ticker.Stop()
 		client.Conn.Close()
 	}()
@@ -323,6 +367,12 @@ func (s *Server) writePump(client *Client) {
 
 // handleMessage handles incoming messages from clients
 func (s *Server) handleMessage(client *Client, msg *common.Message) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("PANIC RECOVERED in handleMessage for client %s: %v", client.ID, r)
+		}
+	}()
+
 	switch msg.Type {
 	case common.MsgTypeHeartbeat:
 		var hb common.HeartbeatPayload
@@ -550,6 +600,15 @@ func (s *Server) ClearFileDataResult(clientID string) {
 
 // monitorClientStatus monitors client status and updates database
 func (s *Server) monitorClientStatus() {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("PANIC RECOVERED in monitorClientStatus: %v", r)
+			log.Println("Restarting client status monitor...")
+			time.Sleep(5 * time.Second)
+			go s.monitorClientStatus() // Restart the monitor
+		}
+	}()
+
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 
@@ -571,6 +630,17 @@ func (s *Server) monitorClientStatus() {
 
 // loadSavedClients loads previously saved clients from database on startup
 func (s *Server) loadSavedClients() {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("PANIC RECOVERED in loadSavedClients: %v", r)
+		}
+	}()
+
+	if s.store == nil {
+		log.Println("Client store not available, skipping load from database")
+		return
+	}
+
 	log.Println("Loading saved clients from database...")
 	clients, err := s.store.GetAllClients()
 	if err != nil {

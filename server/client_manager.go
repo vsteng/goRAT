@@ -46,6 +46,15 @@ func (m *ClientManager) SetStore(store *ClientStore) {
 
 // Run starts the client manager
 func (m *ClientManager) Run() {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("PANIC RECOVERED in ClientManager.Run: %v", r)
+			log.Println("Restarting client manager in 2 seconds...")
+			time.Sleep(2 * time.Second)
+			go m.Run() // Restart the manager
+		}
+	}()
+
 	for {
 		select {
 		case client := <-m.register:
