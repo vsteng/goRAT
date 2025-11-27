@@ -3,6 +3,9 @@
 ## Overview
 Fixed critical stability issues where the server would unexpectedly stop. The server now only stops when receiving explicit stop signals (SIGINT, SIGTERM, SIGQUIT) and includes comprehensive error recovery mechanisms.
 
+## Recent Fix (Nov 27, 2025)
+**Fixed "address already in use" restart loop**: Server now properly shuts down HTTP listener before attempting restart, and detects "address already in use" errors to prevent infinite restart loops.
+
 ## Changes Made
 
 ### 1. Signal Handling (`server/main.go`)
@@ -15,11 +18,19 @@ Fixed critical stability issues where the server would unexpectedly stop. The se
 - Proper cleanup of resources (database, client connections)
 - Server runs until explicitly stopped by user
 
-### 2. Error Recovery (`server/main.go`)
-**Added auto-restart on errors**:
+### 2. HTTP Server Management (`server/handlers.go`)
+**Added proper HTTP server lifecycle management**:
+- Server struct now tracks the running HTTP server instance
+- Shutdown method properly stops HTTP listener before cleanup
+- Prevents "address already in use" errors on restart
+- Thread-safe server reference with mutex protection
+
+### 3. Error Recovery (`server/main.go`)
+**Added smart auto-restart with error detection**:
 - Server runs in goroutine with error channel
-- Automatically restarts after 5 seconds if error occurs
-- Continues running even if individual operations fail
+- Detects "address already in use" errors and exits cleanly instead of restart loop
+- Properly shuts down HTTP server before attempting restart
+- Automatically restarts after 5 seconds for recoverable errors
 - Logs errors instead of crashing
 
 ### 3. Panic Recovery
@@ -28,7 +39,7 @@ Fixed critical stability issues where the server would unexpectedly stop. The se
 #### Server Components (`server/handlers.go`):
 - `NewServer()`: Non-fatal errors for store/web handler creation
 - `NewServerWithRecovery()`: Top-level panic recovery wrapper
-- `Shutdown()`: Graceful shutdown method
+- `Shutdown()`: Graceful shutdown with HTTP server cleanup
 - `readPump()`: Panic recovery per client connection
 - `writePump()`: Panic recovery per client connection  
 - `handleMessage()`: Panic recovery for message processing
@@ -46,6 +57,28 @@ Fixed critical stability issues where the server would unexpectedly stop. The se
 
 ### 5. Dependency Fix (`go.mod`)
 - Moved `github.com/mattn/go-sqlite3` from indirect to direct dependency
+
+## Common Issues Fixed
+
+### "address already in use" Error
+**Problem**: Server would enter infinite restart loop when port was already bound
+```
+Server restart error: listen tcp :8081: bind: address already in use
+Attempting to restart server in 5 seconds...
+[loop continues indefinitely]
+```
+
+**Solution**: 
+- HTTP server is now properly shut down before restart attempt
+- Server detects "address already in use" errors and exits cleanly
+- Prevents restart loops and resource leaks
+
+**Behavior Now**:
+```
+Server error: listen tcp :8081: bind: address already in use
+Cannot restart - address already in use. Server may already be running.
+Shutting down...
+```
 
 ## Testing
 

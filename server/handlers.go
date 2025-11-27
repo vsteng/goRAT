@@ -36,6 +36,8 @@ type Server struct {
 	fileDataResults   map[string]*common.FileDataPayload
 	screenshotResults map[string]*common.ScreenshotDataPayload
 	resultsMu         sync.RWMutex
+	httpServer        *http.Server
+	serverMu          sync.Mutex
 }
 
 // Config holds server configuration
@@ -113,6 +115,20 @@ func NewServerWithRecovery(config *Config) (*Server, error) {
 func (s *Server) Shutdown(ctx context.Context) error {
 	log.Println("Initiating graceful shutdown...")
 
+	s.serverMu.Lock()
+	httpServer := s.httpServer
+	s.serverMu.Unlock()
+
+	// Shutdown HTTP server if running
+	if httpServer != nil {
+		log.Println("Shutting down HTTP server...")
+		if err := httpServer.Shutdown(ctx); err != nil {
+			log.Printf("Error shutting down HTTP server: %v", err)
+			// Force close if graceful shutdown fails
+			httpServer.Close()
+		}
+	}
+
 	// Close all client connections
 	clients := s.manager.GetAllClients()
 	for _, client := range clients {
@@ -129,9 +145,7 @@ func (s *Server) Shutdown(ctx context.Context) error {
 
 	log.Println("Graceful shutdown complete")
 	return nil
-}
-
-// Start starts the server
+} // Start starts the server
 func (s *Server) Start() error {
 	go s.manager.Run()
 
@@ -172,12 +186,26 @@ func (s *Server) Start() error {
 			TLSConfig: tlsConfig,
 		}
 
+		s.serverMu.Lock()
+		s.httpServer = server
+		s.serverMu.Unlock()
+
 		log.Printf("Using direct TLS")
 		return server.ListenAndServeTLS(s.config.CertFile, s.config.KeyFile)
 	}
 
+	// Create HTTP server
+	server := &http.Server{
+		Addr:    s.config.Address,
+		Handler: mux,
+	}
+
+	s.serverMu.Lock()
+	s.httpServer = server
+	s.serverMu.Unlock()
+
 	log.Printf("Using HTTP (TLS should be handled by reverse proxy)")
-	return http.ListenAndServe(s.config.Address, mux)
+	return server.ListenAndServe()
 }
 
 // getClientIP extracts the real client IP from request headers

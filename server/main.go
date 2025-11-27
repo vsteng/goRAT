@@ -91,7 +91,23 @@ func Main() {
 
 		case err := <-errorChan:
 			if err != nil {
+				// Check if error is "address already in use" - don't restart in this case
+				errStr := err.Error()
+				if len(errStr) > 24 && errStr[len(errStr)-24:] == "address already in use" {
+					log.Printf("Server error: %v", err)
+					log.Println("Cannot restart - address already in use. Server may already be running.")
+					log.Println("Shutting down...")
+					return
+				}
+
 				log.Printf("Server encountered error: %v", err)
+				log.Println("Shutting down server before restart...")
+
+				// Properly shutdown before restart
+				shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+				srv.Shutdown(shutdownCtx)
+				shutdownCancel()
+
 				log.Println("Attempting to restart server in 5 seconds...")
 				time.Sleep(5 * time.Second)
 
@@ -111,6 +127,12 @@ func Main() {
 				}()
 			} else {
 				log.Println("Server recovered from panic, restarting...")
+
+				// Properly shutdown before restart
+				shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+				srv.Shutdown(shutdownCtx)
+				shutdownCancel()
+
 				time.Sleep(2 * time.Second)
 
 				// Restart after panic
