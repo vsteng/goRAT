@@ -17,6 +17,7 @@ type Client struct {
 	Metadata *common.ClientMetadata
 	Send     chan *common.Message
 	mu       sync.RWMutex
+	closed   bool // Track if Send channel is closed
 }
 
 // ClientManager manages all connected clients
@@ -27,6 +28,8 @@ type ClientManager struct {
 	broadcast  chan *common.Message
 	store      *ClientStore // Reference to persistent storage
 	mu         sync.RWMutex
+	running    bool
+	runningMu  sync.Mutex
 }
 
 // NewClientManager creates a new client manager
@@ -44,12 +47,44 @@ func (m *ClientManager) SetStore(store *ClientStore) {
 	m.store = store
 }
 
+// safeCloseClient safely closes a client's Send channel
+func (m *ClientManager) safeCloseClient(client *Client) {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	if !client.closed {
+		close(client.Send)
+		client.closed = true
+	}
+}
+
 // Run starts the client manager
 func (m *ClientManager) Run() {
+	// Prevent multiple instances
+	m.runningMu.Lock()
+	if m.running {
+		log.Println("ClientManager.Run() already running, skipping duplicate start")
+		m.runningMu.Unlock()
+		return
+	}
+	m.running = true
+	m.runningMu.Unlock()
+
 	defer func() {
+		m.runningMu.Lock()
+		m.running = false
+		m.runningMu.Unlock()
+
 		if r := recover(); r != nil {
 			log.Printf("PANIC RECOVERED in ClientManager.Run: %v", r)
-			log.Println("Restarting client manager in 2 seconds...")
+			log.Println("Recreating channels and restarting client manager in 2 seconds...")
+
+			// Recreate channels to avoid issues with closed channels
+			m.mu.Lock()
+			m.register = make(chan *Client)
+			m.unregister = make(chan *Client)
+			m.broadcast = make(chan *common.Message, 256)
+			m.mu.Unlock()
+
 			time.Sleep(2 * time.Second)
 			go m.Run() // Restart the manager
 		}
@@ -63,7 +98,7 @@ func (m *ClientManager) Run() {
 			if existing, exists := m.clients[client.ID]; exists {
 				// Client ID already registered - close the existing connection
 				log.Printf("Client ID %s already exists, closing old connection", client.ID)
-				close(existing.Send)
+				m.safeCloseClient(existing)
 				existing.Conn.Close()
 			}
 			m.clients[client.ID] = client
@@ -73,23 +108,24 @@ func (m *ClientManager) Run() {
 		case client := <-m.unregister:
 			m.mu.Lock()
 			if _, ok := m.clients[client.ID]; ok {
-				close(client.Send)
+				m.safeCloseClient(client)
 				delete(m.clients, client.ID)
 				log.Printf("Client unregistered: %s", client.ID)
 			}
 			m.mu.Unlock()
 
 		case message := <-m.broadcast:
-			m.mu.RLock()
-			for _, client := range m.clients {
+			m.mu.Lock() // Use Lock instead of RLock since we may delete
+			for id, client := range m.clients {
 				select {
 				case client.Send <- message:
 				default:
-					close(client.Send)
-					delete(m.clients, client.ID)
+					// Channel full or closed, remove client
+					m.safeCloseClient(client)
+					delete(m.clients, id)
 				}
 			}
-			m.mu.RUnlock()
+			m.mu.Unlock()
 		}
 	}
 }

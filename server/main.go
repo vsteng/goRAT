@@ -55,15 +55,6 @@ func Main() {
 	// Start server in a goroutine
 	errorChan := make(chan error, 1)
 	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				log.Printf("PANIC RECOVERED in server: %v", r)
-				log.Println("Server will attempt to restart...")
-				// Signal error to restart
-				errorChan <- nil
-			}
-		}()
-
 		if err := srv.Start(); err != nil {
 			log.Printf("Server error: %v", err)
 			errorChan <- err
@@ -73,83 +64,26 @@ func Main() {
 	log.Println("Server is running. Press Ctrl+C to stop.")
 
 	// Wait for shutdown signal or error
-	for {
-		select {
-		case sig := <-sigChan:
-			log.Printf("Received signal: %v", sig)
-			log.Println("Shutting down server gracefully...")
+	select {
+	case sig := <-sigChan:
+		log.Printf("Received signal: %v", sig)
+		log.Println("Shutting down server gracefully...")
 
-			// Create shutdown context with timeout
-			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-			defer cancel()
+		// Create shutdown context with timeout
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
 
-			if err := srv.Shutdown(ctx); err != nil {
-				log.Printf("Error during shutdown: %v", err)
-			}
-			log.Println("Server stopped.")
-			return
-
-		case err := <-errorChan:
-			if err != nil {
-				// Check if error is "address already in use" - don't restart in this case
-				errStr := err.Error()
-				if len(errStr) > 24 && errStr[len(errStr)-24:] == "address already in use" {
-					log.Printf("Server error: %v", err)
-					log.Println("Cannot restart - address already in use. Server may already be running.")
-					log.Println("Shutting down...")
-					return
-				}
-
-				log.Printf("Server encountered error: %v", err)
-				log.Println("Shutting down server before restart...")
-
-				// Properly shutdown before restart
-				shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
-				srv.Shutdown(shutdownCtx)
-				shutdownCancel()
-
-				log.Println("Attempting to restart server in 5 seconds...")
-				time.Sleep(5 * time.Second)
-
-				// Restart server
-				go func() {
-					defer func() {
-						if r := recover(); r != nil {
-							log.Printf("PANIC RECOVERED in server restart: %v", r)
-							errorChan <- nil
-						}
-					}()
-
-					if err := srv.Start(); err != nil {
-						log.Printf("Server restart error: %v", err)
-						errorChan <- err
-					}
-				}()
-			} else {
-				log.Println("Server recovered from panic, restarting...")
-
-				// Properly shutdown before restart
-				shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
-				srv.Shutdown(shutdownCtx)
-				shutdownCancel()
-
-				time.Sleep(2 * time.Second)
-
-				// Restart after panic
-				go func() {
-					defer func() {
-						if r := recover(); r != nil {
-							log.Printf("PANIC RECOVERED in server restart: %v", r)
-							errorChan <- nil
-						}
-					}()
-
-					if err := srv.Start(); err != nil {
-						log.Printf("Server restart error: %v", err)
-						errorChan <- err
-					}
-				}()
-			}
+		if err := srv.Shutdown(ctx); err != nil {
+			log.Printf("Error during shutdown: %v", err)
 		}
+		log.Println("Server stopped.")
+		return
+
+	case err := <-errorChan:
+		if err != nil {
+			log.Printf("Server encountered fatal error: %v", err)
+			log.Println("Server stopped.")
+		}
+		return
 	}
 }

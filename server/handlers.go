@@ -38,6 +38,8 @@ type Server struct {
 	resultsMu         sync.RWMutex
 	httpServer        *http.Server
 	serverMu          sync.Mutex
+	started           bool
+	startedMu         sync.Mutex
 }
 
 // Config holds server configuration
@@ -115,6 +117,10 @@ func NewServerWithRecovery(config *Config) (*Server, error) {
 func (s *Server) Shutdown(ctx context.Context) error {
 	log.Println("Initiating graceful shutdown...")
 
+	s.startedMu.Lock()
+	s.started = false
+	s.startedMu.Unlock()
+
 	s.serverMu.Lock()
 	httpServer := s.httpServer
 	s.serverMu.Unlock()
@@ -147,6 +153,16 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	return nil
 } // Start starts the server
 func (s *Server) Start() error {
+	// Prevent duplicate starts
+	s.startedMu.Lock()
+	if s.started {
+		log.Println("Server already started, skipping duplicate start")
+		s.startedMu.Unlock()
+		return nil
+	}
+	s.started = true
+	s.startedMu.Unlock()
+
 	go s.manager.Run()
 
 	// Start background task to mark offline clients
@@ -313,7 +329,8 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 			ConnectedAt: time.Now(),
 			LastSeen:    time.Now(),
 		},
-		Send: make(chan *common.Message, 256),
+		Send:   make(chan *common.Message, 256),
+		closed: false,
 	}
 
 	s.manager.register <- client
