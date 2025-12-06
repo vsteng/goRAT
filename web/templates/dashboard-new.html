@@ -1,0 +1,936 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Control Panel - Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary: #667eea;
+            --primary-dark: #5568d3;
+            --primary-light: #7b93f1;
+            --secondary: #764ba2;
+            --success: #28a745;
+            --danger: #e74c3c;
+            --warning: #ffc107;
+            --info: #17a2b8;
+            --light: #f8f9fa;
+            --dark: #2c3e50;
+            --border: #e1e1e1;
+            --text: #333;
+            --text-light: #888;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #f5f7fa;
+            color: var(--text);
+            line-height: 1.6;
+        }
+
+        .layout {
+            display: flex;
+            min-height: 100vh;
+        }
+
+        /* ========== SIDEBAR ========== */
+        .sidebar {
+            width: 260px;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+            color: white;
+            position: fixed;
+            left: 0;
+            top: 0;
+            height: 100vh;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+            z-index: 1000;
+            overflow-y: auto;
+        }
+
+        .sidebar-header {
+            padding: 30px 20px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .sidebar-header h1 {
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 5px;
+        }
+
+        .sidebar-header p {
+            font-size: 13px;
+            opacity: 0.9;
+        }
+
+        .sidebar-menu {
+            list-style: none;
+            padding: 20px 0;
+        }
+
+        .sidebar-menu li {
+            margin: 0;
+        }
+
+        .sidebar-menu a {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            color: rgba(255,255,255,0.8);
+            text-decoration: none;
+            padding: 12px 20px;
+            transition: all 0.3s;
+            font-size: 14px;
+        }
+
+        .sidebar-menu a:hover {
+            background: rgba(255,255,255,0.1);
+            color: white;
+            padding-left: 25px;
+        }
+
+        .sidebar-menu a.active {
+            background: rgba(255,255,255,0.2);
+            color: white;
+            border-left: 3px solid white;
+            padding-left: 17px;
+        }
+
+        .sidebar-footer {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            padding: 20px;
+            border-top: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .user-avatar {
+            width: 40px;
+            height: 40px;
+            background: rgba(255,255,255,0.3);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+        }
+
+        .user-details p {
+            font-size: 12px;
+            opacity: 0.9;
+            margin: 2px 0;
+        }
+
+        .logout-btn {
+            width: 100%;
+            background: rgba(255,255,255,0.2);
+            border: 1px solid rgba(255,255,255,0.3);
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.3s;
+        }
+
+        .logout-btn:hover {
+            background: rgba(255,255,255,0.3);
+        }
+
+        /* ========== MAIN CONTENT ========== */
+        .main-content {
+            margin-left: 260px;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* ========== TOP BAR ========== */
+        .top-bar {
+            background: white;
+            padding: 20px 30px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .top-bar h2 {
+            font-size: 24px;
+            color: var(--text);
+        }
+
+        .top-bar-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.3s;
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: var(--primary-dark);
+        }
+
+        .btn-secondary {
+            background: var(--info);
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #138496;
+        }
+
+        /* ========== CONTENT AREA ========== */
+        .content {
+            flex: 1;
+            padding: 30px;
+            overflow-y: auto;
+        }
+
+        /* ========== STATS SECTION ========== */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            border-left: 4px solid var(--primary);
+        }
+
+        .stat-card.success {
+            border-left-color: var(--success);
+        }
+
+        .stat-card.danger {
+            border-left-color: var(--danger);
+        }
+
+        .stat-card.warning {
+            border-left-color: var(--warning);
+        }
+
+        .stat-label {
+            color: var(--text-light);
+            font-size: 13px;
+            font-weight: 500;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .stat-value {
+            font-size: 32px;
+            font-weight: 700;
+            color: var(--primary);
+        }
+
+        .stat-card.success .stat-value {
+            color: var(--success);
+        }
+
+        .stat-card.danger .stat-value {
+            color: var(--danger);
+        }
+
+        .stat-card.warning .stat-value {
+            color: var(--warning);
+        }
+
+        /* ========== CLIENTS SECTION ========== */
+        .clients-container {
+            display: grid;
+            grid-template-columns: 1fr 300px;
+            gap: 30px;
+        }
+
+        .section {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            padding: 30px;
+        }
+
+        .section h3 {
+            font-size: 18px;
+            margin-bottom: 20px;
+            color: var(--text);
+            padding-bottom: 15px;
+            border-bottom: 2px solid var(--light);
+        }
+
+        /* ========== CLIENT LIST ========== */
+        .client-list {
+            list-style: none;
+        }
+
+        .client-item {
+            padding: 15px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            margin-bottom: 12px;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .client-item:hover {
+            background: var(--light);
+            border-color: var(--primary);
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.1);
+        }
+
+        .client-item.active {
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+            border-color: var(--primary);
+        }
+
+        .client-info {
+            flex: 1;
+        }
+
+        .client-name {
+            font-weight: 600;
+            color: var(--text);
+            margin-bottom: 5px;
+        }
+
+        .client-meta {
+            font-size: 12px;
+            color: var(--text-light);
+            display: flex;
+            gap: 15px;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .status-badge.online {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-badge.offline {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        /* ========== CLIENT DETAILS PANEL ========== */
+        .client-details {
+            position: fixed;
+            right: 0;
+            top: 0;
+            width: 350px;
+            height: 100vh;
+            background: white;
+            box-shadow: -2px 0 10px rgba(0,0,0,0.1);
+            z-index: 999;
+            transform: translateX(100%);
+            transition: transform 0.3s;
+            margin-top: 0;
+            margin-left: 0;
+            padding: 30px;
+            overflow-y: auto;
+        }
+
+        .client-details.active {
+            transform: translateX(0);
+        }
+
+        .details-close {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: var(--text-light);
+        }
+
+        .details-close:hover {
+            color: var(--text);
+        }
+
+        .details-header {
+            padding-top: 10px;
+            margin-bottom: 25px;
+        }
+
+        .details-header h4 {
+            font-size: 16px;
+            margin-bottom: 8px;
+        }
+
+        .details-row {
+            margin-bottom: 15px;
+        }
+
+        .details-label {
+            font-size: 11px;
+            color: var(--text-light);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+
+        .details-value {
+            font-size: 14px;
+            color: var(--text);
+            word-break: break-all;
+        }
+
+        .details-actions {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 25px;
+            padding-top: 20px;
+            border-top: 1px solid var(--border);
+        }
+
+        .details-actions button {
+            padding: 10px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+
+        .btn-action-primary {
+            background: var(--primary);
+            color: white;
+        }
+
+        .btn-action-primary:hover {
+            background: var(--primary-dark);
+        }
+
+        .btn-action-secondary {
+            background: var(--info);
+            color: white;
+        }
+
+        .btn-action-secondary:hover {
+            background: #138496;
+        }
+
+        .btn-action-danger {
+            background: var(--danger);
+            color: white;
+        }
+
+        .btn-action-danger:hover {
+            background: #c0392b;
+        }
+
+        /* ========== RESPONSIVE ========== */
+        @media (max-width: 1200px) {
+            .clients-container {
+                grid-template-columns: 1fr;
+            }
+
+            .client-details {
+                width: 100%;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .sidebar {
+                width: 70px;
+            }
+
+            .sidebar-header p,
+            .sidebar-menu a span {
+                display: none;
+            }
+
+            .main-content {
+                margin-left: 70px;
+            }
+
+            .top-bar {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 15px;
+            }
+
+            .stats-grid {
+                grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            }
+        }
+
+        /* ========== LOADING & EMPTY STATES ========== */
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--text-light);
+        }
+
+        .empty-state svg {
+            width: 80px;
+            height: 80px;
+            margin-bottom: 20px;
+            opacity: 0.5;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid var(--border);
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* ========== MODALS ========== */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 2000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            max-width: 500px;
+            width: 90%;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+        }
+
+        .modal-content h3 {
+            margin-bottom: 15px;
+            color: var(--text);
+        }
+
+        .modal-content p {
+            margin-bottom: 20px;
+            color: var(--text-light);
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+        }
+    </style>
+</head>
+<body>
+    <div class="layout">
+        <!-- SIDEBAR -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h1>🖥️ RAT</h1>
+                <p>Control Panel</p>
+            </div>
+
+            <ul class="sidebar-menu">
+                <li><a href="#" class="active" onclick="showSection('dashboard')"><span>📊</span> <span>Dashboard</span></a></li>
+                <li><a href="#" onclick="showSection('clients')"><span>👥</span> <span>Clients</span></a></li>
+                <li><a href="#" onclick="showSection('proxy')"><span>🌐</span> <span>Proxy</span></a></li>
+                <li><a href="#" onclick="showSection('settings')"><span>⚙️</span> <span>Settings</span></a></li>
+            </ul>
+
+            <div class="sidebar-footer">
+                <div class="user-info">
+                    <div class="user-avatar">A</div>
+                    <div class="user-details">
+                        <p style="font-weight: 600;">Admin</p>
+                        <p>Connected</p>
+                    </div>
+                </div>
+                <button class="logout-btn" onclick="logout()">Logout</button>
+            </div>
+        </aside>
+
+        <!-- MAIN CONTENT -->
+        <div class="main-content">
+            <!-- TOP BAR -->
+            <div class="top-bar">
+                <div>
+                    <h2 id="pageTitle">Dashboard</h2>
+                </div>
+                <div class="top-bar-actions">
+                    <button class="btn btn-secondary" onclick="loadClients()">🔄 Refresh</button>
+                    <button class="btn btn-primary" onclick="openClientDetailsModal()">➕ Add Client</button>
+                </div>
+            </div>
+
+            <!-- CONTENT -->
+            <div class="content">
+                <!-- STATS GRID -->
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-label">Total Clients</div>
+                        <div class="stat-value" id="totalClients">0</div>
+                    </div>
+                    <div class="stat-card success">
+                        <div class="stat-label">Online Now</div>
+                        <div class="stat-value" id="onlineClients">0</div>
+                    </div>
+                    <div class="stat-card danger">
+                        <div class="stat-label">Offline</div>
+                        <div class="stat-value" id="offlineClients">0</div>
+                    </div>
+                    <div class="stat-card warning">
+                        <div class="stat-label">Awaiting Update</div>
+                        <div class="stat-value" id="updatingClients">0</div>
+                    </div>
+                </div>
+
+                <!-- CLIENTS SECTION -->
+                <div class="clients-container">
+                    <section class="section">
+                        <h3>🔌 Connected Devices</h3>
+                        <ul class="client-list" id="clientList">
+                            <div class="empty-state">
+                                <div class="loading"></div>
+                                <p style="margin-top: 15px;">Loading clients...</p>
+                            </div>
+                        </ul>
+                    </section>
+
+                    <!-- ACTIVITY SIDEBAR -->
+                    <aside class="section" style="max-height: 400px;">
+                        <h3>📈 Recent Activity</h3>
+                        <div id="activityFeed" style="font-size: 12px; color: var(--text-light);">
+                            <p>• System initialized</p>
+                            <p>• Listening on port 8080</p>
+                            <p>• Ready for connections</p>
+                        </div>
+                    </aside>
+                </div>
+            </div>
+        </div>
+
+        <!-- CLIENT DETAILS PANEL -->
+        <div class="client-details" id="clientDetailsPanel">
+            <button class="details-close" onclick="closeClientDetails()">✕</button>
+            <div class="details-header">
+                <h4 id="detailsClientName">Client Details</h4>
+                <span class="status-badge online" id="detailsStatus">Online</span>
+            </div>
+
+            <div id="detailsContent">
+                <!-- Will be populated dynamically -->
+            </div>
+
+            <div class="details-actions">
+                <button class="btn-action-primary" onclick="openClientPanel()">🖥️ Control</button>
+                <button class="btn-action-secondary" onclick="viewStats()">📊 Stats</button>
+                <button class="btn-action-primary" onclick="sendCommand()">⌨️ Terminal</button>
+                <button class="btn-action-secondary" onclick="browseLogs()">📋 Logs</button>
+                <button class="btn-action-danger" onclick="confirmRemove()">🗑️ Remove</button>
+                <button class="btn-action-danger" onclick="confirmUninstall()">❌ Uninstall</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODALS -->
+    <div class="modal" id="confirmModal">
+        <div class="modal-content">
+            <h3 id="confirmTitle">Confirm Action</h3>
+            <p id="confirmMessage"></p>
+            <div class="modal-actions">
+                <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                <button class="btn btn-danger" onclick="confirmAction()">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" id="statusModal">
+        <div class="modal-content">
+            <h3 id="statusTitle">Status</h3>
+            <p id="statusMessage"></p>
+            <div class="modal-actions">
+                <button class="btn btn-primary" onclick="closeModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let selectedClient = null;
+        let clients = [];
+
+        async function loadClients() {
+            try {
+                const response = await fetch('/api/clients');
+                if (response.status === 401) {
+                    window.location.href = '/login';
+                    return;
+                }
+                clients = await response.json() || [];
+                renderClientList();
+                updateStats();
+            } catch (err) {
+                console.error('Error loading clients:', err);
+            }
+        }
+
+        function renderClientList() {
+            const list = document.getElementById('clientList');
+            
+            if (clients.length === 0) {
+                list.innerHTML = `
+                    <div class="empty-state" style="padding: 40px 20px;">
+                        <p>No clients connected</p>
+                        <p style="font-size: 12px; margin-top: 10px;">Waiting for clients to connect...</p>
+                    </div>
+                `;
+                return;
+            }
+
+            list.innerHTML = clients.map(client => `
+                <li class="client-item ${selectedClient?.id === client.id ? 'active' : ''}" 
+                    onclick="selectClient(event, ${JSON.stringify(client).replace(/"/g, '&quot;')})">
+                    <div class="client-info">
+                        <div class="client-name">${escapeHtml(client.hostname || client.id)}</div>
+                        <div class="client-meta">
+                            <span>${escapeHtml(client.os || 'Unknown')}</span>
+                            <span>${escapeHtml(client.ip || 'N/A')}</span>
+                        </div>
+                    </div>
+                    <span class="status-badge ${client.status === 'online' ? 'online' : 'offline'}">
+                        ${client.status}
+                    </span>
+                </li>
+            `).join('');
+        }
+
+        function selectClient(event, client) {
+            event.preventDefault();
+            selectedClient = client;
+            renderClientList();
+            showClientDetails(client);
+        }
+
+        function showClientDetails(client) {
+            const panel = document.getElementById('clientDetailsPanel');
+            const content = document.getElementById('detailsContent');
+            
+            document.getElementById('detailsClientName').textContent = escapeHtml(client.hostname || client.id);
+            document.getElementById('detailsStatus').textContent = client.status.toUpperCase();
+            document.getElementById('detailsStatus').className = `status-badge ${client.status}`;
+
+            content.innerHTML = `
+                <div class="details-row">
+                    <div class="details-label">Client ID</div>
+                    <div class="details-value" style="font-family: monospace; font-size: 12px;">${escapeHtml(client.id)}</div>
+                </div>
+                <div class="details-row">
+                    <div class="details-label">Hostname</div>
+                    <div class="details-value">${escapeHtml(client.hostname || 'N/A')}</div>
+                </div>
+                <div class="details-row">
+                    <div class="details-label">Operating System</div>
+                    <div class="details-value">${escapeHtml(client.os || 'N/A')} / ${escapeHtml(client.arch || 'N/A')}</div>
+                </div>
+                <div class="details-row">
+                    <div class="details-label">Local IP Address</div>
+                    <div class="details-value">${escapeHtml(client.ip || 'N/A')}</div>
+                </div>
+                <div class="details-row">
+                    <div class="details-label">Public IP Address</div>
+                    <div class="details-value">${escapeHtml(client.public_ip || 'N/A')}</div>
+                </div>
+                <div class="details-row">
+                    <div class="details-label">Last Seen</div>
+                    <div class="details-value">${formatDate(client.last_seen)}</div>
+                </div>
+                <div class="details-row">
+                    <div class="details-label">Version</div>
+                    <div class="details-value">${escapeHtml(client.version || 'N/A')}</div>
+                </div>
+            `;
+
+            panel.classList.add('active');
+        }
+
+        function closeClientDetails() {
+            document.getElementById('clientDetailsPanel').classList.remove('active');
+            selectedClient = null;
+            renderClientList();
+        }
+
+        function updateStats() {
+            const total = clients.length;
+            const online = clients.filter(c => c.status === 'online').length;
+            const offline = total - online;
+
+            document.getElementById('totalClients').textContent = total;
+            document.getElementById('onlineClients').textContent = online;
+            document.getElementById('offlineClients').textContent = offline;
+        }
+
+        function openClientPanel() {
+            if (!selectedClient) return;
+            window.open(`/client-details?id=${encodeURIComponent(selectedClient.id)}`, '_blank', 'width=1400,height=800');
+        }
+
+        function sendCommand() {
+            if (!selectedClient) return;
+            window.open(`/terminal?client=${encodeURIComponent(selectedClient.id)}`, '_blank', 'width=1000,height=600');
+        }
+
+        function viewStats() {
+            if (!selectedClient) {
+                showStatus('Error', 'Please select a client first');
+                return;
+            }
+            showStatus('Stats', `Client: ${selectedClient.hostname || selectedClient.id}\nOS: ${selectedClient.os}\nIP: ${selectedClient.ip}`);
+        }
+
+        function browseLogs() {
+            if (!selectedClient) {
+                showStatus('Error', 'Please select a client first');
+                return;
+            }
+            showStatus('Logs', `Logs for ${selectedClient.hostname || selectedClient.id} would be displayed here`);
+        }
+
+        function confirmRemove() {
+            if (!selectedClient) {
+                showStatus('Error', 'Please select a client first');
+                return;
+            }
+            showConfirm('Remove Client', `Remove ${escapeHtml(selectedClient.hostname || selectedClient.id)} from the list?`, removeClient);
+        }
+
+        function confirmUninstall() {
+            if (!selectedClient) {
+                showStatus('Error', 'Please select a client first');
+                return;
+            }
+            showConfirm('Uninstall Client', `Uninstall from ${escapeHtml(selectedClient.hostname || selectedClient.id)}?\n\nThis cannot be undone.`, uninstallClient);
+        }
+
+        function removeClient() {
+            closeModal();
+            showStatus('Removed', 'Client removed from list');
+            closeClientDetails();
+            loadClients();
+        }
+
+        function uninstallClient() {
+            closeModal();
+            showStatus('Uninstall Sent', 'Uninstall command sent to client');
+            closeClientDetails();
+            setTimeout(() => loadClients(), 2000);
+        }
+
+        function openClientDetailsModal() {
+            showStatus('Add Client', 'New client management coming soon');
+        }
+
+        function showSection(section) {
+            document.getElementById('pageTitle').textContent = 
+                section === 'dashboard' ? 'Dashboard' :
+                section === 'clients' ? 'Clients' :
+                section === 'proxy' ? 'Proxy' : 'Settings';
+        }
+
+        function showStatus(title, message) {
+            document.getElementById('statusTitle').textContent = title;
+            document.getElementById('statusMessage').textContent = message;
+            document.getElementById('statusModal').classList.add('active');
+        }
+
+        function showConfirm(title, message, callback) {
+            confirmCallback = callback;
+            document.getElementById('confirmTitle').textContent = title;
+            document.getElementById('confirmMessage').textContent = message;
+            document.getElementById('confirmModal').classList.add('active');
+        }
+
+        let confirmCallback = null;
+        function confirmAction() {
+            if (confirmCallback) confirmCallback();
+        }
+
+        function closeModal() {
+            document.getElementById('statusModal').classList.remove('active');
+            document.getElementById('confirmModal').classList.remove('active');
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function formatDate(dateStr) {
+            if (!dateStr) return 'N/A';
+            const date = new Date(dateStr);
+            return date.toLocaleString();
+        }
+
+        async function logout() {
+            await fetch('/api/logout', { method: 'POST' });
+            window.location.href = '/login';
+        }
+
+        // Initialize
+        loadClients();
+        setInterval(loadClients, 10000);
+    </script>
+</body>
+</html>

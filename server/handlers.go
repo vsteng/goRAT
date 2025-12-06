@@ -30,6 +30,7 @@ type Server struct {
 	authenticator     *Authenticator
 	webHandler        *WebHandler
 	terminalProxy     *TerminalProxy
+	proxyManager      *ProxyManager
 	commandResults    map[string]*common.CommandResultPayload
 	fileListResults   map[string]*common.FileListPayload
 	driveListResults  map[string]*common.DriveListPayload
@@ -180,6 +181,18 @@ func (s *Server) Start() error {
 	mux.HandleFunc("/api/clients", s.webHandler.HandleClientsAPI)
 	mux.HandleFunc("/api/command", s.handleSendCommand)
 	mux.HandleFunc("/api/terminal", s.terminalProxy.HandleTerminalWebSocket)
+
+	// Proxy API endpoints
+	mux.HandleFunc("/api/proxy/create", s.HandleProxyCreate)
+	mux.HandleFunc("/api/proxy/list", s.HandleProxyList)
+	mux.HandleFunc("/api/proxy/close", s.HandleProxyClose)
+	mux.HandleFunc("/api/proxy/stats", s.HandleProxyStats)
+
+	// Client management endpoints
+	mux.HandleFunc("/api/client", s.HandleClientGet)
+	mux.HandleFunc("/api/files", s.HandleFilesAPI)
+	mux.HandleFunc("/api/processes", s.HandleProcessesAPI)
+	mux.HandleFunc("/api/proxy-file", s.ProxyFileServer)
 
 	// Web UI routes
 	s.webHandler.RegisterWebRoutes(mux)

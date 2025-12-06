@@ -214,6 +214,34 @@ func (wh *WebHandler) HandleFilesPage(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// HandleDashboardNew serves the new enhanced dashboard page
+func (wh *WebHandler) HandleDashboardNew(w http.ResponseWriter, r *http.Request) {
+	if err := wh.templates.ExecuteTemplate(w, "dashboard-new.html", nil); err != nil {
+		log.Printf("Error rendering dashboard-new template: %v", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+	}
+}
+
+// HandleClientDetails serves the client details page
+func (wh *WebHandler) HandleClientDetails(w http.ResponseWriter, r *http.Request) {
+	clientID := r.URL.Query().Get("id")
+	if clientID == "" {
+		http.Error(w, "Client ID required", http.StatusBadRequest)
+		return
+	}
+
+	data := struct {
+		ClientID string
+	}{
+		ClientID: clientID,
+	}
+
+	if err := wh.templates.ExecuteTemplate(w, "client-details.html", data); err != nil {
+		log.Printf("Error rendering client-details template: %v", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+	}
+}
+
 // HandleClientsAPI returns the list of connected clients (protected by auth)
 func (wh *WebHandler) HandleClientsAPI(w http.ResponseWriter, r *http.Request) {
 	// Check authentication
@@ -539,12 +567,14 @@ func (wh *WebHandler) RegisterWebRoutes(mux *http.ServeMux) {
 	// Protected routes
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/" {
-			http.Redirect(w, r, "/dashboard", http.StatusSeeOther)
+			http.Redirect(w, r, "/dashboard-new", http.StatusSeeOther)
 			return
 		}
 		http.NotFound(w, r)
 	})
 	mux.HandleFunc("/dashboard", wh.requireAuth(wh.HandleDashboard))
+	mux.HandleFunc("/dashboard-new", wh.requireAuth(wh.HandleDashboardNew))
+	mux.HandleFunc("/client-details", wh.requireAuth(wh.HandleClientDetails))
 	mux.HandleFunc("/terminal", wh.requireAuth(wh.HandleTerminalPage))
 	mux.HandleFunc("/files", wh.requireAuth(wh.HandleFilesPage))
 	mux.HandleFunc("/api/files/browse", wh.requireAuth(wh.HandleFileBrowse))
