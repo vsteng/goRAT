@@ -46,6 +46,10 @@ const (
 	MsgTypeTerminalOutput MessageType = "terminal_output"
 	MsgTypeTerminalResize MessageType = "terminal_resize"
 
+	// Process list messages
+	MsgTypeListProcesses MessageType = "list_processes"
+	MsgTypeProcessList   MessageType = "process_list"
+
 	// Heartbeat and status
 	MsgTypeHeartbeat MessageType = "heartbeat"
 	MsgTypePing      MessageType = "ping"
@@ -230,6 +234,21 @@ type StartTerminalPayload struct {
 	Shell     string `json:"shell,omitempty"` // bash, sh, cmd, powershell
 	Rows      int    `json:"rows,omitempty"`
 	Cols      int    `json:"cols,omitempty"`
+}
+
+// Process represents a running process
+type Process struct {
+	Name   string  `json:"name"`
+	PID    int     `json:"pid"`
+	CPU    float64 `json:"cpu"`
+	Memory float64 `json:"memory"`
+	Status string  `json:"status"`
+}
+
+// ProcessListPayload contains process list data
+type ProcessListPayload struct {
+	Processes []Process `json:"processes"`
+	Error     string    `json:"error,omitempty"`
 }
 
 // ClientMetadata stores client information

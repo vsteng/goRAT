@@ -491,32 +491,38 @@ func (s *Server) HandleProcessesAPI(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = client
 
+	// Clear any previous result
+	s.ClearProcessListResult(clientID)
+
 	// Send process list request to client
-	msg := map[string]interface{}{
-		"type": "list_processes",
+	msg, err := common.NewMessage(common.MsgTypeListProcesses, nil)
+	if err != nil {
+		http.Error(w, "Failed to create message", http.StatusInternalServerError)
+		return
 	}
 
-	data, _ := json.Marshal(msg)
-	_ = data // TODO: Send through websocket
-
-	// Return mock data
-	mockProcesses := []map[string]interface{}{
-		{
-			"name":   "svchost.exe",
-			"pid":    4,
-			"cpu":    2.5,
-			"memory": 15.3,
-			"status": "running",
-		},
-		{
-			"name":   "explorer.exe",
-			"pid":    1024,
-			"cpu":    5.1,
-			"memory": 45.6,
-			"status": "running",
-		},
+	if err := s.manager.SendToClient(clientID, msg); err != nil {
+		http.Error(w, "Failed to send request", http.StatusInternalServerError)
+		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(mockProcesses)
+	// Wait for response with timeout
+	timeout := time.After(30 * time.Second)
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-timeout:
+			http.Error(w, "Request timeout", http.StatusRequestTimeout)
+			return
+		case <-ticker.C:
+			if result, exists := s.GetProcessListResult(clientID); exists {
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(result.Processes)
+				s.ClearProcessListResult(clientID)
+				return
+			}
+		}
+	}
 }

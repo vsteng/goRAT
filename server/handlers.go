@@ -24,23 +24,24 @@ var upgrader = websocket.Upgrader{
 
 // Server represents the main server
 type Server struct {
-	manager           *ClientManager
-	store             *ClientStore
-	config            *Config
-	authenticator     *Authenticator
-	webHandler        *WebHandler
-	terminalProxy     *TerminalProxy
-	proxyManager      *ProxyManager
-	commandResults    map[string]*common.CommandResultPayload
-	fileListResults   map[string]*common.FileListPayload
-	driveListResults  map[string]*common.DriveListPayload
-	fileDataResults   map[string]*common.FileDataPayload
-	screenshotResults map[string]*common.ScreenshotDataPayload
-	resultsMu         sync.RWMutex
-	httpServer        *http.Server
-	serverMu          sync.Mutex
-	started           bool
-	startedMu         sync.Mutex
+	manager            *ClientManager
+	store              *ClientStore
+	config             *Config
+	authenticator      *Authenticator
+	webHandler         *WebHandler
+	terminalProxy      *TerminalProxy
+	proxyManager       *ProxyManager
+	commandResults     map[string]*common.CommandResultPayload
+	fileListResults    map[string]*common.FileListPayload
+	driveListResults   map[string]*common.DriveListPayload
+	fileDataResults    map[string]*common.FileDataPayload
+	screenshotResults  map[string]*common.ScreenshotDataPayload
+	processListResults map[string]*common.ProcessListPayload
+	resultsMu          sync.RWMutex
+	httpServer         *http.Server
+	serverMu           sync.Mutex
+	started            bool
+	startedMu          sync.Mutex
 }
 
 // Config holds server configuration
@@ -81,17 +82,18 @@ func NewServer(config *Config) *Server {
 	}
 
 	server := &Server{
-		manager:           manager,
-		store:             store,
-		config:            config,
-		authenticator:     NewAuthenticator(config.AuthToken),
-		webHandler:        webHandler,
-		terminalProxy:     terminalProxy,
-		commandResults:    make(map[string]*common.CommandResultPayload),
-		fileListResults:   make(map[string]*common.FileListPayload),
-		driveListResults:  make(map[string]*common.DriveListPayload),
-		fileDataResults:   make(map[string]*common.FileDataPayload),
-		screenshotResults: make(map[string]*common.ScreenshotDataPayload),
+		manager:            manager,
+		store:              store,
+		config:             config,
+		authenticator:      NewAuthenticator(config.AuthToken),
+		webHandler:         webHandler,
+		terminalProxy:      terminalProxy,
+		commandResults:     make(map[string]*common.CommandResultPayload),
+		fileListResults:    make(map[string]*common.FileListPayload),
+		driveListResults:   make(map[string]*common.DriveListPayload),
+		fileDataResults:    make(map[string]*common.FileDataPayload),
+		screenshotResults:  make(map[string]*common.ScreenshotDataPayload),
+		processListResults: make(map[string]*common.ProcessListPayload),
 	}
 
 	// Set server reference in web handler
@@ -654,6 +656,28 @@ func (s *Server) ClearFileDataResult(clientID string) {
 	s.resultsMu.Lock()
 	defer s.resultsMu.Unlock()
 	delete(s.fileDataResults, clientID)
+}
+
+// GetProcessListResult retrieves stored process list result for a client
+func (s *Server) GetProcessListResult(clientID string) (*common.ProcessListPayload, bool) {
+	s.resultsMu.RLock()
+	defer s.resultsMu.RUnlock()
+	result, exists := s.processListResults[clientID]
+	return result, exists
+}
+
+// SetProcessListResult stores process list result for a client
+func (s *Server) SetProcessListResult(clientID string, payload *common.ProcessListPayload) {
+	s.resultsMu.Lock()
+	defer s.resultsMu.Unlock()
+	s.processListResults[clientID] = payload
+}
+
+// ClearProcessListResult removes stored process list result
+func (s *Server) ClearProcessListResult(clientID string) {
+	s.resultsMu.Lock()
+	defer s.resultsMu.Unlock()
+	delete(s.processListResults, clientID)
 }
 
 // monitorClientStatus monitors client status and updates database
