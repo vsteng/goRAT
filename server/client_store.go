@@ -390,13 +390,13 @@ func (s *ClientStore) DeleteProxy(id string) error {
 
 // WebUser represents a web UI user
 type WebUser struct {
-	ID        int
-	Username  string
-	FullName  string
-	Role      string // "admin" or "user"
-	Status    string // "active" or "inactive"
-	CreatedAt time.Time
-	LastLogin *time.Time
+	ID        int        `json:"id"`
+	Username  string     `json:"username"`
+	FullName  string     `json:"full_name"`
+	Role      string     `json:"role"`   // "admin" or "user"
+	Status    string     `json:"status"` // "active" or "inactive"
+	CreatedAt time.Time  `json:"created_at"`
+	LastLogin *time.Time `json:"last_login,omitempty"`
 }
 
 // CreateWebUser creates a new web user (password_hash should be pre-hashed)
@@ -420,6 +420,7 @@ func (s *ClientStore) GetWebUser(username string) (*WebUser, string, error) {
 
 	var user WebUser
 	var passwordHash string
+	var lastLogin sql.NullTime
 
 	query := `SELECT id, username, password_hash, full_name, role, status, created_at, last_login FROM web_users WHERE username = ?`
 	err := s.db.QueryRow(query, username).Scan(
@@ -430,11 +431,15 @@ func (s *ClientStore) GetWebUser(username string) (*WebUser, string, error) {
 		&user.Role,
 		&user.Status,
 		&user.CreatedAt,
-		&user.LastLogin,
+		&lastLogin,
 	)
 
 	if err != nil {
 		return nil, "", err
+	}
+
+	if lastLogin.Valid {
+		user.LastLogin = &lastLogin.Time
 	}
 
 	return &user, passwordHash, nil
@@ -468,6 +473,7 @@ func (s *ClientStore) GetAllWebUsers() ([]*WebUser, error) {
 	var users []*WebUser
 	for rows.Next() {
 		var user WebUser
+		var lastLogin sql.NullTime
 
 		err := rows.Scan(
 			&user.ID,
@@ -476,12 +482,16 @@ func (s *ClientStore) GetAllWebUsers() ([]*WebUser, error) {
 			&user.Role,
 			&user.Status,
 			&user.CreatedAt,
-			&user.LastLogin,
+			&lastLogin,
 		)
 
 		if err != nil {
 			log.Printf("Error scanning web user row: %v", err)
 			continue
+		}
+
+		if lastLogin.Valid {
+			user.LastLogin = &lastLogin.Time
 		}
 
 		users = append(users, &user)
