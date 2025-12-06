@@ -476,6 +476,17 @@ func (s *Server) handleMessage(client *Client, msg *common.Message) {
 			log.Printf("Drive list from %s", client.ID)
 		}
 
+	case common.MsgTypeProcessList:
+		var pl common.ProcessListPayload
+		if err := msg.ParsePayload(&pl); err == nil {
+			log.Printf("Process list from %s: %d processes", client.ID, len(pl.Processes))
+			s.resultsMu.Lock()
+			s.SetProcessListResult(client.ID, &pl)
+			s.resultsMu.Unlock()
+		} else {
+			log.Printf("Process list from %s", client.ID)
+		}
+
 	case common.MsgTypeFileData:
 		var fd common.FileDataPayload
 		if err := msg.ParsePayload(&fd); err == nil {

@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"os"
 	"os/exec"
 	"runtime"
 	"sync"
+	"time"
 
 	"golang.org/x/text/encoding/simplifiedchinese"
 	"golang.org/x/text/transform"
@@ -170,14 +172,28 @@ func (tm *TerminalManager) StopSession(sessionID string) error {
 		session.stdin.Close()
 	}
 
-	// Kill the process
+	// Kill the process and its children
 	if session.cmd != nil && session.cmd.Process != nil {
-		session.cmd.Process.Kill()
+		killProcessTree(session.cmd.Process)
 	}
 
-	// Wait for process to finish
+	// Wait for process to finish (with timeout)
 	go func() {
-		session.cmd.Wait()
+		done := make(chan error, 1)
+		go func() {
+			done <- session.cmd.Wait()
+		}()
+
+		select {
+		case <-done:
+			// Process finished normally
+		case <-time.After(2 * time.Second):
+			// Force kill if still running
+			if session.cmd.Process != nil {
+				session.cmd.Process.Kill()
+			}
+		}
+
 		close(session.done)
 	}()
 
@@ -185,6 +201,29 @@ func (tm *TerminalManager) StopSession(sessionID string) error {
 	log.Printf("Stopped terminal session: %s", sessionID)
 
 	return nil
+}
+
+// killProcessTree kills a process and all its children
+func killProcessTree(proc *os.Process) error {
+	if proc == nil {
+		return nil
+	}
+
+	if runtime.GOOS == "windows" {
+		// On Windows, use taskkill to kill process tree
+		cmd := exec.Command("taskkill", "/PID", fmt.Sprintf("%d", proc.Pid), "/T", "/F")
+		return cmd.Run()
+	} else {
+		// On Unix, try to send SIGTERM to process group
+		// First try SIGTERM for graceful shutdown
+		proc.Signal(os.Interrupt)
+
+		// Wait a bit for graceful shutdown
+		time.Sleep(500 * time.Millisecond)
+
+		// Force kill if still running
+		return proc.Kill()
+	}
 }
 
 // readOutput reads stdout from the terminal

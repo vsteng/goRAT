@@ -432,6 +432,9 @@ func (c *Client) handleMessage(msg *common.Message) {
 	case common.MsgTypeStopTerminal:
 		c.handleStopTerminal(msg)
 
+	case common.MsgTypeListProcesses:
+		c.handleListProcesses(msg)
+
 	case common.MsgTypePing:
 		c.sendMessage(common.MsgTypePong, nil)
 
@@ -634,6 +637,51 @@ func (c *Client) handleStopTerminal(msg *common.Message) {
 	if err != nil {
 		log.Printf("Failed to stop terminal: %v", err)
 	}
+}
+
+// handleListProcesses handles process list requests
+func (c *Client) handleListProcesses(msg *common.Message) {
+	log.Printf("Getting process list")
+
+	processes := getProcessList()
+	result := &common.ProcessListPayload{
+		Processes: processes,
+	}
+
+	c.sendMessage(common.MsgTypeProcessList, result)
+}
+
+// getProcessList retrieves the list of running processes
+func getProcessList() []common.Process {
+	var processes []common.Process
+
+	// Implementation varies by OS
+	osProcesses := getOSProcessList()
+	for _, p := range osProcesses {
+		processes = append(processes, common.Process{
+			Name:   p.Name,
+			PID:    p.PID,
+			CPU:    p.CPU,
+			Memory: p.Memory,
+			Status: "running",
+		})
+	}
+
+	return processes
+}
+
+// OSProcess represents a process with OS-specific data
+type OSProcess struct {
+	Name   string
+	PID    int
+	CPU    float64
+	Memory float64
+}
+
+// getOSProcessList is implemented per-OS
+func getOSProcessList() []OSProcess {
+	// Platform-specific implementation - will be in system_stats_*.go
+	return getOSProcessListImpl()
 }
 
 // sendMessage sends a message to the server
