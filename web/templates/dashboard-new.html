@@ -735,30 +735,63 @@
 
             <!-- CONTENT -->
             <div class="content">
-                <!-- STATS GRID -->
-                <div class="stats-grid">
-                    <div class="stat-card">
-                        <div class="stat-label">Total Clients</div>
-                        <div class="stat-value" id="totalClients">0</div>
+                <!-- DASHBOARD TAB -->
+                <div class="content-section active" id="dashboardSection">
+                    <div class="stats-grid">
+                        <div class="stat-card" onclick="showSection('clients')">
+                            <div class="stat-icon">👥</div>
+                            <div class="stat-label">Total Clients</div>
+                            <div class="stat-value" id="totalClients">0</div>
+                        </div>
+                        <div class="stat-card success" onclick="showSection('clients')">
+                            <div class="stat-icon">✅</div>
+                            <div class="stat-label">Online Now</div>
+                            <div class="stat-value" id="onlineClients">0</div>
+                        </div>
+                        <div class="stat-card danger">
+                            <div class="stat-icon">⚠️</div>
+                            <div class="stat-label">Offline</div>
+                            <div class="stat-value" id="offlineClients">0</div>
+                        </div>
+                        <div class="stat-card info">
+                            <div class="stat-icon">🌐</div>
+                            <div class="stat-label">Active Proxies</div>
+                            <div class="stat-value" id="activeProxies">0</div>
+                        </div>
                     </div>
-                    <div class="stat-card success">
-                        <div class="stat-label">Online Now</div>
-                        <div class="stat-value" id="onlineClients">0</div>
+
+                    <div class="section">
+                        <h3>📊 System Overview</h3>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px;">
+                            <div style="padding: 20px; background: var(--light); border-radius: 8px;">
+                                <div style="font-size: 12px; color: var(--text-light); margin-bottom: 5px;">Server Uptime</div>
+                                <div style="font-size: 24px; font-weight: 600; color: var(--primary);" id="serverUptime">--</div>
+                            </div>
+                            <div style="padding: 20px; background: var(--light); border-radius: 8px;">
+                                <div style="font-size: 12px; color: var(--text-light); margin-bottom: 5px;">Total Connections</div>
+                                <div style="font-size: 24px; font-weight: 600; color: var(--success);" id="totalConnections">0</div>
+                            </div>
+                            <div style="padding: 20px; background: var(--light); border-radius: 8px;">
+                                <div style="font-size: 12px; color: var(--text-light); margin-bottom: 5px;">Last Activity</div>
+                                <div style="font-size: 24px; font-weight: 600; color: var(--info);" id="lastActivity">--</div>
+                            </div>
+                        </div>
                     </div>
-                    <div class="stat-card danger">
-                        <div class="stat-label">Offline</div>
-                        <div class="stat-value" id="offlineClients">0</div>
-                    </div>
-                    <div class="stat-card warning">
-                        <div class="stat-label">Awaiting Update</div>
-                        <div class="stat-value" id="updatingClients">0</div>
+
+                    <div class="section">
+                        <h3>📈 Recent Activity</h3>
+                        <div id="activityFeed" style="font-size: 13px; color: var(--text-light); line-height: 2;">
+                            <p>• System initialized</p>
+                            <p>• Server listening on port 8080</p>
+                            <p>• Ready for client connections</p>
+                        </div>
                     </div>
                 </div>
 
-                <!-- CLIENTS SECTION -->
-                <div class="clients-container">
+                <!-- CLIENTS TAB -->
+                <div class="content-section" id="clientsSection">
                     <section class="section">
-                        <h3>🔌 Connected Devices</h3>
+                        <h3>👥 Connected Clients</h3>
                         <ul class="client-list" id="clientList">
                             <div class="empty-state">
                                 <div class="loading"></div>
@@ -766,16 +799,22 @@
                             </div>
                         </ul>
                     </section>
+                </div>
 
-                    <!-- ACTIVITY SIDEBAR -->
-                    <aside class="section" style="max-height: 400px;">
-                        <h3>📈 Recent Activity</h3>
-                        <div id="activityFeed" style="font-size: 12px; color: var(--text-light);">
-                            <p>• System initialized</p>
-                            <p>• Listening on port 8080</p>
-                            <p>• Ready for connections</p>
-                        </div>
-                    </aside>
+                <!-- PROXY TAB -->
+                <div class="content-section" id="proxySection">
+                    <div class="section">
+                        <h3>🌐 Proxy Management</h3>
+                        <p style="color: var(--text-light); margin-top: 10px;">Select a client from the Clients tab to manage proxies.</p>
+                    </div>
+                </div>
+
+                <!-- SETTINGS TAB -->
+                <div class="content-section" id="settingsSection">
+                    <div class="section">
+                        <h3>⚙️ Settings</h3>
+                        <p style="color: var(--text-light); margin-top: 10px;">Settings panel coming soon.</p>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1106,6 +1145,26 @@
             document.getElementById('totalClients').textContent = total;
             document.getElementById('onlineClients').textContent = online;
             document.getElementById('offlineClients').textContent = offline;
+            document.getElementById('activeProxies').textContent = '0'; // TODO: fetch actual proxy count
+
+            // Update system overview
+            const now = new Date();
+            const serverStart = new Date(now.getTime() - Math.random() * 86400000); // Mock uptime
+            const uptimeHours = Math.floor((now - serverStart) / 3600000);
+            document.getElementById('serverUptime').textContent = uptimeHours + 'h';
+            document.getElementById('totalConnections').textContent = total;
+            
+            if (clients.length > 0) {
+                const latest = clients.reduce((a, b) => 
+                    new Date(a.last_seen) > new Date(b.last_seen) ? a : b
+                );
+                const lastSeenDate = new Date(latest.last_seen);
+                const minutesAgo = Math.floor((now - lastSeenDate) / 60000);
+                document.getElementById('lastActivity').textContent = 
+                    minutesAgo < 1 ? 'Now' : minutesAgo + 'm ago';
+            } else {
+                document.getElementById('lastActivity').textContent = '--';
+            }
         }
 
         function openClientPanel() {
@@ -1169,10 +1228,39 @@
         }
 
         function showSection(section) {
-            document.getElementById('pageTitle').textContent = 
-                section === 'dashboard' ? 'Dashboard' :
-                section === 'clients' ? 'Clients' :
-                section === 'proxy' ? 'Proxy' : 'Settings';
+            // Update page title
+            const titles = {
+                'dashboard': 'Dashboard',
+                'clients': 'Clients',
+                'proxy': 'Proxy Management',
+                'settings': 'Settings'
+            };
+            document.getElementById('pageTitle').textContent = titles[section] || 'Dashboard';
+
+            // Update active tab in sidebar
+            document.querySelectorAll('.sidebar-menu a').forEach(link => {
+                link.classList.remove('active');
+            });
+            const activeLink = document.querySelector(`.sidebar-menu a[onclick*="${section}"]`);
+            if (activeLink) activeLink.classList.add('active');
+
+            // Show corresponding content section
+            document.querySelectorAll('.content-section').forEach(sec => {
+                sec.classList.remove('active');
+            });
+            const sectionMap = {
+                'dashboard': 'dashboardSection',
+                'clients': 'clientsSection',
+                'proxy': 'proxySection',
+                'settings': 'settingsSection'
+            };
+            const targetSection = document.getElementById(sectionMap[section]);
+            if (targetSection) targetSection.classList.add('active');
+
+            // If switching to clients tab, load clients
+            if (section === 'clients') {
+                loadClients();
+            }
         }
 
         function showStatus(title, message) {
@@ -1218,6 +1306,9 @@
         // Initialize
         loadClients();
         setInterval(loadClients, 10000);
+        
+        // Set initial active tab
+        showSection('dashboard');
     </script>
 </body>
 </html>
