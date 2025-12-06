@@ -675,6 +675,7 @@
             </div>
 
             <div class="details-actions">
+                <button class="btn-action-primary" onclick="openProxyManagement()">🌐 Proxy</button>
                 <button class="btn-action-primary" onclick="openClientPanel()">🖥️ Control</button>
                 <button class="btn-action-secondary" onclick="viewStats()">📊 Stats</button>
                 <button class="btn-action-primary" onclick="sendCommand()">⌨️ Terminal</button>
@@ -761,6 +762,14 @@
             selectedClient = client;
             renderClientList();
             showClientDetails(client);
+        }
+
+        function openProxyManagement() {
+            if (!selectedClient) {
+                showStatus('Error', 'Please select a client first');
+                return;
+            }
+            window.location.href = `/client-proxies?id=${encodeURIComponent(selectedClient.id)}`;
         }
 
         function showClientDetails(client) {

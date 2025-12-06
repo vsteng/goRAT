@@ -3,490 +3,740 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Proxy Management</title>
+    <title>Client Proxy Management</title>
     <style>
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
         }
-        
+
+        :root {
+            --primary: #667eea;
+            --primary-dark: #5568d3;
+            --primary-light: #7b93f1;
+            --secondary: #764ba2;
+            --success: #28a745;
+            --danger: #e74c3c;
+            --warning: #ffc107;
+            --info: #17a2b8;
+            --light: #f8f9fa;
+            --dark: #2c3e50;
+            --border: #e1e1e1;
+            --text: #333;
+            --text-light: #888;
+        }
+
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
             background: #f5f7fa;
-            color: #333;
+            color: var(--text);
+            line-height: 1.6;
         }
-        
-        .navbar {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+
+        .layout {
+            display: flex;
+            min-height: 100vh;
+        }
+
+        /* ========== SIDEBAR ========== */
+        .sidebar {
+            width: 260px;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
             color: white;
+            position: fixed;
+            left: 0;
+            top: 0;
+            height: 100vh;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+            z-index: 1000;
+            overflow-y: auto;
+        }
+
+        .sidebar-header {
+            padding: 30px 20px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .sidebar-header h1 {
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 5px;
+        }
+
+        .sidebar-header p {
+            font-size: 13px;
+            opacity: 0.9;
+        }
+
+        .sidebar-menu {
+            list-style: none;
+            padding: 20px 0;
+        }
+
+        .sidebar-menu li {
+            margin: 0;
+        }
+
+        .sidebar-menu a {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            color: rgba(255,255,255,0.8);
+            text-decoration: none;
+            padding: 12px 20px;
+            transition: all 0.3s;
+            font-size: 14px;
+        }
+
+        .sidebar-menu a:hover {
+            background: rgba(255,255,255,0.1);
+            color: white;
+            padding-left: 25px;
+        }
+
+        .sidebar-menu a.active {
+            background: rgba(255,255,255,0.2);
+            color: white;
+            border-left: 3px solid white;
+            padding-left: 17px;
+        }
+
+        .sidebar-footer {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            padding: 20px;
+            border-top: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .user-avatar {
+            width: 40px;
+            height: 40px;
+            background: rgba(255,255,255,0.3);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+        }
+
+        .user-details p {
+            font-size: 12px;
+            opacity: 0.9;
+            margin: 2px 0;
+        }
+
+        .logout-btn {
+            width: 100%;
+            background: rgba(255,255,255,0.2);
+            border: 1px solid rgba(255,255,255,0.3);
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.3s;
+        }
+
+        .logout-btn:hover {
+            background: rgba(255,255,255,0.3);
+        }
+
+        /* ========== MAIN CONTENT ========== */
+        .main-content {
+            margin-left: 260px;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* ========== TOP BAR ========== */
+        .top-bar {
+            background: white;
             padding: 20px 30px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
             display: flex;
             justify-content: space-between;
             align-items: center;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
         }
-        
-        .navbar h1 {
+
+        .top-bar h2 {
             font-size: 24px;
-            font-weight: 600;
+            color: var(--text);
         }
-        
-        .navbar-actions {
+
+        .top-bar-actions {
             display: flex;
-            gap: 15px;
-            align-items: center;
+            gap: 10px;
         }
-        
-        .back-btn, .logout-btn {
-            background: rgba(255,255,255,0.2);
-            color: white;
-            border: 1px solid rgba(255,255,255,0.3);
-            padding: 8px 16px;
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
             border-radius: 5px;
             cursor: pointer;
             font-size: 14px;
-            transition: background 0.3s;
+            font-weight: 500;
+            transition: all 0.3s;
         }
-        
-        .back-btn:hover, .logout-btn:hover {
-            background: rgba(255,255,255,0.3);
+
+        .btn-primary {
+            background: var(--primary);
+            color: white;
         }
-        
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 0 20px;
+
+        .btn-primary:hover {
+            background: var(--primary-dark);
         }
-        
-        .client-menu {
-            background: white;
-            padding: 20px 30px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-            margin-bottom: 2px;
+
+        .btn-secondary {
+            background: var(--info);
+            color: white;
         }
-        
-        .client-menu-content {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
+
+        .btn-secondary:hover {
+            background: #138496;
         }
-        
-        .client-info h2 {
-            font-size: 20px;
-            margin-bottom: 5px;
-            color: #333;
-        }
-        
-        .client-details {
-            display: flex;
-            gap: 30px;
-            font-size: 13px;
-            color: #666;
-            margin-top: 8px;
-        }
-        
-        .client-detail-item {
-            display: flex;
-            gap: 8px;
-        }
-        
-        .client-detail-label {
-            font-weight: 600;
-            color: #555;
-        }
-        
-        .divider {
-            border-top: 2px dashed #e1e1e1;
-            margin: 0;
-            padding: 0;
-        }
-        
-        .content-section {
+
+        /* ========== CONTENT AREA ========== */
+        .content {
+            flex: 1;
             padding: 30px;
+            overflow-y: auto;
         }
-        
-        .section-title {
-            font-size: 18px;
-            font-weight: 600;
-            color: #333;
-            margin-bottom: 20px;
-            margin-top: 0;
-        }
-        
-        .proxy-table {
+
+        /* ========== CLIENT INFO SECTION ========== */
+        .client-info-section {
             background: white;
-            border-radius: 8px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-            overflow: hidden;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            padding: 30px;
             margin-bottom: 30px;
+            border-left: 4px solid var(--primary);
         }
-        
-        .table-header {
+
+        .client-info-section h3 {
+            font-size: 18px;
+            margin-bottom: 20px;
+            color: var(--text);
+            padding-bottom: 15px;
+            border-bottom: 2px solid var(--light);
+        }
+
+        .client-info-grid {
             display: grid;
-            grid-template-columns: 1fr 1fr 1fr 1fr 0.6fr;
-            background: #f8f9fa;
-            border-bottom: 2px solid #e1e1e1;
-            padding: 15px 20px;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+        }
+
+        .info-item {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .info-label {
+            font-size: 11px;
+            color: var(--text-light);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
             font-weight: 600;
-            color: #555;
+            margin-bottom: 5px;
+        }
+
+        .info-value {
             font-size: 14px;
-            gap: 15px;
+            color: var(--text);
+            word-break: break-all;
         }
-        
-        .proxy-row {
-            display: grid;
-            grid-template-columns: 1fr 1fr 1fr 1fr 0.6fr;
-            padding: 15px 20px;
-            border-bottom: 1px solid #e1e1e1;
-            align-items: center;
-            gap: 15px;
-        }
-        
-        .proxy-row:last-child {
-            border-bottom: none;
-        }
-        
-        .proxy-row:hover {
-            background: #f8f9fa;
-        }
-        
-        .empty-state {
-            text-align: center;
-            padding: 40px 20px;
-            color: #999;
-        }
-        
-        .proxy-status {
+
+        .status-badge {
             display: inline-block;
-            padding: 5px 12px;
+            padding: 4px 10px;
             border-radius: 20px;
-            font-size: 12px;
+            font-size: 11px;
             font-weight: 600;
+            text-transform: uppercase;
+            width: fit-content;
         }
-        
-        .status-active {
+
+        .status-badge.online {
             background: #d4edda;
             color: #155724;
         }
-        
-        .status-inactive {
+
+        .status-badge.offline {
             background: #f8d7da;
             color: #721c24;
         }
-        
-        .delete-btn {
-            background: #dc3545;
+
+        /* ========== DASHED SEPARATOR ========== */
+        .separator {
+            border-top: 2px dashed var(--border);
+            margin: 30px 0;
+        }
+
+        /* ========== PROXY SECTION ========== */
+        .proxy-section {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            padding: 30px;
+            margin-bottom: 30px;
+        }
+
+        .proxy-section h3 {
+            font-size: 18px;
+            margin-bottom: 20px;
+            color: var(--text);
+            padding-bottom: 15px;
+            border-bottom: 2px solid var(--light);
+        }
+
+        /* ========== PROXY LIST ========== */
+        .proxy-list {
+            list-style: none;
+        }
+
+        .proxy-item {
+            padding: 15px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            margin-bottom: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: all 0.3s;
+        }
+
+        .proxy-item:hover {
+            background: var(--light);
+            border-color: var(--primary);
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.1);
+        }
+
+        .proxy-info {
+            flex: 1;
+        }
+
+        .proxy-source {
+            font-weight: 600;
+            color: var(--text);
+            margin-bottom: 5px;
+        }
+
+        .proxy-meta {
+            font-size: 12px;
+            color: var(--text-light);
+            display: flex;
+            gap: 15px;
+        }
+
+        .proxy-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn-delete {
+            background: var(--danger);
             color: white;
+            padding: 8px 15px;
             border: none;
-            padding: 6px 10px;
-            border-radius: 4px;
+            border-radius: 5px;
             cursor: pointer;
             font-size: 12px;
-            transition: background 0.2s;
+            transition: all 0.3s;
         }
-        
-        .delete-btn:hover {
-            background: #c82333;
+
+        .btn-delete:hover {
+            background: #c0392b;
         }
-        
-        .add-proxy-section {
+
+        /* ========== ADD PROXY FORM ========== */
+        .form-section {
             background: white;
-            padding: 25px;
-            border-radius: 8px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            padding: 30px;
         }
-        
-        .form-title {
-            font-size: 16px;
-            font-weight: 600;
-            color: #333;
+
+        .form-section h3 {
+            font-size: 18px;
             margin-bottom: 20px;
+            color: var(--text);
+            padding-bottom: 15px;
+            border-bottom: 2px solid var(--light);
         }
-        
+
         .form-grid {
             display: grid;
-            grid-template-columns: 1fr 1fr 1fr auto;
-            gap: 15px;
-            align-items: flex-end;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
         }
-        
+
         .form-group {
             display: flex;
             flex-direction: column;
         }
-        
+
         .form-group label {
-            font-weight: 500;
-            color: #555;
-            margin-bottom: 6px;
-            font-size: 13px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: var(--text);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
-        
+
         .form-group input,
         .form-group select {
-            padding: 10px;
-            border: 2px solid #e1e1e1;
+            padding: 12px;
+            border: 1px solid var(--border);
             border-radius: 5px;
             font-size: 14px;
-            transition: border-color 0.3s;
+            transition: all 0.3s;
+            font-family: inherit;
         }
-        
+
         .form-group input:focus,
         .form-group select:focus {
             outline: none;
-            border-color: #667eea;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
         }
-        
-        .add-btn {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+
+        .form-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn-submit {
+            background: var(--primary);
             color: white;
+            padding: 12px 30px;
             border: none;
-            padding: 10px 25px;
             border-radius: 5px;
             cursor: pointer;
+            font-size: 14px;
             font-weight: 600;
-            transition: transform 0.2s;
-            white-space: nowrap;
+            transition: all 0.3s;
         }
-        
-        .add-btn:hover {
-            transform: translateY(-2px);
+
+        .btn-submit:hover {
+            background: var(--primary-dark);
         }
-        
+
+        .btn-back {
+            background: var(--info);
+            color: white;
+            padding: 12px 30px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+
+        .btn-back:hover {
+            background: #138496;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: var(--text-light);
+        }
+
         .alert {
             padding: 15px 20px;
             border-radius: 5px;
             margin-bottom: 20px;
             display: none;
         }
-        
+
         .alert.show {
             display: block;
         }
-        
+
         .alert-success {
             background: #d4edda;
             color: #155724;
             border: 1px solid #c3e6cb;
         }
-        
-        .alert-error {
+
+        .alert-danger {
             background: #f8d7da;
             color: #721c24;
             border: 1px solid #f5c6cb;
         }
-        
+
         @media (max-width: 768px) {
+            .sidebar {
+                width: 70px;
+            }
+
+            .sidebar-header p,
+            .sidebar-menu a span {
+                display: none;
+            }
+
+            .main-content {
+                margin-left: 70px;
+            }
+
             .form-grid {
                 grid-template-columns: 1fr;
             }
-            
-            .table-header,
-            .proxy-row {
+
+            .client-info-grid {
                 grid-template-columns: 1fr;
-                gap: 10px;
-            }
-            
-            .client-details {
-                flex-direction: column;
-                gap: 10px;
             }
         }
     </style>
 </head>
 <body>
-    <div class="navbar">
-        <h1>🔐 Server Manager</h1>
-        <div class="navbar-actions">
-            <button class="back-btn" onclick="goBack()">← Back</button>
-            <button class="logout-btn" onclick="logout()">Logout</button>
-        </div>
-    </div>
-    
-    <div class="client-menu">
-        <div class="client-menu-content">
-            <div class="client-info">
-                <h2 id="clientName">Loading...</h2>
-                <div class="client-details">
-                    <div class="client-detail-item">
-                        <span class="client-detail-label">ID:</span>
-                        <span id="clientId">-</span>
+    <div class="layout">
+        <!-- SIDEBAR -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h1>🖥️ RAT</h1>
+                <p>Control Panel</p>
+            </div>
+
+            <ul class="sidebar-menu">
+                <li><a href="/dashboard-new" onclick="return true;"><span>📊</span> <span>Dashboard</span></a></li>
+                <li><a href="#" class="active" onclick="return false;"><span>🌐</span> <span>Proxy</span></a></li>
+                <li><a href="#" onclick="return false;"><span>⚙️</span> <span>Settings</span></a></li>
+            </ul>
+
+            <div class="sidebar-footer">
+                <div class="user-info">
+                    <div class="user-avatar">A</div>
+                    <div class="user-details">
+                        <p style="font-weight: 600;">Admin</p>
+                        <p>Connected</p>
                     </div>
-                    <div class="client-detail-item">
-                        <span class="client-detail-label">Hostname:</span>
-                        <span id="clientHostname">-</span>
+                </div>
+                <button class="logout-btn" onclick="logout()">Logout</button>
+            </div>
+        </aside>
+
+        <!-- MAIN CONTENT -->
+        <div class="main-content">
+            <!-- TOP BAR -->
+            <div class="top-bar">
+                <div>
+                    <h2 id="pageTitle">Client Proxy Management</h2>
+                </div>
+                <div class="top-bar-actions">
+                    <button class="btn btn-secondary" onclick="goBackDashboard()">← Back</button>
+                </div>
+            </div>
+
+            <!-- CONTENT -->
+            <div class="content">
+                <!-- ALERT MESSAGES -->
+                <div id="alertBox" class="alert"></div>
+
+                <!-- CLIENT INFO SECTION -->
+                <div class="client-info-section">
+                    <h3>📋 Client Information</h3>
+                    <div class="client-info-grid">
+                        <div class="info-item">
+                            <div class="info-label">Client Name</div>
+                            <div class="info-value" id="clientName">Loading...</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Client ID</div>
+                            <div class="info-value" id="clientId" style="font-family: monospace; font-size: 12px;">-</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Operating System</div>
+                            <div class="info-value" id="clientOS">-</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Status</div>
+                            <div class="info-value"><span class="status-badge offline" id="clientStatus">Offline</span></div>
+                        </div>
                     </div>
-                    <div class="client-detail-item">
-                        <span class="client-detail-label">OS:</span>
-                        <span id="clientOS">-</span>
+                </div>
+
+                <!-- SEPARATOR -->
+                <div class="separator"></div>
+
+                <!-- PROXY LIST SECTION -->
+                <div class="proxy-section">
+                    <h3>🔌 Proxy Connections</h3>
+                    <ul class="proxy-list" id="proxyList">
+                        <div class="empty-state">
+                            <p>No proxy connections configured</p>
+                            <p style="font-size: 12px; margin-top: 10px;">Add one below to get started</p>
+                        </div>
+                    </ul>
+                </div>
+
+                <!-- ADD PROXY FORM -->
+                <div class="form-section">
+                    <h3>➕ Add New Proxy Connection</h3>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="remoteAddr">Client Address (e.g., 127.0.0.1:22)</label>
+                            <input type="text" id="remoteAddr" placeholder="127.0.0.1:22">
+                        </div>
+                        <div class="form-group">
+                            <label for="localPort">Server Port (e.g., 10033)</label>
+                            <input type="text" id="localPort" placeholder="10033">
+                        </div>
+                        <div class="form-group">
+                            <label for="protocol">Protocol</label>
+                            <select id="protocol">
+                                <option value="TCP">TCP</option>
+                                <option value="HTTP">HTTP</option>
+                                <option value="HTTPS">HTTPS</option>
+                            </select>
+                        </div>
                     </div>
-                    <div class="client-detail-item">
-                        <span class="client-detail-label">Status:</span>
-                        <span id="clientStatus" class="proxy-status status-inactive">🔴 Offline</span>
+                    <div class="form-actions">
+                        <button class="btn-submit" onclick="addProxy()">➕ Add Proxy</button>
+                        <button class="btn-back" onclick="goBackDashboard()">← Back</button>
                     </div>
                 </div>
             </div>
         </div>
     </div>
-    
-    <div class="divider"></div>
-    
-    <div class="container">
-        <div class="content-section">
-            <h3 class="section-title">Proxy Connections</h3>
-            
-            <div id="alert" class="alert"></div>
-            
-            <div class="proxy-table">
-                <div class="table-header">
-                    <div>Local Address</div>
-                    <div>Remote Address</div>
-                    <div>Protocol</div>
-                    <div>Status</div>
-                    <div>Action</div>
-                </div>
-                <div id="proxyList"></div>
-            </div>
-            
-            <div class="add-proxy-section">
-                <div class="form-title">Add New Proxy Connection</div>
-                <div class="form-grid">
-                    <div class="form-group">
-                        <label for="remoteAddr">Client Address (e.g., 127.0.0.1:22)</label>
-                        <input type="text" id="remoteAddr" placeholder="127.0.0.1:22">
-                    </div>
-                    <div class="form-group">
-                        <label for="localPort">Server Port (e.g., 10033)</label>
-                        <input type="text" id="localPort" placeholder="10033">
-                    </div>
-                    <div class="form-group">
-                        <label for="protocol">Protocol</label>
-                        <select id="protocol">
-                            <option value="TCP">TCP</option>
-                            <option value="HTTP">HTTP</option>
-                            <option value="HTTPS">HTTPS</option>
-                        </select>
-                    </div>
-                    <button class="add-btn" onclick="addProxy()">+ Add Proxy</button>
-                </div>
-            </div>
-        </div>
-    </div>
-    
+
     <script>
         let clientId = null;
         let clientData = null;
-        
+
         function getClientIdFromURL() {
-            const pathParts = window.location.pathname.split('/');
-            return pathParts[2];
+            const params = new URLSearchParams(window.location.search);
+            return params.get('id');
         }
-        
+
         async function loadClientData() {
             clientId = getClientIdFromURL();
             
+            if (!clientId) {
+                showAlert('Error', 'No client ID provided', 'danger');
+                return;
+            }
+
             try {
-                const response = await fetch(`/api/client?id=${clientId}`);
+                const response = await fetch(`/api/client?id=${encodeURIComponent(clientId)}`);
+                if (response.status === 401) {
+                    window.location.href = '/login';
+                    return;
+                }
                 if (response.ok) {
                     clientData = await response.json();
                     updateClientInfo();
                     loadProxies();
-                } else if (response.status === 401) {
-                    window.location.href = '/login';
                 } else {
-                    showAlert('Failed to load client data', 'error');
+                    showAlert('Error', 'Failed to load client data', 'danger');
                 }
             } catch (err) {
-                console.error('Failed to load client:', err);
-                showAlert('Error loading client information', 'error');
+                console.error('Error:', err);
+                showAlert('Error', 'Failed to load client information', 'danger');
             }
         }
-        
+
         function updateClientInfo() {
             if (!clientData) return;
+
+            document.getElementById('clientName').textContent = escapeHtml(clientData.hostname || clientData.ID || 'Unknown');
+            document.getElementById('clientId').textContent = escapeHtml(clientData.ID || '-');
+            document.getElementById('clientOS').textContent = escapeHtml((clientData.OS || 'Unknown') + ' / ' + (clientData.Arch || 'Unknown'));
             
-            document.getElementById('clientName').textContent = clientData.Hostname || 'Unknown Client';
-            document.getElementById('clientId').textContent = clientData.ID;
-            document.getElementById('clientHostname').textContent = clientData.Hostname || 'N/A';
-            document.getElementById('clientOS').textContent = clientData.OS || 'Unknown';
-            
+            const statusBadge = document.getElementById('clientStatus');
             if (clientData.IsConnected) {
-                document.getElementById('clientStatus').textContent = '🟢 Online';
-                document.getElementById('clientStatus').className = 'proxy-status status-active';
+                statusBadge.textContent = 'Online';
+                statusBadge.className = 'status-badge online';
             } else {
-                document.getElementById('clientStatus').textContent = '🔴 Offline';
-                document.getElementById('clientStatus').className = 'proxy-status status-inactive';
+                statusBadge.textContent = 'Offline';
+                statusBadge.className = 'status-badge offline';
             }
         }
-        
+
         async function loadProxies() {
             try {
-                const response = await fetch(`/api/proxy/list?clientId=${clientId}`);
+                const response = await fetch(`/api/proxy/list?clientId=${encodeURIComponent(clientId)}`);
+                if (response.status === 401) {
+                    window.location.href = '/login';
+                    return;
+                }
                 if (response.ok) {
                     const proxies = await response.json() || [];
                     renderProxies(proxies);
-                } else if (response.status === 401) {
-                    window.location.href = '/login';
                 }
             } catch (err) {
-                console.error('Failed to load proxies:', err);
+                console.error('Error:', err);
             }
         }
-        
+
         function renderProxies(proxies) {
-            const proxyList = document.getElementById('proxyList');
+            const list = document.getElementById('proxyList');
             
             if (!proxies || proxies.length === 0) {
-                proxyList.innerHTML = '<div class="empty-state">No proxy connections yet. Add one below.</div>';
+                list.innerHTML = `
+                    <div class="empty-state">
+                        <p>No proxy connections configured</p>
+                        <p style="font-size: 12px; margin-top: 10px;">Add one below to get started</p>
+                    </div>
+                `;
                 return;
             }
-            
-            proxyList.innerHTML = proxies.map(proxy => `
-                <div class="proxy-row">
-                    <div>:${proxy.LocalPort}</div>
-                    <div>${proxy.RemoteHost}:${proxy.RemotePort}</div>
-                    <div>${proxy.Protocol}</div>
-                    <div>
-                        <span class="proxy-status ${proxy.Status === 'Active' ? 'status-active' : 'status-inactive'}">
-                            ${proxy.Status === 'Active' ? '🟢' : '🔴'} ${proxy.Status}
-                        </span>
+
+            list.innerHTML = proxies.map(proxy => `
+                <li class="proxy-item">
+                    <div class="proxy-info">
+                        <div class="proxy-source">:${proxy.LocalPort} → ${escapeHtml(proxy.RemoteHost)}:${proxy.RemotePort}</div>
+                        <div class="proxy-meta">
+                            <span>Protocol: ${escapeHtml(proxy.Protocol)}</span>
+                            <span>Status: ${escapeHtml(proxy.Status)}</span>
+                        </div>
                     </div>
-                    <div>
-                        <button class="delete-btn" onclick="deleteProxy('${proxy.ID}')">Delete</button>
+                    <div class="proxy-actions">
+                        <button class="btn-delete" onclick="deleteProxy('${escapeHtml(proxy.ID)}')">🗑️ Delete</button>
                     </div>
-                </div>
+                </li>
             `).join('');
         }
-        
+
         async function addProxy() {
             const remoteAddr = document.getElementById('remoteAddr').value.trim();
             const localPort = document.getElementById('localPort').value.trim();
             const protocol = document.getElementById('protocol').value;
-            
+
             if (!remoteAddr || !localPort) {
-                showAlert('Please fill in all fields', 'error');
+                showAlert('Error', 'Please fill in all fields', 'danger');
                 return;
             }
-            
-            // Parse remote address
+
             const [remoteHost, remotePort] = remoteAddr.split(':');
             if (!remoteHost || !remotePort) {
-                showAlert('Invalid client address format. Use: 127.0.0.1:22', 'error');
+                showAlert('Error', 'Invalid client address format. Use: 127.0.0.1:22', 'danger');
                 return;
             }
-            
+
             if (isNaN(localPort) || isNaN(remotePort)) {
-                showAlert('Port numbers must be numeric', 'error');
+                showAlert('Error', 'Port numbers must be numeric', 'danger');
                 return;
             }
-            
+
             try {
                 const response = await fetch('/api/proxy/create', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         clientId: clientId,
                         remoteHost: remoteHost,
@@ -495,84 +745,83 @@
                         protocol: protocol
                     })
                 });
-                
+
                 if (response.ok) {
-                    showAlert('Proxy connection created successfully!', 'success');
+                    showAlert('Success', 'Proxy connection created successfully!', 'success');
                     document.getElementById('remoteAddr').value = '';
                     document.getElementById('localPort').value = '';
-                    
-                    // Reload proxies after 1 second
                     setTimeout(loadProxies, 1000);
                 } else if (response.status === 401) {
                     window.location.href = '/login';
                 } else {
-                    const result = await response.json();
-                    showAlert(result.error || 'Failed to create proxy', 'error');
+                    showAlert('Error', 'Failed to create proxy', 'danger');
                 }
             } catch (err) {
-                console.error('Failed to create proxy:', err);
-                showAlert('Error creating proxy connection', 'error');
+                console.error('Error:', err);
+                showAlert('Error', 'Error creating proxy connection', 'danger');
             }
         }
-        
+
         async function deleteProxy(proxyId) {
             if (!confirm('Are you sure you want to delete this proxy connection?')) {
                 return;
             }
-            
+
             try {
-                const response = await fetch(`/api/proxy/close`, {
+                const response = await fetch('/api/proxy/close', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ proxyId: proxyId })
                 });
-                
+
                 if (response.ok) {
-                    showAlert('Proxy connection deleted', 'success');
+                    showAlert('Success', 'Proxy deleted successfully', 'success');
                     loadProxies();
                 } else if (response.status === 401) {
                     window.location.href = '/login';
                 } else {
-                    showAlert('Failed to delete proxy', 'error');
+                    showAlert('Error', 'Failed to delete proxy', 'danger');
                 }
             } catch (err) {
-                console.error('Failed to delete proxy:', err);
-                showAlert('Error deleting proxy', 'error');
+                console.error('Error:', err);
+                showAlert('Error', 'Error deleting proxy', 'danger');
             }
         }
-        
-        function showAlert(message, type) {
-            const alert = document.getElementById('alert');
-            alert.textContent = message;
+
+        function showAlert(title, message, type) {
+            const alert = document.getElementById('alertBox');
+            alert.innerHTML = `<strong>${escapeHtml(title)}:</strong> ${escapeHtml(message)}`;
             alert.className = `alert show alert-${type}`;
-            
+
             if (type === 'success') {
                 setTimeout(() => {
                     alert.classList.remove('show');
                 }, 3000);
             }
         }
-        
-        function goBack() {
-            window.location.href = '/dashboard-summary';
+
+        function goBackDashboard() {
+            window.location.href = '/dashboard-new';
         }
-        
-        function logout() {
-            localStorage.removeItem('isLoggedIn');
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        async function logout() {
+            await fetch('/api/logout', { method: 'POST' });
             window.location.href = '/login';
         }
-        
-        // Load data on page load
+
+        // Initialize
         document.addEventListener('DOMContentLoaded', loadClientData);
-        
-        // Refresh proxies every 5 seconds
         setInterval(() => {
             if (clientId) {
                 loadProxies();
             }
-        }, 5000);
+        }, 10000);
     </script>
 </body>
 </html>
