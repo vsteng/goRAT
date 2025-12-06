@@ -39,15 +39,17 @@ type ProxyManager struct {
 	connections map[string]*ProxyConnection
 	mu          sync.RWMutex
 	manager     *ClientManager
+	store       *ClientStore   // For persistent storage
 	portMap     map[int]string // Maps port to proxy connection ID (like lanproxy)
 	portMapMu   sync.RWMutex
 }
 
 // NewProxyManager creates a new proxy manager
-func NewProxyManager(manager *ClientManager) *ProxyManager {
+func NewProxyManager(manager *ClientManager, store *ClientStore) *ProxyManager {
 	return &ProxyManager{
 		connections: make(map[string]*ProxyConnection),
 		manager:     manager,
+		store:       store,
 		portMap:     make(map[int]string),
 	}
 }
@@ -100,6 +102,13 @@ func (pm *ProxyManager) CreateProxyConnection(clientID, remoteHost string, remot
 
 	// Store connection
 	pm.connections[id] = conn
+
+	// Persist to database if store is available
+	if pm.store != nil {
+		if err := pm.store.SaveProxy(conn); err != nil {
+			log.Printf("WARNING: Failed to save proxy to database: %v", err)
+		}
+	}
 
 	// Start accepting connections
 	go pm.acceptConnections(conn)
@@ -318,6 +327,13 @@ func (pm *ProxyManager) CloseProxyConnection(id string) error {
 	delete(pm.connections, id)
 	log.Printf("Closed proxy connection: %s (port %d)", id, conn.LocalPort)
 
+	// Update database status if store is available
+	if pm.store != nil {
+		if err := pm.store.DeleteProxy(id); err != nil {
+			log.Printf("WARNING: Failed to delete proxy from database: %v", err)
+		}
+	}
+
 	return nil
 }
 
@@ -462,7 +478,7 @@ func (s *Server) HandleProxyCreate(w http.ResponseWriter, r *http.Request) {
 
 	// Create proxy manager if not exists
 	if s.proxyManager == nil {
-		s.proxyManager = NewProxyManager(s.manager)
+		s.proxyManager = NewProxyManager(s.manager, s.store)
 	}
 
 	conn, err := s.proxyManager.CreateProxyConnection(

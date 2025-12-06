@@ -1,6 +1,8 @@
 package server
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"html/template"
 	"log"
@@ -21,13 +23,14 @@ type WebConfig struct {
 type WebHandler struct {
 	sessionMgr *SessionManager
 	clientMgr  *ClientManager
+	store      *ClientStore
 	config     *WebConfig
 	templates  *template.Template
 	server     *Server // Reference to main server for result access
 }
 
 // NewWebHandler creates a new web handler
-func NewWebHandler(sessionMgr *SessionManager, clientMgr *ClientManager, config *WebConfig) (*WebHandler, error) {
+func NewWebHandler(sessionMgr *SessionManager, clientMgr *ClientManager, store *ClientStore, config *WebConfig) (*WebHandler, error) {
 	// Load templates from disk
 	templatesPath := filepath.Join("web", "templates", "*.html")
 	tmpl, err := template.ParseGlob(templatesPath)
@@ -35,12 +38,32 @@ func NewWebHandler(sessionMgr *SessionManager, clientMgr *ClientManager, config 
 		return nil, err
 	}
 
-	return &WebHandler{
+	handler := &WebHandler{
 		sessionMgr: sessionMgr,
 		clientMgr:  clientMgr,
+		store:      store,
 		config:     config,
 		templates:  tmpl,
-	}, nil
+	}
+
+	// Initialize default user from config if store is available and user doesn't exist
+	if store != nil && config.Username != "" {
+		exists, err := store.UserExists(config.Username)
+		if err != nil {
+			log.Printf("WARNING: Failed to check if default user exists: %v", err)
+		} else if !exists {
+			// Create default user with hashed password
+			hash := sha256.Sum256([]byte(config.Password))
+			passwordHash := hex.EncodeToString(hash[:])
+			if err := store.CreateWebUser(config.Username, passwordHash, "Administrator", "admin"); err != nil {
+				log.Printf("WARNING: Failed to create default web user: %v", err)
+			} else {
+				log.Printf("✅ Created default web user: %s (role: admin)", config.Username)
+			}
+		}
+	}
+
+	return handler, nil
 }
 
 // requireAuth middleware to check if user is authenticated
@@ -98,12 +121,44 @@ func (wh *WebHandler) HandleLoginAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate credentials
-	if credentials.Username != wh.config.Username || credentials.Password != wh.config.Password {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusUnauthorized)
-		json.NewEncoder(w).Encode(map[string]string{"error": "Invalid username or password"})
-		return
+	// Validate credentials against database if store is available
+	if wh.store != nil {
+		user, passwordHash, err := wh.store.GetWebUser(credentials.Username)
+		if err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnauthorized)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Invalid username or password"})
+			return
+		}
+
+		// Check if user is active
+		if user.Status != "active" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnauthorized)
+			json.NewEncoder(w).Encode(map[string]string{"error": "User account is inactive"})
+			return
+		}
+
+		// Verify password
+		hash := sha256.Sum256([]byte(credentials.Password))
+		providedHash := hex.EncodeToString(hash[:])
+		if providedHash != passwordHash {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnauthorized)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Invalid username or password"})
+			return
+		}
+
+		// Update last login
+		_ = wh.store.UpdateWebUserLastLogin(credentials.Username)
+	} else {
+		// Fallback to config credentials if store is not available
+		if credentials.Username != wh.config.Username || credentials.Password != wh.config.Password {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnauthorized)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Invalid username or password"})
+			return
+		}
 	}
 
 	// Create session

@@ -75,7 +75,7 @@ func NewServer(config *Config) *Server {
 		Password: config.WebPassword,
 	}
 
-	webHandler, err := NewWebHandler(sessionMgr, manager, webConfig)
+	webHandler, err := NewWebHandler(sessionMgr, manager, store, webConfig)
 	if err != nil {
 		log.Printf("ERROR: Failed to create web handler: %v", err)
 		log.Println("Server will continue with limited web functionality")
@@ -174,6 +174,9 @@ func (s *Server) Start() error {
 
 	// Load previously saved clients from database
 	go s.loadSavedClients()
+
+	// Load previously saved proxies from database
+	go s.loadSavedProxies()
 
 	mux := http.NewServeMux()
 
@@ -788,4 +791,79 @@ func (s *Server) loadSavedClients() {
 		log.Printf("  - %s (%s) - %s - Last seen: %s",
 			client.ID, client.Hostname, client.Status, client.LastSeen.Format(time.RFC3339))
 	}
+}
+
+// loadSavedProxies loads previously saved proxies from database on startup
+func (s *Server) loadSavedProxies() {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("PANIC RECOVERED in loadSavedProxies: %v", r)
+		}
+	}()
+
+	if s.store == nil {
+		log.Println("Store not available, skipping proxy load from database")
+		return
+	}
+
+	log.Println("Loading saved proxies from database...")
+
+	// Initialize proxy manager if not already done
+	if s.proxyManager == nil {
+		s.proxyManager = NewProxyManager(s.manager, s.store)
+	}
+
+	proxies, err := s.store.GetAllProxies()
+	if err != nil {
+		log.Printf("Error loading saved proxies: %v", err)
+		return
+	}
+
+	if len(proxies) == 0 {
+		log.Println("No saved proxies found in database")
+		return
+	}
+
+	log.Printf("Found %d saved proxies in database, attempting to restore...", len(proxies))
+
+	successCount := 0
+	failCount := 0
+
+	for _, proxy := range proxies {
+		// Check if client is available
+		client, exists := s.manager.GetClient(proxy.ClientID)
+		if !exists {
+			log.Printf("  ⚠️  Skipping proxy %s (client %s not currently connected)", proxy.ID, proxy.ClientID)
+			failCount++
+			continue
+		}
+
+		if client.Conn == nil {
+			log.Printf("  ⚠️  Skipping proxy %s (client %s WebSocket not ready)", proxy.ID, proxy.ClientID)
+			failCount++
+			continue
+		}
+
+		// Try to recreate the proxy
+		conn, err := s.proxyManager.CreateProxyConnection(
+			proxy.ClientID,
+			proxy.RemoteHost,
+			proxy.RemotePort,
+			proxy.LocalPort,
+			proxy.Protocol,
+		)
+
+		if err != nil {
+			log.Printf("  ❌ Failed to restore proxy %s: %v", proxy.ID, err)
+			failCount++
+			continue
+		}
+
+		log.Printf("  ✅ Restored proxy: :%d -> %s:%d (client: %s, protocol: %s)",
+			conn.LocalPort, conn.RemoteHost, conn.RemotePort, conn.ClientID, conn.Protocol)
+		successCount++
+	}
+
+	log.Printf("Proxy restore complete: %d restored, %d skipped/failed", successCount, failCount)
+	log.Printf("Note: Proxies will be auto-restored when their clients reconnect")
 }

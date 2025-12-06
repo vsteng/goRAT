@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"log"
+	"net"
 	"sync"
 	"time"
 
@@ -57,6 +58,37 @@ func (s *ClientStore) initDB() error {
 
 	CREATE INDEX IF NOT EXISTS idx_last_seen ON clients(last_seen DESC);
 	CREATE INDEX IF NOT EXISTS idx_status ON clients(status);
+
+	CREATE TABLE IF NOT EXISTS proxies (
+		id TEXT PRIMARY KEY,
+		client_id TEXT NOT NULL,
+		local_port INTEGER NOT NULL,
+		remote_host TEXT NOT NULL,
+		remote_port INTEGER NOT NULL,
+		protocol TEXT DEFAULT 'tcp',
+		status TEXT DEFAULT 'active',
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		FOREIGN KEY (client_id) REFERENCES clients(id),
+		UNIQUE(client_id, local_port)
+	);
+
+	CREATE INDEX IF NOT EXISTS idx_client_proxies ON proxies(client_id);
+	CREATE INDEX IF NOT EXISTS idx_proxy_local_port ON proxies(local_port);
+
+	CREATE TABLE IF NOT EXISTS web_users (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		username TEXT NOT NULL UNIQUE,
+		password_hash TEXT NOT NULL,
+		full_name TEXT,
+		role TEXT DEFAULT 'user',
+		status TEXT DEFAULT 'active',
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		last_login DATETIME
+	);
+
+	CREATE INDEX IF NOT EXISTS idx_web_users_username ON web_users(username);
 	`
 
 	_, err := s.db.Exec(schema)
@@ -220,4 +252,259 @@ func (s *ClientStore) GetStats() (total, online, offline int, err error) {
 
 	err = s.db.QueryRow("SELECT COUNT(*) FROM clients WHERE status = 'offline'").Scan(&offline)
 	return
+}
+
+// SaveProxy saves a proxy connection to the database
+func (s *ClientStore) SaveProxy(proxy *ProxyConnection) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	query := `
+	INSERT INTO proxies (id, client_id, local_port, remote_host, remote_port, protocol, status, updated_at)
+	VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+	ON CONFLICT(id) DO UPDATE SET
+		status = excluded.status,
+		updated_at = CURRENT_TIMESTAMP
+	`
+
+	_, err := s.db.Exec(query,
+		proxy.ID,
+		proxy.ClientID,
+		proxy.LocalPort,
+		proxy.RemoteHost,
+		proxy.RemotePort,
+		proxy.Protocol,
+		proxy.Status,
+	)
+
+	return err
+}
+
+// GetProxies retrieves all proxies for a client
+func (s *ClientStore) GetProxies(clientID string) ([]*ProxyConnection, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	query := `
+	SELECT id, client_id, local_port, remote_host, remote_port, protocol, status, created_at
+	FROM proxies
+	WHERE client_id = ? AND status = 'active'
+	`
+
+	rows, err := s.db.Query(query, clientID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var proxies []*ProxyConnection
+	for rows.Next() {
+		var proxy ProxyConnection
+		var createdAt time.Time
+
+		err := rows.Scan(
+			&proxy.ID,
+			&proxy.ClientID,
+			&proxy.LocalPort,
+			&proxy.RemoteHost,
+			&proxy.RemotePort,
+			&proxy.Protocol,
+			&proxy.Status,
+			&createdAt,
+		)
+
+		if err != nil {
+			log.Printf("Error scanning proxy row: %v", err)
+			continue
+		}
+
+		proxy.CreatedAt = createdAt
+		proxy.LastActive = time.Now()
+		proxy.userChannels = make(map[string]*net.Conn)
+
+		proxies = append(proxies, &proxy)
+	}
+
+	return proxies, rows.Err()
+}
+
+// GetAllProxies retrieves all proxies (for non-client-specific queries)
+func (s *ClientStore) GetAllProxies() ([]*ProxyConnection, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	query := `
+	SELECT id, client_id, local_port, remote_host, remote_port, protocol, status, created_at
+	FROM proxies
+	WHERE status = 'active'
+	`
+
+	rows, err := s.db.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var proxies []*ProxyConnection
+	for rows.Next() {
+		var proxy ProxyConnection
+		var createdAt time.Time
+
+		err := rows.Scan(
+			&proxy.ID,
+			&proxy.ClientID,
+			&proxy.LocalPort,
+			&proxy.RemoteHost,
+			&proxy.RemotePort,
+			&proxy.Protocol,
+			&proxy.Status,
+			&createdAt,
+		)
+
+		if err != nil {
+			log.Printf("Error scanning proxy row: %v", err)
+			continue
+		}
+
+		proxy.CreatedAt = createdAt
+		proxy.LastActive = time.Now()
+		proxy.userChannels = make(map[string]*net.Conn)
+
+		proxies = append(proxies, &proxy)
+	}
+
+	return proxies, rows.Err()
+}
+
+// DeleteProxy marks a proxy as inactive in the database
+func (s *ClientStore) DeleteProxy(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	_, err := s.db.Exec(
+		"UPDATE proxies SET status = 'inactive', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+		id,
+	)
+	return err
+}
+
+// WebUser represents a web UI user
+type WebUser struct {
+	ID        int
+	Username  string
+	FullName  string
+	Role      string // "admin" or "user"
+	Status    string // "active" or "inactive"
+	CreatedAt time.Time
+	LastLogin *time.Time
+}
+
+// CreateWebUser creates a new web user (password_hash should be pre-hashed)
+func (s *ClientStore) CreateWebUser(username, passwordHash, fullName, role string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	query := `
+	INSERT INTO web_users (username, password_hash, full_name, role, status)
+	VALUES (?, ?, ?, ?, 'active')
+	`
+
+	_, err := s.db.Exec(query, username, passwordHash, fullName, role)
+	return err
+}
+
+// GetWebUser retrieves a web user by username
+func (s *ClientStore) GetWebUser(username string) (*WebUser, string, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var user WebUser
+	var passwordHash string
+
+	query := `SELECT id, username, password_hash, full_name, role, status, created_at, last_login FROM web_users WHERE username = ?`
+	err := s.db.QueryRow(query, username).Scan(
+		&user.ID,
+		&user.Username,
+		&passwordHash,
+		&user.FullName,
+		&user.Role,
+		&user.Status,
+		&user.CreatedAt,
+		&user.LastLogin,
+	)
+
+	if err != nil {
+		return nil, "", err
+	}
+
+	return &user, passwordHash, nil
+}
+
+// UpdateWebUserLastLogin updates the last login time for a user
+func (s *ClientStore) UpdateWebUserLastLogin(username string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	_, err := s.db.Exec(
+		"UPDATE web_users SET last_login = CURRENT_TIMESTAMP WHERE username = ?",
+		username,
+	)
+	return err
+}
+
+// GetAllWebUsers retrieves all web users
+func (s *ClientStore) GetAllWebUsers() ([]*WebUser, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	query := `SELECT id, username, full_name, role, status, created_at, last_login FROM web_users ORDER BY created_at DESC`
+
+	rows, err := s.db.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var users []*WebUser
+	for rows.Next() {
+		var user WebUser
+
+		err := rows.Scan(
+			&user.ID,
+			&user.Username,
+			&user.FullName,
+			&user.Role,
+			&user.Status,
+			&user.CreatedAt,
+			&user.LastLogin,
+		)
+
+		if err != nil {
+			log.Printf("Error scanning web user row: %v", err)
+			continue
+		}
+
+		users = append(users, &user)
+	}
+
+	return users, rows.Err()
+}
+
+// DeleteWebUser removes a web user
+func (s *ClientStore) DeleteWebUser(username string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	_, err := s.db.Exec("DELETE FROM web_users WHERE username = ?", username)
+	return err
+}
+
+// UserExists checks if a user exists
+func (s *ClientStore) UserExists(username string) (bool, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var count int
+	err := s.db.QueryRow("SELECT COUNT(*) FROM web_users WHERE username = ?", username).Scan(&count)
+	return count > 0, err
 }
