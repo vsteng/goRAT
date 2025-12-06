@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"sync"
 	"time"
+
+	"mww2.com/server_manager/common"
 )
 
 // ProxyConnection represents a proxy tunnel connection
@@ -400,15 +402,19 @@ func (s *Server) HandleClientGet(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Prefer returning metadata only to avoid marshaling websocket.Conn and other internal fields.
+	var meta *common.ClientMetadata
 	if client.Metadata == nil {
-		http.Error(w, "Client metadata unavailable", http.StatusInternalServerError)
-		return
-	}
-
-	meta := *client.Metadata
-	// Ensure ID is populated from client struct if missing
-	if meta.ID == "" {
-		meta.ID = client.ID
+		// Fallback: return minimal metadata if nil
+		meta = &common.ClientMetadata{
+			ID:     client.ID,
+			Status: "unknown",
+		}
+	} else {
+		meta = client.Metadata
+		// Ensure ID is populated from client struct if missing
+		if meta.ID == "" {
+			meta.ID = client.ID
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
