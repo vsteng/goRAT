@@ -213,6 +213,79 @@
             overflow-y: auto;
         }
 
+        .content-section {
+            display: none;
+        }
+
+        .content-section.active {
+            display: block;
+        }
+
+        /* ========== CLIENTS 3-COLUMN LAYOUT ========== */
+        .clients-layout {
+            display: grid;
+            grid-template-columns: 300px 1fr 350px;
+            gap: 20px;
+            height: calc(100vh - 140px);
+        }
+
+        .clients-left,
+        .clients-middle,
+        .clients-right {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            overflow-y: auto;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+
+        .clients-left h3,
+        .clients-middle h3,
+        .clients-right h3 {
+            font-size: 16px;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid var(--light);
+        }
+
+        .filter-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .filter-tab {
+            flex: 1;
+            padding: 8px 12px;
+            border: 1px solid var(--border);
+            background: white;
+            border-radius: 5px;
+            cursor: pointer;
+            text-align: center;
+            font-size: 12px;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+
+        .filter-tab:hover {
+            border-color: var(--primary);
+            background: var(--light);
+        }
+
+        .filter-tab.active {
+            background: var(--primary);
+            color: white;
+            border-color: var(--primary);
+        }
+
+        .clients-middle.empty {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-light);
+            font-size: 14px;
+        }
+
         /* ========== STATS SECTION ========== */
         .stats-grid {
             display: grid;
@@ -222,64 +295,76 @@
         }
 
         .stat-card {
-            background: white;
-            padding: 25px;
-            border-radius: 10px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-            border-left: 4px solid var(--primary);
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 4px 20px rgba(102, 126, 234, 0.3);
+            cursor: pointer;
+            transition: all 0.3s;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 30px rgba(102, 126, 234, 0.4);
         }
 
         .stat-card.success {
-            border-left-color: var(--success);
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+            box-shadow: 0 4px 20px rgba(40, 167, 69, 0.3);
+        }
+
+        .stat-card.success:hover {
+            box-shadow: 0 8px 30px rgba(40, 167, 69, 0.4);
         }
 
         .stat-card.danger {
-            border-left-color: var(--danger);
+            background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+            box-shadow: 0 4px 20px rgba(231, 76, 60, 0.3);
         }
 
-        .stat-card.warning {
-            border-left-color: var(--warning);
+        .stat-card.danger:hover {
+            box-shadow: 0 8px 30px rgba(231, 76, 60, 0.4);
+        }
+
+        .stat-card.info {
+            background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+            box-shadow: 0 4px 20px rgba(52, 152, 219, 0.3);
+        }
+
+        .stat-card.info:hover {
+            box-shadow: 0 8px 30px rgba(52, 152, 219, 0.4);
+        }
+
+        .stat-icon {
+            font-size: 36px;
+            margin-bottom: 10px;
         }
 
         .stat-label {
-            color: var(--text-light);
-            font-size: 13px;
-            font-weight: 500;
-            margin-bottom: 10px;
+            color: rgba(255,255,255,0.9);
+            font-size: 12px;
+            font-weight: 600;
+            margin-bottom: 8px;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
+            letter-spacing: 1px;
         }
 
         .stat-value {
-            font-size: 32px;
+            font-size: 40px;
             font-weight: 700;
-            color: var(--primary);
-        }
-
-        .stat-card.success .stat-value {
-            color: var(--success);
-        }
-
-        .stat-card.danger .stat-value {
-            color: var(--danger);
-        }
-
-        .stat-card.warning .stat-value {
-            color: var(--warning);
+            color: white;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.2);
         }
 
         /* ========== CLIENTS SECTION ========== */
-        .clients-container {
-            display: grid;
-            grid-template-columns: 1fr 300px;
-            gap: 30px;
-        }
-
         .section {
             background: white;
             border-radius: 10px;
             box-shadow: 0 2px 8px rgba(0,0,0,0.05);
             padding: 30px;
+            margin-bottom: 20px;
         }
 
         .section h3 {
@@ -296,15 +381,12 @@
         }
 
         .client-item {
-            padding: 15px;
+            padding: 12px;
             border: 1px solid var(--border);
-            border-radius: 8px;
-            margin-bottom: 12px;
+            border-radius: 6px;
+            margin-bottom: 8px;
             cursor: pointer;
             transition: all 0.3s;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
         }
 
         .client-item:hover {
@@ -325,23 +407,23 @@
         .client-name {
             font-weight: 600;
             color: var(--text);
-            margin-bottom: 5px;
+            margin-bottom: 4px;
+            font-size: 13px;
         }
 
         .client-meta {
-            font-size: 12px;
+            font-size: 11px;
             color: var(--text-light);
-            display: flex;
-            gap: 15px;
         }
 
         .status-badge {
             display: inline-block;
-            padding: 4px 10px;
-            border-radius: 20px;
-            font-size: 11px;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 10px;
             font-weight: 600;
             text-transform: uppercase;
+            margin-top: 4px;
         }
 
         .status-badge.online {
@@ -354,26 +436,9 @@
             color: #721c24;
         }
 
-        /* ========== CLIENT DETAILS PANEL ========== */
+        /* ========== CLIENT DETAILS PANEL (HIDDEN - Using right column instead) ========== */
         .client-details {
-            position: fixed;
-            right: 0;
-            top: 0;
-            width: 350px;
-            height: 100vh;
-            background: white;
-            box-shadow: -2px 0 10px rgba(0,0,0,0.1);
-            z-index: 999;
-            transform: translateX(100%);
-            transition: transform 0.3s;
-            margin-top: 0;
-            margin-left: 0;
-            padding: 30px;
-            overflow-y: auto;
-        }
-
-        .client-details.active {
-            transform: translateX(0);
+            display: none;
         }
 
         .details-close {
@@ -790,15 +855,39 @@
 
                 <!-- CLIENTS TAB -->
                 <div class="content-section" id="clientsSection">
-                    <section class="section">
-                        <h3>👥 Connected Clients</h3>
-                        <ul class="client-list" id="clientList">
-                            <div class="empty-state">
-                                <div class="loading"></div>
-                                <p style="margin-top: 15px;">Loading clients...</p>
+                    <div class="clients-layout">
+                        <!-- LEFT COLUMN: Client List -->
+                        <div class="clients-left">
+                            <h3>👥 Clients</h3>
+                            <div class="filter-tabs">
+                                <button class="filter-tab active" onclick="filterClients('all')">All</button>
+                                <button class="filter-tab" onclick="filterClients('online')">Online</button>
+                                <button class="filter-tab" onclick="filterClients('offline')">Offline</button>
                             </div>
-                        </ul>
-                    </section>
+                            <ul class="client-list" id="clientList">
+                                <div class="empty-state" style="padding: 40px 10px;">
+                                    <div class="loading"></div>
+                                    <p style="margin-top: 15px; font-size: 12px;">Loading...</p>
+                                </div>
+                            </ul>
+                        </div>
+
+                        <!-- MIDDLE COLUMN: Proxy Management -->
+                        <div class="clients-middle" id="proxyMiddle">
+                            <div style="text-align: center; padding: 60px 20px; color: var(--text-light);">
+                                <p style="font-size: 48px; margin-bottom: 15px;">🌐</p>
+                                <p>Select a client to manage proxies</p>
+                            </div>
+                        </div>
+
+                        <!-- RIGHT COLUMN: Client Details & Controls -->
+                        <div class="clients-right" id="clientRight">
+                            <div style="text-align: center; padding: 60px 20px; color: var(--text-light);">
+                                <p style="font-size: 48px; margin-bottom: 15px;">📋</p>
+                                <p>Select a client to view details</p>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- PROXY TAB -->
@@ -897,6 +986,7 @@
     <script>
         let selectedClient = null;
         let clients = [];
+    let currentFilter = 'all';
 
         async function loadClients() {
             try {
@@ -916,40 +1006,122 @@
         function renderClientList() {
             const list = document.getElementById('clientList');
             
-            if (clients.length === 0) {
+            // Filter clients based on current filter
+            let filteredClients = clients;
+            if (currentFilter === 'online') {
+                filteredClients = clients.filter(c => c.status === 'online');
+            } else if (currentFilter === 'offline') {
+                filteredClients = clients.filter(c => c.status !== 'online');
+            }
+            
+            if (filteredClients.length === 0) {
                 list.innerHTML = `
-                    <div class="empty-state" style="padding: 40px 20px;">
-                        <p>No clients connected</p>
-                        <p style="font-size: 12px; margin-top: 10px;">Waiting for clients to connect...</p>
+                    <div class="empty-state" style="padding: 40px 10px;">
+                        <p style="font-size: 13px;">${clients.length === 0 ? 'No clients' : 'No ' + currentFilter + ' clients'}</p>
                     </div>
                 `;
                 return;
             }
 
-            list.innerHTML = clients.map(client => `
+            list.innerHTML = filteredClients.map(client => `
                 <li class="client-item ${selectedClient?.id === client.id ? 'active' : ''}" 
                     onclick="selectClient(event, ${JSON.stringify(client).replace(/"/g, '&quot;')})">
-                    <div class="client-info">
-                        <div class="client-name">${escapeHtml(client.hostname || client.id)}</div>
-                        <div class="client-meta">
-                            <span>${escapeHtml(client.os || 'Unknown')}</span>
-                            <span>${escapeHtml(client.ip || 'N/A')}</span>
-                        </div>
-                    </div>
-                    <span class="status-badge ${client.status === 'online' ? 'online' : 'offline'}">
-                        ${client.status}
-                    </span>
+                    <div class="client-name">${escapeHtml(client.hostname || client.id)}</div>
+                    <div class="client-meta">${escapeHtml(client.os || 'Unknown')}</div>
+                    <span class="status-badge ${client.status === 'online' ? 'online' : 'offline'}">${client.status}</span>
                 </li>
             `).join('');
         }
 
+        function filterClients(filter) {
+            currentFilter = filter;
+            
+            // Update active filter tab
+            document.querySelectorAll('.filter-tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            event.target.classList.add('active');
+            
+            renderClientList();
+        }
         function selectClient(event, client) {
             event.preventDefault();
             selectedClient = client;
             renderClientList();
-            showClientDetails(client);
+            showClientInColumns(client);
         }
 
+        function showClientInColumns(client) {
+            // Update MIDDLE column: Proxy Management
+            const proxyMiddle = document.getElementById('proxyMiddle');
+            proxyMiddle.innerHTML = `
+                <h3>🌐 Proxy for ${escapeHtml(client.hostname || client.id)}</h3>
+                <ul class="proxy-list" id="proxyList">
+                    <div class="empty-proxy-state">Loading proxies...</div>
+                </ul>
+                <div class="proxy-form">
+                    <h5 style="font-size: 14px; margin-bottom: 12px;">➕ Add New Proxy</h5>
+                    <div class="proxy-form-group">
+                        <label>Client Address (host:port)</label>
+                        <input type="text" id="proxyRemoteAddr" placeholder="127.0.0.1:22">
+                    </div>
+                    <div class="proxy-form-group">
+                        <label>Server Port</label>
+                        <input type="number" id="proxyLocalPort" placeholder="10033">
+                    </div>
+                    <div class="proxy-form-group">
+                        <label>Protocol</label>
+                        <select id="proxyProtocol">
+                            <option value="TCP">TCP</option>
+                            <option value="HTTP">HTTP</option>
+                            <option value="HTTPS">HTTPS</option>
+                        </select>
+                    </div>
+                    <button onclick="addProxy()">➕ Add Proxy Connection</button>
+                </div>
+            `;
+            
+            // Update RIGHT column: Client Details & Controls
+            const clientRight = document.getElementById('clientRight');
+            clientRight.innerHTML = `
+                <h3>📋 Client Details</h3>
+                <div style="margin-bottom: 20px;">
+                    <div class="details-row">
+                        <div class="details-label">Client ID</div>
+                        <div class="details-value" style="font-family: monospace; font-size: 11px; word-break: break-all;">${escapeHtml(client.id)}</div>
+                    </div>
+                    <div class="details-row">
+                        <div class="details-label">Hostname</div>
+                        <div class="details-value">${escapeHtml(client.hostname || 'N/A')}</div>
+                    </div>
+                    <div class="details-row">
+                        <div class="details-label">Operating System</div>
+                        <div class="details-value">${escapeHtml(client.os || 'N/A')} / ${escapeHtml(client.arch || 'N/A')}</div>
+                    </div>
+                    <div class="details-row">
+                        <div class="details-label">IP Address</div>
+                        <div class="details-value">${escapeHtml(client.ip || 'N/A')}</div>
+                    </div>
+                    <div class="details-row">
+                        <div class="details-label">Status</div>
+                        <div class="details-value"><span class="status-badge ${client.status === 'online' ? 'online' : 'offline'}">${client.status}</span></div>
+                    </div>
+                </div>
+                
+                <h3 style="margin-top: 25px;">⚡ Control Panel</h3>
+                <div class="details-actions">
+                    <button class="btn-action-primary" onclick="openClientPanel()">🖥️ Control</button>
+                    <button class="btn-action-primary" onclick="sendCommand()">⌨️ Terminal</button>
+                    <button class="btn-action-secondary" onclick="viewStats()">📊 Stats</button>
+                    <button class="btn-action-secondary" onclick="browseLogs()">📋 Logs</button>
+                    <button class="btn-action-danger" onclick="confirmRemove()">🗑️ Remove</button>
+                    <button class="btn-action-danger" onclick="confirmUninstall()">❌ Uninstall</button>
+                </div>
+            `;
+            
+            // Load proxies for this client
+            loadProxies();
+        }
         function openProxyManagement() {
             if (!selectedClient) {
                 showStatus('Error', 'Please select a client first');
@@ -990,11 +1162,12 @@
 
         function renderProxies(proxies) {
             const list = document.getElementById('proxyList');
+                        if (!list) return;
             
             if (!proxies || proxies.length === 0) {
                 list.innerHTML = `
                     <div class="empty-proxy-state">
-                        <p>No proxy connections configured</p>
+                        <p style="font-size: 13px;">No proxy connections</p>
                     </div>
                 `;
                 return;
@@ -1039,71 +1212,7 @@
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        clientId: clientId,
-                        remoteHost: remoteHost,
-                        remotePort: parseInt(remotePort),
-                        localPort: parseInt(localPort),
-                        protocol: protocol
-                    })
-                });
-
-                if (response.ok) {
-                    showStatus('Success', 'Proxy connection created!');
-                    document.getElementById('proxyRemoteAddr').value = '';
-                    document.getElementById('proxyLocalPort').value = '';
-                    setTimeout(loadProxies, 1000);
-                } else if (response.status === 401) {
-                    window.location.href = '/login';
-                } else {
-                    showStatus('Error', 'Failed to create proxy');
                 }
-            } catch (err) {
-                console.error('Error:', err);
-                showStatus('Error', 'Error creating proxy connection');
-            }
-        }
-
-        async function deleteProxy(proxyId) {
-            if (!confirm('Delete this proxy connection?')) {
-                return;
-            }
-
-            try {
-                const response = await fetch('/api/proxy/close', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ proxyId: proxyId })
-                });
-
-                if (response.ok) {
-                    showStatus('Success', 'Proxy deleted successfully');
-                    loadProxies();
-                } else if (response.status === 401) {
-                    window.location.href = '/login';
-                } else {
-                    showStatus('Error', 'Failed to delete proxy');
-                }
-            } catch (err) {
-                console.error('Error:', err);
-                showStatus('Error', 'Error deleting proxy');
-            }
-        }
-
-        function showClientDetails(client) {
-            const panel = document.getElementById('clientDetailsPanel');
-            const content = document.getElementById('detailsContent');
-            
-            document.getElementById('detailsClientName').textContent = escapeHtml(client.hostname || client.id);
-            document.getElementById('detailsStatus').textContent = client.status.toUpperCase();
-            document.getElementById('detailsStatus').className = `status-badge ${client.status}`;
-
-            content.innerHTML = `
-                <div class="details-row">
-                    <div class="details-label">Client ID</div>
-                    <div class="details-value" style="font-family: monospace; font-size: 12px;">${escapeHtml(client.id)}</div>
-                </div>
-                <div class="details-row">
-                    <div class="details-label">Hostname</div>
                     <div class="details-value">${escapeHtml(client.hostname || 'N/A')}</div>
                 </div>
                 <div class="details-row">
@@ -1212,14 +1321,19 @@
         function removeClient() {
             closeModal();
             showStatus('Removed', 'Client removed from list');
-            closeClientDetails();
+            selectedClient = null;
+            // Clear middle and right columns
+            document.getElementById('proxyMiddle').innerHTML = '<div style="text-align: center; padding: 60px 20px; color: var(--text-light);"><p style="font-size: 48px; margin-bottom: 15px;">🌐</p><p>Select a client to manage proxies</p></div>';
+            document.getElementById('clientRight').innerHTML = '<div style="text-align: center; padding: 60px 20px; color: var(--text-light);"><p style="font-size: 48px; margin-bottom: 15px;">📋</p><p>Select a client to view details</p></div>';
             loadClients();
         }
 
         function uninstallClient() {
             closeModal();
             showStatus('Uninstall Sent', 'Uninstall command sent to client');
-            closeClientDetails();
+            selectedClient = null;
+            document.getElementById('proxyMiddle').innerHTML = '<div style="text-align: center; padding: 60px 20px; color: var(--text-light);"><p style="font-size: 48px; margin-bottom: 15px;">🌐</p><p>Select a client to manage proxies</p></div>';
+            document.getElementById('clientRight').innerHTML = '<div style="text-align: center; padding: 60px 20px; color: var(--text-light);"><p style="font-size: 48px; margin-bottom: 15px;">📋</p><p>Select a client to view details</p></div>';
             setTimeout(() => loadClients(), 2000);
         }
 
