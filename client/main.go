@@ -138,8 +138,8 @@ func (c *Client) Start() error {
 
 // connectionLoop manages connection lifecycle with automatic reconnection
 func (c *Client) connectionLoop() {
-	reconnectDelay := 5 * time.Second
-	maxReconnectDelay := 60 * time.Second
+	reconnectDelay := 1 * time.Second
+	maxReconnectDelay := 30 * time.Second
 
 	for c.running {
 		// Attempt to connect
@@ -149,8 +149,12 @@ func (c *Client) connectionLoop() {
 			log.Printf("Retrying in %v...", reconnectDelay)
 			time.Sleep(reconnectDelay)
 
-			// Exponential backoff for reconnect delay
-			reconnectDelay *= 2
+			// Exponential backoff for reconnect delay (but less aggressive)
+			if reconnectDelay < 10*time.Second {
+				reconnectDelay += 500 * time.Millisecond
+			} else {
+				reconnectDelay = time.Duration(float64(reconnectDelay) * 1.3)
+			}
 			if reconnectDelay > maxReconnectDelay {
 				reconnectDelay = maxReconnectDelay
 			}
@@ -158,7 +162,7 @@ func (c *Client) connectionLoop() {
 		}
 
 		// Connection successful, reset delay
-		reconnectDelay = 5 * time.Second
+		reconnectDelay = 1 * time.Second
 		log.Printf("Connected successfully")
 
 		// Create a session-specific disconnect channel for this connection
@@ -221,7 +225,7 @@ func (c *Client) connect() error {
 
 	dialer := websocket.Dialer{
 		TLSClientConfig:  tlsConfig,
-		HandshakeTimeout: 10 * time.Second,
+		HandshakeTimeout: 15 * time.Second,
 	}
 
 	// Connect to WebSocket
