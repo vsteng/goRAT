@@ -908,57 +908,6 @@
             </div>
         </div>
 
-        <!-- CLIENT DETAILS PANEL -->
-        <div class="client-details" id="clientDetailsPanel">
-            <button class="details-close" onclick="closeClientDetails()">✕</button>
-            <div class="details-header">
-                <h4 id="detailsClientName">Client Details</h4>
-                <span class="status-badge online" id="detailsStatus">Online</span>
-            </div>
-
-            <div id="detailsContent">
-                <!-- Will be populated dynamically -->
-            </div>
-
-            <!-- PROXY MANAGEMENT SECTION -->
-            <div class="proxy-section" id="proxySection" style="display: none;">
-                <h4>🌐 Proxy Connections</h4>
-                <ul class="proxy-list" id="proxyList">
-                    <div class="empty-proxy-state">Loading proxies...</div>
-                </ul>
-
-                <div class="proxy-form">
-                    <h5>➕ Add New Proxy</h5>
-                    <div class="proxy-form-group">
-                        <label>Client Address (host:port)</label>
-                        <input type="text" id="proxyRemoteAddr" placeholder="127.0.0.1:22">
-                    </div>
-                    <div class="proxy-form-group">
-                        <label>Server Port</label>
-                        <input type="number" id="proxyLocalPort" placeholder="10033">
-                    </div>
-                    <div class="proxy-form-group">
-                        <label>Protocol</label>
-                        <select id="proxyProtocol">
-                            <option value="TCP">TCP</option>
-                            <option value="HTTP">HTTP</option>
-                            <option value="HTTPS">HTTPS</option>
-                        </select>
-                    </div>
-                    <button onclick="addProxy()">➕ Add Proxy Connection</button>
-                </div>
-            </div>
-
-            <div class="details-actions">
-                <button class="btn-action-primary" onclick="toggleProxySection()">🌐 Proxy</button>
-                <button class="btn-action-primary" onclick="openClientPanel()">🖥️ Control</button>
-                <button class="btn-action-secondary" onclick="viewStats()">📊 Stats</button>
-                <button class="btn-action-primary" onclick="sendCommand()">⌨️ Terminal</button>
-                <button class="btn-action-secondary" onclick="browseLogs()">📋 Logs</button>
-                <button class="btn-action-danger" onclick="confirmRemove()">🗑️ Remove</button>
-                <button class="btn-action-danger" onclick="confirmUninstall()">❌ Uninstall</button>
-            </div>
-        </div>
     </div>
 
     <!-- MODALS -->
@@ -1122,24 +1071,6 @@
             // Load proxies for this client
             loadProxies();
         }
-        function openProxyManagement() {
-            if (!selectedClient) {
-                showStatus('Error', 'Please select a client first');
-                return;
-            }
-            toggleProxySection();
-        }
-
-        function toggleProxySection() {
-            const proxySection = document.getElementById('proxySection');
-            if (proxySection.style.display === 'none') {
-                proxySection.style.display = 'block';
-                loadProxies();
-            } else {
-                proxySection.style.display = 'none';
-            }
-        }
-
         async function loadProxies() {
             if (!selectedClient) return;
 
@@ -1212,38 +1143,28 @@
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
+                        clientId: clientId,
+                        remoteHost: remoteHost,
+                        remotePort: parseInt(remotePort),
+                        localPort: parseInt(localPort),
+                        protocol: protocol
+                    })
+                });
+
+                if (response.ok) {
+                    showStatus('Success', 'Proxy connection created!');
+                    document.getElementById('proxyRemoteAddr').value = '';
+                    document.getElementById('proxyLocalPort').value = '';
+                    setTimeout(loadProxies, 800);
+                } else if (response.status === 401) {
+                    window.location.href = '/login';
+                } else {
+                    showStatus('Error', 'Failed to create proxy');
                 }
-                    <div class="details-value">${escapeHtml(client.hostname || 'N/A')}</div>
-                </div>
-                <div class="details-row">
-                    <div class="details-label">Operating System</div>
-                    <div class="details-value">${escapeHtml(client.os || 'N/A')} / ${escapeHtml(client.arch || 'N/A')}</div>
-                </div>
-                <div class="details-row">
-                    <div class="details-label">Local IP Address</div>
-                    <div class="details-value">${escapeHtml(client.ip || 'N/A')}</div>
-                </div>
-                <div class="details-row">
-                    <div class="details-label">Public IP Address</div>
-                    <div class="details-value">${escapeHtml(client.public_ip || 'N/A')}</div>
-                </div>
-                <div class="details-row">
-                    <div class="details-label">Last Seen</div>
-                    <div class="details-value">${formatDate(client.last_seen)}</div>
-                </div>
-                <div class="details-row">
-                    <div class="details-label">Version</div>
-                    <div class="details-value">${escapeHtml(client.version || 'N/A')}</div>
-                </div>
-            `;
-
-            panel.classList.add('active');
-        }
-
-        function closeClientDetails() {
-            document.getElementById('clientDetailsPanel').classList.remove('active');
-            selectedClient = null;
-            renderClientList();
+            } catch (err) {
+                console.error('Error:', err);
+                showStatus('Error', 'Error creating proxy connection');
+            }
         }
 
         function updateStats() {
