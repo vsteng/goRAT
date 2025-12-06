@@ -376,21 +376,68 @@ func (s *Server) HandleProxyCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req struct {
-		ClientID   string `json:"client_id"`
-		RemoteHost string `json:"remote_host"`
-		RemotePort int    `json:"remote_port"`
-		LocalPort  int    `json:"local_port"`
-		Protocol   string `json:"protocol"`
-	}
-
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request", http.StatusBadRequest)
+	var rawReq map[string]interface{}
+	if err := json.NewDecoder(r.Body).Decode(&rawReq); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
-	if req.Protocol == "" {
-		req.Protocol = "tcp"
+	// Extract fields, supporting both snake_case and camelCase
+	clientID := ""
+	remoteHost := ""
+	remotePort := 0
+	localPort := 0
+	protocol := ""
+
+	// Try snake_case first
+	if v, ok := rawReq["client_id"].(string); ok {
+		clientID = v
+	} else if v, ok := rawReq["clientId"].(string); ok {
+		clientID = v
+	}
+
+	if v, ok := rawReq["remote_host"].(string); ok {
+		remoteHost = v
+	} else if v, ok := rawReq["remoteHost"].(string); ok {
+		remoteHost = v
+	}
+
+	if v, ok := rawReq["remote_port"].(float64); ok {
+		remotePort = int(v)
+	} else if v, ok := rawReq["remotePort"].(float64); ok {
+		remotePort = int(v)
+	}
+
+	if v, ok := rawReq["local_port"].(float64); ok {
+		localPort = int(v)
+	} else if v, ok := rawReq["localPort"].(float64); ok {
+		localPort = int(v)
+	}
+
+	if v, ok := rawReq["protocol"].(string); ok {
+		protocol = v
+	}
+
+	// Validate required fields
+	if clientID == "" {
+		http.Error(w, "Missing client_id", http.StatusBadRequest)
+		return
+	}
+	if remoteHost == "" {
+		http.Error(w, "Missing remote_host", http.StatusBadRequest)
+		return
+	}
+	if remotePort == 0 {
+		http.Error(w, "Missing remote_port", http.StatusBadRequest)
+		return
+	}
+	if localPort == 0 {
+		http.Error(w, "Missing local_port", http.StatusBadRequest)
+		return
+	}
+
+	if protocol == "" {
+		protocol = "tcp"
 	}
 
 	// Create proxy manager if not exists
@@ -399,7 +446,7 @@ func (s *Server) HandleProxyCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	conn, err := s.proxyManager.CreateProxyConnection(
-		req.ClientID, req.RemoteHost, req.RemotePort, req.LocalPort, req.Protocol)
+		clientID, remoteHost, remotePort, localPort, protocol)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
