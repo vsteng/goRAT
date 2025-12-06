@@ -936,7 +936,10 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         client_id: clientId,
-                        command: command
+                        command: {
+                            command: command,
+                            timeout: 30
+                        }
                     })
                 });
                 
@@ -1001,7 +1004,11 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         client_id: clientId,
-                        command: `kill ${pid}`
+                        command: {
+                            command: 'kill',
+                            args: [String(pid)],
+                            timeout: 10
+                        }
                     })
                 }).then(resp => {
                     if (resp.ok) {
@@ -1028,9 +1035,18 @@
             }
 
             try {
-                const body = config.cmd ? 
-                    { client_id: clientId, command: config.cmd } :
-                    { client_id: clientId };
+                let body;
+                if (config.cmd) {
+                    body = {
+                        client_id: clientId,
+                        command: {
+                            command: config.cmd,
+                            timeout: 10
+                        }
+                    };
+                } else {
+                    body = { client_id: clientId };
+                }
 
                 const response = await fetch(config.endpoint, {
                     method: 'POST',
