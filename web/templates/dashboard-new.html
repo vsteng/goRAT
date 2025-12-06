@@ -466,6 +466,124 @@
             background: #c0392b;
         }
 
+        /* ========== PROXY SECTION ========== */
+        .proxy-section {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 2px dashed var(--border);
+        }
+
+        .proxy-section h4 {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 15px;
+            color: var(--text);
+        }
+
+        .proxy-list {
+            list-style: none;
+            margin-bottom: 20px;
+        }
+
+        .proxy-item {
+            padding: 12px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            margin-bottom: 10px;
+            font-size: 12px;
+        }
+
+        .proxy-source {
+            font-weight: 600;
+            color: var(--text);
+            margin-bottom: 4px;
+        }
+
+        .proxy-meta {
+            font-size: 11px;
+            color: var(--text-light);
+            display: flex;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+
+        .proxy-item button {
+            background: var(--danger);
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 11px;
+        }
+
+        .proxy-item button:hover {
+            background: #c0392b;
+        }
+
+        .proxy-form {
+            background: var(--light);
+            padding: 15px;
+            border-radius: 6px;
+            margin-top: 15px;
+        }
+
+        .proxy-form h5 {
+            font-size: 13px;
+            margin-bottom: 12px;
+            color: var(--text);
+        }
+
+        .proxy-form-group {
+            margin-bottom: 12px;
+        }
+
+        .proxy-form-group label {
+            display: block;
+            font-size: 11px;
+            font-weight: 600;
+            margin-bottom: 5px;
+            color: var(--text);
+            text-transform: uppercase;
+        }
+
+        .proxy-form-group input,
+        .proxy-form-group select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            font-size: 12px;
+        }
+
+        .proxy-form-group input:focus,
+        .proxy-form-group select:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
+        .proxy-form button {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            width: 100%;
+        }
+
+        .proxy-form button:hover {
+            background: var(--primary-dark);
+        }
+
+        .empty-proxy-state {
+            text-align: center;
+            padding: 20px;
+            color: var(--text-light);
+            font-size: 12px;
+        }
+
         /* ========== RESPONSIVE ========== */
         @media (max-width: 1200px) {
             .clients-container {
@@ -674,8 +792,37 @@
                 <!-- Will be populated dynamically -->
             </div>
 
+            <!-- PROXY MANAGEMENT SECTION -->
+            <div class="proxy-section" id="proxySection" style="display: none;">
+                <h4>🌐 Proxy Connections</h4>
+                <ul class="proxy-list" id="proxyList">
+                    <div class="empty-proxy-state">Loading proxies...</div>
+                </ul>
+
+                <div class="proxy-form">
+                    <h5>➕ Add New Proxy</h5>
+                    <div class="proxy-form-group">
+                        <label>Client Address (host:port)</label>
+                        <input type="text" id="proxyRemoteAddr" placeholder="127.0.0.1:22">
+                    </div>
+                    <div class="proxy-form-group">
+                        <label>Server Port</label>
+                        <input type="number" id="proxyLocalPort" placeholder="10033">
+                    </div>
+                    <div class="proxy-form-group">
+                        <label>Protocol</label>
+                        <select id="proxyProtocol">
+                            <option value="TCP">TCP</option>
+                            <option value="HTTP">HTTP</option>
+                            <option value="HTTPS">HTTPS</option>
+                        </select>
+                    </div>
+                    <button onclick="addProxy()">➕ Add Proxy Connection</button>
+                </div>
+            </div>
+
             <div class="details-actions">
-                <button class="btn-action-primary" onclick="openProxyManagement()">🌐 Proxy</button>
+                <button class="btn-action-primary" onclick="toggleProxySection()">🌐 Proxy</button>
                 <button class="btn-action-primary" onclick="openClientPanel()">🖥️ Control</button>
                 <button class="btn-action-secondary" onclick="viewStats()">📊 Stats</button>
                 <button class="btn-action-primary" onclick="sendCommand()">⌨️ Terminal</button>
@@ -769,9 +916,138 @@
                 showStatus('Error', 'Please select a client first');
                 return;
             }
-            // Use the correct ID field - try both formats
+            toggleProxySection();
+        }
+
+        function toggleProxySection() {
+            const proxySection = document.getElementById('proxySection');
+            if (proxySection.style.display === 'none') {
+                proxySection.style.display = 'block';
+                loadProxies();
+            } else {
+                proxySection.style.display = 'none';
+            }
+        }
+
+        async function loadProxies() {
+            if (!selectedClient) return;
+
             const clientId = selectedClient.ID || selectedClient.id;
-            window.location.href = `/client-proxies?id=${encodeURIComponent(clientId)}`;
+            try {
+                const response = await fetch(`/api/proxy/list?clientId=${encodeURIComponent(clientId)}`);
+                if (response.status === 401) {
+                    window.location.href = '/login';
+                    return;
+                }
+                if (response.ok) {
+                    const proxies = await response.json() || [];
+                    renderProxies(proxies);
+                }
+            } catch (err) {
+                console.error('Error loading proxies:', err);
+                renderProxies([]);
+            }
+        }
+
+        function renderProxies(proxies) {
+            const list = document.getElementById('proxyList');
+            
+            if (!proxies || proxies.length === 0) {
+                list.innerHTML = `
+                    <div class="empty-proxy-state">
+                        <p>No proxy connections configured</p>
+                    </div>
+                `;
+                return;
+            }
+
+            list.innerHTML = proxies.map(proxy => `
+                <li class="proxy-item">
+                    <div class="proxy-source">:${proxy.LocalPort} → ${escapeHtml(proxy.RemoteHost)}:${proxy.RemotePort}</div>
+                    <div class="proxy-meta">
+                        <span>Protocol: ${escapeHtml(proxy.Protocol)}</span>
+                        <span>Status: ${escapeHtml(proxy.Status)}</span>
+                    </div>
+                    <button onclick="deleteProxy('${escapeHtml(proxy.ID)}')">🗑️ Delete</button>
+                </li>
+            `).join('');
+        }
+
+        async function addProxy() {
+            const remoteAddr = document.getElementById('proxyRemoteAddr').value.trim();
+            const localPort = document.getElementById('proxyLocalPort').value.trim();
+            const protocol = document.getElementById('proxyProtocol').value;
+
+            if (!remoteAddr || !localPort) {
+                showStatus('Error', 'Please fill in all fields');
+                return;
+            }
+
+            const [remoteHost, remotePort] = remoteAddr.split(':');
+            if (!remoteHost || !remotePort) {
+                showStatus('Error', 'Invalid address format. Use: 127.0.0.1:22');
+                return;
+            }
+
+            if (isNaN(localPort) || isNaN(remotePort)) {
+                showStatus('Error', 'Port numbers must be numeric');
+                return;
+            }
+
+            try {
+                const clientId = selectedClient.ID || selectedClient.id;
+                const response = await fetch('/api/proxy/create', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        clientId: clientId,
+                        remoteHost: remoteHost,
+                        remotePort: parseInt(remotePort),
+                        localPort: parseInt(localPort),
+                        protocol: protocol
+                    })
+                });
+
+                if (response.ok) {
+                    showStatus('Success', 'Proxy connection created!');
+                    document.getElementById('proxyRemoteAddr').value = '';
+                    document.getElementById('proxyLocalPort').value = '';
+                    setTimeout(loadProxies, 1000);
+                } else if (response.status === 401) {
+                    window.location.href = '/login';
+                } else {
+                    showStatus('Error', 'Failed to create proxy');
+                }
+            } catch (err) {
+                console.error('Error:', err);
+                showStatus('Error', 'Error creating proxy connection');
+            }
+        }
+
+        async function deleteProxy(proxyId) {
+            if (!confirm('Delete this proxy connection?')) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/proxy/close', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ proxyId: proxyId })
+                });
+
+                if (response.ok) {
+                    showStatus('Success', 'Proxy deleted successfully');
+                    loadProxies();
+                } else if (response.status === 401) {
+                    window.location.href = '/login';
+                } else {
+                    showStatus('Error', 'Failed to delete proxy');
+                }
+            } catch (err) {
+                console.error('Error:', err);
+                showStatus('Error', 'Error deleting proxy');
+            }
         }
 
         function showClientDetails(client) {

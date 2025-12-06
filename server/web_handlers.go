@@ -557,16 +557,6 @@ func (wh *WebHandler) HandleGlobalUpdate(w http.ResponseWriter, r *http.Request)
 	})
 }
 
-// HandleClientProxies handles the client proxy management page
-func (wh *WebHandler) HandleClientProxies(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	err := wh.templates.ExecuteTemplate(w, "client-proxies.html", nil)
-	if err != nil {
-		log.Printf("Error rendering client proxies: %v", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-	}
-}
-
 // RegisterWebRoutes registers all web UI routes
 func (wh *WebHandler) RegisterWebRoutes(mux *http.ServeMux) {
 	// Public routes
@@ -585,7 +575,6 @@ func (wh *WebHandler) RegisterWebRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/dashboard", wh.requireAuth(wh.HandleDashboard))
 	mux.HandleFunc("/dashboard-new", wh.requireAuth(wh.HandleDashboardNew))
 	mux.HandleFunc("/client-details", wh.requireAuth(wh.HandleClientDetails))
-	mux.HandleFunc("/client-proxies", wh.requireAuth(wh.HandleClientProxies))
 	mux.HandleFunc("/terminal", wh.requireAuth(wh.HandleTerminalPage))
 	mux.HandleFunc("/files", wh.requireAuth(wh.HandleFilesPage))
 	mux.HandleFunc("/api/files/browse", wh.requireAuth(wh.HandleFileBrowse))
