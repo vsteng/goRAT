@@ -2,6 +2,8 @@ package client
 
 import (
 	"crypto/tls"
+	"encoding/base64"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -333,13 +335,40 @@ func (c *Client) readPump(disconnectChan chan bool) {
 	})
 
 	for c.running {
-		var msg common.Message
-		err := c.conn.ReadJSON(&msg)
+		// Read as raw JSON to check message type
+		var rawMsg map[string]interface{}
+		err := c.conn.ReadJSON(&rawMsg)
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 				log.Printf("WebSocket error: %v", err)
 			}
 			break
+		}
+
+		// Check if this is a proxy message
+		if msgType, ok := rawMsg["type"].(string); ok {
+			switch msgType {
+			case "proxy_connect":
+				// Handle proxy connection request
+				c.handleProxyConnect(rawMsg)
+				continue
+			case "proxy_data":
+				// Handle proxy data relay
+				c.handleProxyData(rawMsg)
+				continue
+			case "proxy_disconnect":
+				// Handle proxy disconnection
+				c.handleProxyDisconnect(rawMsg)
+				continue
+			}
+		}
+
+		// Not a proxy message, parse as common.Message
+		jsonData, _ := json.Marshal(rawMsg)
+		var msg common.Message
+		if err := json.Unmarshal(jsonData, &msg); err != nil {
+			log.Printf("Failed to parse message: %v", err)
+			continue
 		}
 
 		// Handle message
@@ -444,6 +473,99 @@ func (c *Client) handleMessage(msg *common.Message) {
 
 	default:
 		log.Printf("Unknown message type: %s", msg.Type)
+	}
+}
+
+// handleProxyConnect handles proxy connection requests from the server
+func (c *Client) handleProxyConnect(rawMsg map[string]interface{}) {
+	proxyID, _ := rawMsg["proxy_id"].(string)
+	userID, _ := rawMsg["user_id"].(string)
+	remoteHost, _ := rawMsg["remote_host"].(string)
+	remotePort, _ := rawMsg["remote_port"].(float64)
+	protocol, _ := rawMsg["protocol"].(string)
+
+	log.Printf("Proxy connect request: proxy=%s, user=%s, remote=%s:%d, protocol=%s",
+		proxyID, userID, remoteHost, int(remotePort), protocol)
+
+	// Try to connect to the remote host
+	remoteAddr := fmt.Sprintf("%s:%d", remoteHost, int(remotePort))
+	remoteConn, err := net.Dial("tcp", remoteAddr)
+	if err != nil {
+		log.Printf("Failed to connect to remote host %s: %v", remoteAddr, err)
+		// Send disconnect message to server
+		c.sendProxyMessage("proxy_disconnect", proxyID, userID, nil)
+		return
+	}
+
+	log.Printf("Connected to remote host: %s", remoteAddr)
+
+	// Start relaying data from remote to server
+	go c.relayProxyData(proxyID, userID, remoteConn)
+}
+
+// handleProxyData handles proxy data from the server
+func (c *Client) handleProxyData(rawMsg map[string]interface{}) {
+	var data []byte
+	if dataVal, ok := rawMsg["data"]; ok {
+		if dataStr, ok := dataVal.(string); ok {
+			// Decode base64
+			var err error
+			data, err = base64.StdEncoding.DecodeString(dataStr)
+			if err != nil {
+				log.Printf("Error decoding base64 proxy data: %v", err)
+				return
+			}
+		}
+	}
+
+	// This is not implemented yet - data relay from server to remote is handled differently
+	// The client would need to maintain a map of proxyID -> remote connection
+	_ = data // Placeholder
+}
+
+// handleProxyDisconnect handles proxy disconnection from the server
+func (c *Client) handleProxyDisconnect(rawMsg map[string]interface{}) {
+	proxyID, _ := rawMsg["proxy_id"].(string)
+	userID, _ := rawMsg["user_id"].(string)
+
+	log.Printf("Proxy disconnect: proxy=%s, user=%s", proxyID, userID)
+	// Close remote connection if it exists
+	// This would be implemented if maintaining connection map
+}
+
+// sendProxyMessage sends a proxy message to the server
+func (c *Client) sendProxyMessage(msgType, proxyID, userID string, data []byte) {
+	msg := map[string]interface{}{
+		"type":     msgType,
+		"proxy_id": proxyID,
+		"user_id":  userID,
+	}
+
+	if data != nil && len(data) > 0 {
+		msg["data"] = base64.StdEncoding.EncodeToString(data)
+	}
+
+	c.conn.WriteJSON(msg)
+}
+
+// relayProxyData relays data from remote host back to the server
+func (c *Client) relayProxyData(proxyID, userID string, remoteConn net.Conn) {
+	defer remoteConn.Close()
+
+	buf := make([]byte, 4096)
+	for {
+		n, err := remoteConn.Read(buf)
+		if err != nil {
+			log.Printf("Remote connection closed: %v", err)
+			// Notify server of disconnect
+			c.sendProxyMessage("proxy_disconnect", proxyID, userID, nil)
+			break
+		}
+
+		if n > 0 {
+			// Send data to server via proxy_data message
+			c.sendProxyMessage("proxy_data", proxyID, userID, buf[:n])
+		}
 	}
 }
 
