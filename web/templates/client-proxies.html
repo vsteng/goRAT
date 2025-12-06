@@ -653,12 +653,19 @@
         function updateClientInfo() {
             if (!clientData) return;
 
-            document.getElementById('clientName').textContent = escapeHtml(clientData.hostname || clientData.ID || 'Unknown');
-            document.getElementById('clientId').textContent = escapeHtml(clientData.ID || '-');
-            document.getElementById('clientOS').textContent = escapeHtml((clientData.OS || 'Unknown') + ' / ' + (clientData.Arch || 'Unknown'));
+            // Handle both possible field name formats (Go struct vs lowercase)
+            const id = clientData.ID || clientData.id || '-';
+            const hostname = clientData.Hostname || clientData.hostname || clientData.ID || 'Unknown';
+            const os = clientData.OS || clientData.os || 'Unknown';
+            const arch = clientData.Arch || clientData.arch || 'Unknown';
+            const isConnected = clientData.IsConnected !== undefined ? clientData.IsConnected : (clientData.status === 'online');
+
+            document.getElementById('clientName').textContent = escapeHtml(hostname);
+            document.getElementById('clientId').textContent = escapeHtml(id);
+            document.getElementById('clientOS').textContent = escapeHtml(os + ' / ' + arch);
             
             const statusBadge = document.getElementById('clientStatus');
-            if (clientData.IsConnected) {
+            if (isConnected) {
                 statusBadge.textContent = 'Online';
                 statusBadge.className = 'status-badge online';
             } else {
@@ -734,11 +741,13 @@
             }
 
             try {
+                // Use the correct client ID from the loaded data
+                const clientIdToUse = clientData.ID || clientData.id || clientId;
                 const response = await fetch('/api/proxy/create', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        clientId: clientId,
+                        clientId: clientIdToUse,
                         remoteHost: remoteHost,
                         remotePort: parseInt(remotePort),
                         localPort: parseInt(localPort),

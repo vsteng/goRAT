@@ -769,7 +769,9 @@
                 showStatus('Error', 'Please select a client first');
                 return;
             }
-            window.location.href = `/client-proxies?id=${encodeURIComponent(selectedClient.id)}`;
+            // Use the correct ID field - try both formats
+            const clientId = selectedClient.ID || selectedClient.id;
+            window.location.href = `/client-proxies?id=${encodeURIComponent(clientId)}`;
         }
 
         function showClientDetails(client) {
