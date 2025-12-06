@@ -788,15 +788,24 @@
         async function loadClientDetails() {
             clientId = getClientId();
             if (!clientId) {
-                window.location.href = '/dashboard-new.html';
+                window.location.href = '/dashboard-new';
                 return;
             }
 
             try {
-                const response = await fetch(`/api/clients/${encodeURIComponent(clientId)}`);
+                const response = await fetch(`/api/client?id=${encodeURIComponent(clientId)}`);
                 if (!response.ok) throw new Error('Failed to load client');
                 
-                currentClient = await response.json();
+                const raw = await response.json();
+                // Normalize structure: some responses are ClientMetadata, some are Client{Metadata: {...}}
+                if (raw && raw.Metadata) {
+                    currentClient = { ...raw.Metadata };
+                    // Preserve id if not present
+                    if (!currentClient.id && raw.ID) currentClient.id = raw.ID;
+                    if (!currentClient.status && raw.Metadata.status) currentClient.status = raw.Metadata.status;
+                } else {
+                    currentClient = raw;
+                }
                 updateClientDisplay();
             } catch (err) {
                 console.error('Error loading client:', err);
@@ -816,7 +825,7 @@
             document.getElementById('localIp').textContent = currentClient.ip || '-';
             document.getElementById('publicIp').textContent = currentClient.public_ip || '-';
             document.getElementById('connected').textContent = currentClient.status;
-            document.getElementById('lastSync').textContent = new Date(currentClient.last_seen).toLocaleString();
+            document.getElementById('lastSync').textContent = currentClient.last_seen ? new Date(currentClient.last_seen).toLocaleString() : '-';
         }
 
         // File browser functions
