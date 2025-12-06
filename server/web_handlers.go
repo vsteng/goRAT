@@ -619,6 +619,10 @@ func (wh *WebHandler) RegisterWebRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/login", wh.HandleLoginAPI)
 	mux.HandleFunc("/api/logout", wh.HandleLogout)
 
+	// User management API routes
+	mux.HandleFunc("/api/users", wh.requireAuth(wh.HandleUsersAPI))
+	mux.HandleFunc("/api/users/", wh.requireAuth(wh.HandleUserAPI))
+
 	// Protected routes
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/" {
@@ -637,4 +641,175 @@ func (wh *WebHandler) RegisterWebRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/files/download", wh.requireAuth(wh.HandleFileDownload))
 	mux.HandleFunc("/api/screenshot", wh.requireAuth(wh.HandleScreenshotRequest))
 	mux.HandleFunc("/api/update/global", wh.requireAuth(wh.HandleGlobalUpdate))
+}
+
+// HandleUsersAPI handles GET (list users) and POST (create user) requests
+func (wh *WebHandler) HandleUsersAPI(w http.ResponseWriter, r *http.Request) {
+	if wh.store == nil {
+		http.Error(w, "User management not available", http.StatusServiceUnavailable)
+		return
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		// List all users
+		users, err := wh.store.GetAllWebUsers()
+		if err != nil {
+			log.Printf("Error getting users: %v", err)
+			http.Error(w, "Failed to get users", http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(users)
+
+	case http.MethodPost:
+		// Create new user
+		var req struct {
+			Username string `json:"username"`
+			Password string `json:"password"`
+			FullName string `json:"full_name"`
+			Role     string `json:"role"`
+		}
+
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "Invalid request", http.StatusBadRequest)
+			return
+		}
+
+		if req.Username == "" || req.Password == "" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Username and password are required"})
+			return
+		}
+
+		if len(req.Password) < 6 {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Password must be at least 6 characters"})
+			return
+		}
+
+		// Check if user already exists
+		exists, err := wh.store.UserExists(req.Username)
+		if err != nil {
+			log.Printf("Error checking user existence: %v", err)
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			return
+		}
+		if exists {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusConflict)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Username already exists"})
+			return
+		}
+
+		// Set default role if not provided
+		if req.Role == "" {
+			req.Role = "admin"
+		}
+
+		// Create user
+		if err := wh.store.CreateWebUser(req.Username, req.Password, req.FullName, req.Role); err != nil {
+			log.Printf("Error creating user: %v", err)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Failed to create user"})
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(map[string]string{"status": "success", "message": "User created successfully"})
+
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+// HandleUserAPI handles PUT (update user) and DELETE (delete user) requests
+func (wh *WebHandler) HandleUserAPI(w http.ResponseWriter, r *http.Request) {
+	if wh.store == nil {
+		http.Error(w, "User management not available", http.StatusServiceUnavailable)
+		return
+	}
+
+	// Extract username from URL path
+	username := r.URL.Path[len("/api/users/"):]
+	if username == "" {
+		http.Error(w, "Username required", http.StatusBadRequest)
+		return
+	}
+
+	switch r.Method {
+	case http.MethodPut:
+		// Update user (status, role, etc.)
+		var req struct {
+			Status   string `json:"status"`
+			Role     string `json:"role"`
+			FullName string `json:"full_name"`
+		}
+
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "Invalid request", http.StatusBadRequest)
+			return
+		}
+
+		// Get current user
+		user, _, err := wh.store.GetWebUser(username)
+		if err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusNotFound)
+			json.NewEncoder(w).Encode(map[string]string{"error": "User not found"})
+			return
+		}
+
+		// Update fields if provided
+		if req.Status != "" {
+			user.Status = req.Status
+		}
+		if req.Role != "" {
+			user.Role = req.Role
+		}
+		if req.FullName != "" {
+			user.FullName = req.FullName
+		}
+
+		// Update in database (we need to add an update method)
+		wh.store.mu.Lock()
+		_, err = wh.store.db.Exec(`
+			UPDATE web_users 
+			SET status = ?, role = ?, full_name = ?
+			WHERE username = ?
+		`, user.Status, user.Role, user.FullName, username)
+		wh.store.mu.Unlock()
+
+		if err != nil {
+			log.Printf("Error updating user: %v", err)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Failed to update user"})
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"status": "success", "message": "User updated successfully"})
+
+	case http.MethodDelete:
+		// Delete user
+		if err := wh.store.DeleteWebUser(username); err != nil {
+			log.Printf("Error deleting user: %v", err)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Failed to delete user"})
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"status": "success", "message": "User deleted successfully"})
+
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
 }

@@ -755,6 +755,61 @@
             gap: 10px;
             justify-content: flex-end;
         }
+
+        /* ========== FORM INPUTS ========== */
+        .input-field {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid var(--border);
+            border-radius: 5px;
+            font-size: 14px;
+            font-family: inherit;
+            transition: border-color 0.3s;
+        }
+
+        .input-field:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        /* ========== DATA TABLE ========== */
+        .table-responsive {
+            overflow-x: auto;
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+
+        .data-table thead {
+            background: var(--light);
+        }
+
+        .data-table th {
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+            color: var(--text);
+            border-bottom: 2px solid var(--border);
+        }
+
+        .data-table td {
+            padding: 12px;
+            border-bottom: 1px solid var(--border);
+            color: var(--text);
+        }
+
+        .data-table tr:hover {
+            background: var(--light);
+        }
+
+        .btn-sm {
+            padding: 5px 10px;
+            font-size: 12px;
+        }
     </style>
 </head>
 <body>
@@ -770,6 +825,7 @@
                 <li><a href="#" class="active" onclick="showSection('dashboard')"><span>📊</span> <span>Dashboard</span></a></li>
                 <li><a href="#" onclick="showSection('clients')"><span>👥</span> <span>Clients</span></a></li>
                 <li><a href="#" onclick="showSection('proxy')"><span>🌐</span> <span>Proxy</span></a></li>
+                <li><a href="#" onclick="showSection('users')"><span>👤</span> <span>Users</span></a></li>
                 <li><a href="#" onclick="showSection('settings')"><span>⚙️</span> <span>Settings</span></a></li>
             </ul>
 
@@ -895,6 +951,69 @@
                     <div class="section">
                         <h3>🌐 Proxy Management</h3>
                         <p style="color: var(--text-light); margin-top: 10px;">Select a client from the Clients tab to manage proxies.</p>
+                    </div>
+                </div>
+
+                <!-- USERS TAB -->
+                <div class="content-section" id="usersSection">
+                    <div class="section">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                            <h3>👤 User Management</h3>
+                            <button class="btn btn-primary" onclick="showAddUserForm()">➕ Add User</button>
+                        </div>
+
+                        <!-- Add User Form (hidden by default) -->
+                        <div id="addUserForm" style="display: none; background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+                            <h4 style="margin-bottom: 15px;">Create New User</h4>
+                            <div style="display: grid; gap: 15px;">
+                                <div>
+                                    <label style="display: block; margin-bottom: 5px; font-weight: 500;">Username</label>
+                                    <input type="text" id="newUsername" class="input-field" placeholder="Enter username" />
+                                </div>
+                                <div>
+                                    <label style="display: block; margin-bottom: 5px; font-weight: 500;">Password</label>
+                                    <input type="password" id="newPassword" class="input-field" placeholder="Enter password" />
+                                </div>
+                                <div>
+                                    <label style="display: block; margin-bottom: 5px; font-weight: 500;">Full Name</label>
+                                    <input type="text" id="newFullName" class="input-field" placeholder="Enter full name" />
+                                </div>
+                                <div>
+                                    <label style="display: block; margin-bottom: 5px; font-weight: 500;">Role</label>
+                                    <select id="newRole" class="input-field">
+                                        <option value="admin">Admin</option>
+                                        <option value="operator">Operator</option>
+                                        <option value="viewer">Viewer</option>
+                                    </select>
+                                </div>
+                                <div style="display: flex; gap: 10px;">
+                                    <button class="btn btn-primary" onclick="createUser()">Create User</button>
+                                    <button class="btn btn-secondary" onclick="hideAddUserForm()">Cancel</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Users Table -->
+                        <div class="table-responsive">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Username</th>
+                                        <th>Full Name</th>
+                                        <th>Role</th>
+                                        <th>Status</th>
+                                        <th>Created</th>
+                                        <th>Last Login</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="usersTableBody">
+                                    <tr>
+                                        <td colspan="7" style="text-align: center; padding: 40px; color: var(--text-light);">Loading users...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
 
@@ -1312,6 +1431,7 @@
                 'dashboard': 'dashboardSection',
                 'clients': 'clientsSection',
                 'proxy': 'proxySection',
+                'users': 'usersSection',
                 'settings': 'settingsSection'
             };
             const targetSection = document.getElementById(sectionMap[section]);
@@ -1320,6 +1440,10 @@
             // If switching to clients tab, load clients
             if (section === 'clients') {
                 loadClients();
+            }
+            // If switching to users tab, load users
+            if (section === 'users') {
+                loadUsers();
             }
         }
 
@@ -1361,6 +1485,146 @@
         async function logout() {
             await fetch('/api/logout', { method: 'POST' });
             window.location.href = '/login';
+        }
+
+        // User Management Functions
+        async function loadUsers() {
+            try {
+                const response = await fetch('/api/users');
+                if (response.status === 401) {
+                    window.location.href = '/login';
+                    return;
+                }
+                const users = await response.json() || [];
+                renderUsersTable(users);
+            } catch (err) {
+                console.error('Error loading users:', err);
+                document.getElementById('usersTableBody').innerHTML = `
+                    <tr><td colspan="7" style="text-align: center; color: var(--danger);">Error loading users</td></tr>
+                `;
+            }
+        }
+
+        function renderUsersTable(users) {
+            const tbody = document.getElementById('usersTableBody');
+            if (users.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 40px; color: var(--text-light);">No users found</td></tr>';
+                return;
+            }
+            tbody.innerHTML = users.map(user => `
+                <tr>
+                    <td><strong>${escapeHtml(user.username)}</strong></td>
+                    <td>${escapeHtml(user.full_name || 'N/A')}</td>
+                    <td><span class="badge" style="background: var(--info); color: white; padding: 4px 8px; border-radius: 4px; font-size: 11px;">${escapeHtml(user.role || 'user')}</span></td>
+                    <td><span class="status-badge ${user.status === 'active' ? 'online' : 'offline'}">${escapeHtml(user.status)}</span></td>
+                    <td>${formatDate(user.created_at)}</td>
+                    <td>${user.last_login ? formatDate(user.last_login) : 'Never'}</td>
+                    <td>
+                        <button class="btn btn-sm" style="padding: 5px 10px; font-size: 12px; margin-right: 5px; background: var(--warning);" 
+                                onclick="toggleUserStatus('${escapeHtml(user.username)}', '${user.status}')">
+                            ${user.status === 'active' ? '🔒 Disable' : '🔓 Enable'}
+                        </button>
+                        <button class="btn btn-sm btn-danger" style="padding: 5px 10px; font-size: 12px;" 
+                                onclick="deleteUser('${escapeHtml(user.username)}')">
+                            🗑️ Delete
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function showAddUserForm() {
+            document.getElementById('addUserForm').style.display = 'block';
+            document.getElementById('newUsername').value = '';
+            document.getElementById('newPassword').value = '';
+            document.getElementById('newFullName').value = '';
+            document.getElementById('newRole').value = 'admin';
+        }
+
+        function hideAddUserForm() {
+            document.getElementById('addUserForm').style.display = 'none';
+        }
+
+        async function createUser() {
+            const username = document.getElementById('newUsername').value.trim();
+            const password = document.getElementById('newPassword').value;
+            const fullName = document.getElementById('newFullName').value.trim();
+            const role = document.getElementById('newRole').value;
+
+            if (!username || !password) {
+                showStatus('Error', 'Username and password are required');
+                return;
+            }
+
+            if (password.length < 6) {
+                showStatus('Error', 'Password must be at least 6 characters');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/users', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password, full_name: fullName, role })
+                });
+
+                const result = await response.json();
+                if (response.ok) {
+                    showStatus('Success', 'User created successfully');
+                    hideAddUserForm();
+                    loadUsers();
+                } else {
+                    showStatus('Error', result.error || 'Failed to create user');
+                }
+            } catch (err) {
+                console.error('Error creating user:', err);
+                showStatus('Error', 'Failed to create user');
+            }
+        }
+
+        async function toggleUserStatus(username, currentStatus) {
+            const newStatus = currentStatus === 'active' ? 'inactive' : 'active';
+            try {
+                const response = await fetch(`/api/users/${encodeURIComponent(username)}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status: newStatus })
+                });
+
+                const result = await response.json();
+                if (response.ok) {
+                    showStatus('Success', `User ${newStatus === 'active' ? 'enabled' : 'disabled'} successfully`);
+                    loadUsers();
+                } else {
+                    showStatus('Error', result.error || 'Failed to update user');
+                }
+            } catch (err) {
+                console.error('Error updating user:', err);
+                showStatus('Error', 'Failed to update user');
+            }
+        }
+
+        async function deleteUser(username) {
+            showConfirm('Delete User', `Are you sure you want to delete user "${username}"?`, async () => {
+                try {
+                    const response = await fetch(`/api/users/${encodeURIComponent(username)}`, {
+                        method: 'DELETE'
+                    });
+
+                    const result = await response.json();
+                    if (response.ok) {
+                        showStatus('Success', 'User deleted successfully');
+                        loadUsers();
+                    } else {
+                        showStatus('Error', result.error || 'Failed to delete user');
+                    }
+                    closeModal();
+                } catch (err) {
+                    console.error('Error deleting user:', err);
+                    showStatus('Error', 'Failed to delete user');
+                    closeModal();
+                }
+            });
         }
 
         // Initialize
