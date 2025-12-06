@@ -1,6 +1,7 @@
 package server
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -188,8 +189,7 @@ func (pm *ProxyManager) handleUserConnection(proxyConn *ProxyConnection, userCon
 				"proxy_id": proxyConn.ID,
 				"user_id":  userID,
 			}
-			data, _ := json.Marshal(msg)
-			if err := client.Conn.WriteMessage(1, data); err != nil {
+			if err := client.Conn.WriteJSON(msg); err != nil {
 				log.Printf("Failed to send proxy_disconnect message: %v", err)
 			}
 		}
@@ -219,13 +219,7 @@ func (pm *ProxyManager) handleUserConnection(proxyConn *ProxyConnection, userCon
 		"protocol":    proxyConn.Protocol,
 	}
 
-	data, err := json.Marshal(connectMsg)
-	if err != nil {
-		log.Printf("Failed to marshal connect message: %v", err)
-		return
-	}
-
-	err = client.Conn.WriteMessage(1, data)
+	err := client.Conn.WriteJSON(connectMsg)
 	if err != nil {
 		log.Printf("Failed to send proxy_connect message: %v", err)
 		return
@@ -251,21 +245,15 @@ func (pm *ProxyManager) handleUserConnection(proxyConn *ProxyConnection, userCon
 			proxyConn.LastActive = time.Now()
 			proxyConn.mu.Unlock()
 
-			// Send data to client via websocket
+			// Send data to client via websocket (encode binary data as base64)
 			dataMsg := map[string]interface{}{
 				"type":     "proxy_data",
 				"proxy_id": proxyConn.ID,
 				"user_id":  userID,
-				"data":     buf[:n],
+				"data":     base64.StdEncoding.EncodeToString(buf[:n]),
 			}
 
-			msgData, err := json.Marshal(dataMsg)
-			if err != nil {
-				log.Printf("Failed to marshal data message: %v", err)
-				break
-			}
-
-			err = client.Conn.WriteMessage(1, msgData)
+			err := client.Conn.WriteJSON(dataMsg)
 			if err != nil {
 				log.Printf("Failed to send proxy_data message: %v", err)
 				break

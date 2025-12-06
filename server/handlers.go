@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"crypto/tls"
+	"encoding/base64"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -395,16 +396,18 @@ func (s *Server) readPump(client *Client) {
 				proxyID, _ := rawMsg["proxy_id"].(string)
 				userID, _ := rawMsg["user_id"].(string)
 
-				// Data might be base64 encoded or binary
+				// Data is base64 encoded string
 				var data []byte
 				if dataVal, ok := rawMsg["data"]; ok {
-					switch v := dataVal.(type) {
-					case []byte:
-						data = v
-					case string:
-						// Assuming it's base64 encoded, try to decode
-						// For now, just use as string bytes
-						data = []byte(v)
+					if dataStr, ok := dataVal.(string); ok {
+						// Decode from base64
+						decodedData, err := base64.StdEncoding.DecodeString(dataStr)
+						if err != nil {
+							log.Printf("Error decoding base64 proxy data: %v", err)
+							data = []byte(dataStr) // Fallback to raw string if not valid base64
+						} else {
+							data = decodedData
+						}
 					}
 				}
 
