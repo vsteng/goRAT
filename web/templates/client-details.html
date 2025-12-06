@@ -836,7 +836,14 @@
 
         async function loadFiles(path) {
             try {
-                const response = await fetch(`/api/files?client_id=${encodeURIComponent(clientId)}&path=${encodeURIComponent(path)}`);
+                const response = await fetch(`/api/files/browse`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        client_id: clientId,
+                        path: path
+                    })
+                });
                 if (!response.ok) throw new Error('Failed to load files');
                 
                 const files = await response.json() || [];
@@ -844,7 +851,7 @@
             } catch (err) {
                 console.error('Error loading files:', err);
                 document.getElementById('fileTableBody').innerHTML = 
-                    `<tr><td colspan="4" style="text-align: center; color: red;">Error loading files</td></tr>`;
+                    `<tr><td colspan="4" style="text-align: center; color: red;">Error loading files: ${err.message}</td></tr>`;
             }
         }
 
@@ -876,13 +883,30 @@
         }
 
         function downloadFile(path) {
-            // Implementation for downloading files
-            showStatus('Download', `Downloading: ${path}`);
+            // Download file via proxy
+            window.location.href = `/api/files/download?client_id=${encodeURIComponent(clientId)}&path=${encodeURIComponent(path)}`;
         }
 
-        function deleteFile(path) {
+        async function deleteFile(path) {
             if (confirm(`Delete ${path}?`)) {
-                showStatus('Deleted', `File deleted: ${path}`);
+                try {
+                    const response = await fetch(`/api/files/delete`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            client_id: clientId,
+                            path: path
+                        })
+                    });
+                    if (response.ok) {
+                        showStatus('Deleted', `File deleted: ${path}`);
+                        browseFolder();
+                    } else {
+                        showStatus('Error', 'Failed to delete file');
+                    }
+                } catch (err) {
+                    showStatus('Error', err.message);
+                }
             }
         }
 
@@ -895,21 +919,38 @@
         }
 
         // Terminal functions
-        function executeTerminalCommand() {
+        async function executeTerminalCommand() {
             const input = document.getElementById('terminalInput');
             const command = input.value.trim();
             
             if (!command) return;
 
             const output = document.getElementById('terminalOutput');
-            output.innerHTML += `<div class="terminal-line">$ ${escapeHtml(command)}</div>`;
+            output.innerHTML += `<div class="terminal-line" style="color: #0a0;">$ ${escapeHtml(command)}</div>`;
             
-            // Simulate command execution
-            setTimeout(() => {
-                output.innerHTML += `<div class="terminal-line">Command executed</div>`;
-                output.scrollTop = output.scrollHeight;
-            }, 100);
-
+            try {
+                const response = await fetch(`/api/command`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        client_id: clientId,
+                        command: command
+                    })
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    const resultText = result.output || result.result || 'Command executed';
+                    output.innerHTML += `<div class="terminal-line">${escapeHtml(resultText)}</div>`;
+                } else {
+                    const err = await response.json().catch(() => ({}));
+                    output.innerHTML += `<div class="terminal-line" style="color: #f00;">Error: ${escapeHtml(err.error || 'Command failed')}</div>`;
+                }
+            } catch (err) {
+                output.innerHTML += `<div class="terminal-line" style="color: #f00;">Error: ${escapeHtml(err.message)}</div>`;
+            }
+            
+            output.scrollTop = output.scrollHeight;
             input.value = '';
         }
 
@@ -953,25 +994,56 @@
 
         function killProcess(pid) {
             if (confirm(`Kill process ${pid}?`)) {
-                showStatus('Killed', `Process ${pid} terminated`);
-                refreshProcesses();
+                fetch(`/api/command`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        client_id: clientId,
+                        command: `kill ${pid}`
+                    })
+                }).then(resp => {
+                    if (resp.ok) {
+                        showStatus('Killed', `Process ${pid} terminated`);
+                        refreshProcesses();
+                    } else {
+                        showStatus('Error', 'Failed to kill process');
+                    }
+                }).catch(err => showStatus('Error', err.message));
             }
         }
 
         // Actions
-        function executeAction(action) {
+        async function executeAction(action) {
             const actions = {
-                'screenshot': 'Taking screenshot...',
-                'refresh': 'Refreshing client...',
-                'restart': 'Restarting client...',
-                'lock': 'Locking screen...',
-                'sleep': 'Putting system to sleep...',
-                'message': 'Sending message...',
-                'shutdown': 'Shutting down...',
-                'uninstall': 'Uninstalling client...'
+                'screenshot': { endpoint: '/api/screenshot', message: 'Taking screenshot...' },
+                'refresh': { endpoint: '/api/refresh', message: 'Refreshing client...' },
             };
 
-            showStatus('Action Executed', actions[action] || 'Action executed');
+            const config = actions[action];
+            if (!config) {
+                showStatus('Error', 'Unknown action');
+                return;
+            }
+
+            try {
+                const body = config.cmd ? 
+                    { client_id: clientId, command: config.cmd } :
+                    { client_id: clientId };
+
+                const response = await fetch(config.endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+
+                if (response.ok) {
+                    showStatus('Action Executed', config.message);
+                } else {
+                    showStatus('Error', 'Action failed');
+                }
+            } catch (err) {
+                showStatus('Error', err.message);
+            }
         }
 
         // Utility functions
