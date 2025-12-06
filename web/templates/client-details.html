@@ -782,6 +782,13 @@
             
             document.getElementById(tabName).classList.add('active');
             event.target.classList.add('active');
+            
+            // Load data when switching to specific tabs
+            if (tabName === 'processes') {
+                loadProcesses();
+            } else if (tabName === 'files') {
+                browseFolder();
+            }
         }
 
         // Load client details
@@ -961,14 +968,21 @@
 
         // Process management
         async function loadProcesses() {
+            const container = document.getElementById('processListContainer');
+            container.innerHTML = '<div style="text-align: center; padding: 40px; color: var(--text-light);">Loading processes...</div>';
+            
             try {
                 const response = await fetch(`/api/processes?client_id=${encodeURIComponent(clientId)}`);
-                if (!response.ok) throw new Error('Failed to load processes');
+                if (!response.ok) {
+                    const err = await response.text();
+                    throw new Error(err || 'Failed to load processes');
+                }
                 
-                const processes = await response.json() || [];
-                renderProcessList(processes);
+                const processes = await response.json();
+                renderProcessList(Array.isArray(processes) ? processes : []);
             } catch (err) {
                 console.error('Error loading processes:', err);
+                container.innerHTML = `<div style="text-align: center; padding: 40px; color: #f00;">Error: ${escapeHtml(err.message)}</div>`;
             }
         }
 
