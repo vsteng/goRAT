@@ -399,8 +399,20 @@ func (s *Server) HandleClientGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Prefer returning metadata only to avoid marshaling websocket.Conn and other internal fields.
+	if client.Metadata == nil {
+		http.Error(w, "Client metadata unavailable", http.StatusInternalServerError)
+		return
+	}
+
+	meta := *client.Metadata
+	// Ensure ID is populated from client struct if missing
+	if meta.ID == "" {
+		meta.ID = client.ID
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(client)
+	json.NewEncoder(w).Encode(meta)
 }
 
 // HandleFilesAPI serves file list for a client
