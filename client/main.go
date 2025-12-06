@@ -6,12 +6,14 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
 	"os"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"mww2.com/server_manager/common"
@@ -43,6 +45,10 @@ type Client struct {
 	// Channels
 	sendChan chan *common.Message
 	stopChan chan bool
+
+	// Proxy connections: map[proxyID-userID]net.Conn
+	proxyConns map[string]net.Conn
+	proxyMu    sync.RWMutex
 }
 
 // Config holds client configuration
@@ -85,6 +91,7 @@ func NewClient(config *Config, instanceMgr *InstanceManager) *Client {
 		sendChan:    make(chan *common.Message, 256),
 		stopChan:    make(chan bool),
 		instanceMgr: instanceMgr,
+		proxyConns:  make(map[string]net.Conn),
 	}
 	log.Printf("[DEBUG] NewClient: Client created successfully")
 
@@ -499,12 +506,23 @@ func (c *Client) handleProxyConnect(rawMsg map[string]interface{}) {
 
 	log.Printf("Connected to remote host: %s", remoteAddr)
 
+	// Store the connection for data relay
+	connKey := fmt.Sprintf("%s-%s", proxyID, userID)
+	c.proxyMu.Lock()
+	c.proxyConns[connKey] = remoteConn
+	c.proxyMu.Unlock()
+
+	log.Printf("Stored proxy connection: key=%s", connKey)
+
 	// Start relaying data from remote to server
 	go c.relayProxyData(proxyID, userID, remoteConn)
 }
 
 // handleProxyData handles proxy data from the server
 func (c *Client) handleProxyData(rawMsg map[string]interface{}) {
+	proxyID, _ := rawMsg["proxy_id"].(string)
+	userID, _ := rawMsg["user_id"].(string)
+
 	var data []byte
 	if dataVal, ok := rawMsg["data"]; ok {
 		if dataStr, ok := dataVal.(string); ok {
@@ -512,15 +530,37 @@ func (c *Client) handleProxyData(rawMsg map[string]interface{}) {
 			var err error
 			data, err = base64.StdEncoding.DecodeString(dataStr)
 			if err != nil {
-				log.Printf("Error decoding base64 proxy data: %v", err)
+				log.Printf("Error decoding base64 proxy data: proxy=%s, user=%s: %v", proxyID, userID, err)
 				return
 			}
 		}
 	}
 
-	// This is not implemented yet - data relay from server to remote is handled differently
-	// The client would need to maintain a map of proxyID -> remote connection
-	_ = data // Placeholder
+	// Get the remote connection and send data to it
+	connKey := fmt.Sprintf("%s-%s", proxyID, userID)
+	c.proxyMu.RLock()
+	remoteConn, ok := c.proxyConns[connKey]
+	c.proxyMu.RUnlock()
+
+	if !ok {
+		log.Printf("Proxy connection not found: key=%s", connKey)
+		return
+	}
+
+	if len(data) > 0 {
+		_, err := remoteConn.Write(data)
+		if err != nil {
+			log.Printf("Error writing to remote connection: proxy=%s, user=%s: %v", proxyID, userID, err)
+			// Close the connection and clean up
+			remoteConn.Close()
+			c.proxyMu.Lock()
+			delete(c.proxyConns, connKey)
+			c.proxyMu.Unlock()
+			// Notify server
+			c.sendProxyMessage("proxy_disconnect", proxyID, userID, nil)
+			return
+		}
+	}
 }
 
 // handleProxyDisconnect handles proxy disconnection from the server
@@ -529,8 +569,16 @@ func (c *Client) handleProxyDisconnect(rawMsg map[string]interface{}) {
 	userID, _ := rawMsg["user_id"].(string)
 
 	log.Printf("Proxy disconnect: proxy=%s, user=%s", proxyID, userID)
+
 	// Close remote connection if it exists
-	// This would be implemented if maintaining connection map
+	connKey := fmt.Sprintf("%s-%s", proxyID, userID)
+	c.proxyMu.Lock()
+	if remoteConn, ok := c.proxyConns[connKey]; ok {
+		remoteConn.Close()
+		delete(c.proxyConns, connKey)
+		log.Printf("Closed proxy connection: key=%s", connKey)
+	}
+	c.proxyMu.Unlock()
 }
 
 // sendProxyMessage sends a proxy message to the server
@@ -550,13 +598,22 @@ func (c *Client) sendProxyMessage(msgType, proxyID, userID string, data []byte) 
 
 // relayProxyData relays data from remote host back to the server
 func (c *Client) relayProxyData(proxyID, userID string, remoteConn net.Conn) {
-	defer remoteConn.Close()
+	connKey := fmt.Sprintf("%s-%s", proxyID, userID)
+	defer func() {
+		remoteConn.Close()
+		c.proxyMu.Lock()
+		delete(c.proxyConns, connKey)
+		c.proxyMu.Unlock()
+	}()
 
 	buf := make([]byte, 4096)
 	for {
+		remoteConn.SetReadDeadline(time.Now().Add(30 * time.Second))
 		n, err := remoteConn.Read(buf)
 		if err != nil {
-			log.Printf("Remote connection closed: %v", err)
+			if err != io.EOF {
+				log.Printf("Remote connection error: proxy=%s, user=%s: %v", proxyID, userID, err)
+			}
 			// Notify server of disconnect
 			c.sendProxyMessage("proxy_disconnect", proxyID, userID, nil)
 			break
