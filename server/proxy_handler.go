@@ -478,7 +478,11 @@ func (s *Server) HandleProxyCreate(w http.ResponseWriter, r *http.Request) {
 
 // HandleProxyList lists proxy connections via HTTP
 func (s *Server) HandleProxyList(w http.ResponseWriter, r *http.Request) {
-	clientID := r.URL.Query().Get("client_id")
+	// Support both snake_case and camelCase
+	clientID := r.URL.Query().Get("clientId")
+	if clientID == "" {
+		clientID = r.URL.Query().Get("client_id")
+	}
 
 	if s.proxyManager == nil {
 		w.Header().Set("Content-Type", "application/json")

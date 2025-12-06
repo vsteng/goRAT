@@ -1116,6 +1116,31 @@
             `).join('');
         }
 
+        async function deleteProxy(proxyId) {
+            if (!proxyId) {
+                showStatus('Error', 'Invalid proxy ID');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/proxy/close?id=${encodeURIComponent(proxyId)}`, {
+                    method: 'POST'
+                });
+
+                if (response.ok) {
+                    showStatus('Success', 'Proxy connection closed!');
+                    setTimeout(loadProxies, 500);
+                } else if (response.status === 401) {
+                    window.location.href = '/login';
+                } else {
+                    showStatus('Error', 'Failed to close proxy');
+                }
+            } catch (err) {
+                console.error('Error:', err);
+                showStatus('Error', 'Error closing proxy connection');
+            }
+        }
+
         async function addProxy() {
             const remoteAddr = document.getElementById('proxyRemoteAddr').value.trim();
             const localPort = document.getElementById('proxyLocalPort').value.trim();
