@@ -557,6 +557,26 @@ func (wh *WebHandler) HandleGlobalUpdate(w http.ResponseWriter, r *http.Request)
 	})
 }
 
+// HandleDashboardSummary handles the simplified client summary dashboard
+func (wh *WebHandler) HandleDashboardSummary(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	err := wh.templates.ExecuteTemplate(w, "dashboard-summary.html", nil)
+	if err != nil {
+		log.Printf("Error rendering dashboard summary: %v", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+	}
+}
+
+// HandleClientProxies handles the client-specific proxy management page
+func (wh *WebHandler) HandleClientProxies(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	err := wh.templates.ExecuteTemplate(w, "client-proxies.html", nil)
+	if err != nil {
+		log.Printf("Error rendering client proxies: %v", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+	}
+}
+
 // RegisterWebRoutes registers all web UI routes
 func (wh *WebHandler) RegisterWebRoutes(mux *http.ServeMux) {
 	// Public routes
@@ -567,14 +587,16 @@ func (wh *WebHandler) RegisterWebRoutes(mux *http.ServeMux) {
 	// Protected routes
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/" {
-			http.Redirect(w, r, "/dashboard-new", http.StatusSeeOther)
+			http.Redirect(w, r, "/dashboard-summary", http.StatusSeeOther)
 			return
 		}
 		http.NotFound(w, r)
 	})
 	mux.HandleFunc("/dashboard", wh.requireAuth(wh.HandleDashboard))
 	mux.HandleFunc("/dashboard-new", wh.requireAuth(wh.HandleDashboardNew))
+	mux.HandleFunc("/dashboard-summary", wh.requireAuth(wh.HandleDashboardSummary))
 	mux.HandleFunc("/client-details", wh.requireAuth(wh.HandleClientDetails))
+	mux.HandleFunc("/client/", wh.requireAuth(wh.HandleClientProxies)) // Handles /client/{id}/proxies
 	mux.HandleFunc("/terminal", wh.requireAuth(wh.HandleTerminalPage))
 	mux.HandleFunc("/files", wh.requireAuth(wh.HandleFilesPage))
 	mux.HandleFunc("/api/files/browse", wh.requireAuth(wh.HandleFileBrowse))

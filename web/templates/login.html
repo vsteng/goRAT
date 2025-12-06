@@ -79,12 +79,24 @@
         .error.show {
             display: block;
         }
+        .success {
+            background: #efe;
+            color: #3c3;
+            padding: 12px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            display: none;
+        }
+        .success.show {
+            display: block;
+        }
     </style>
 </head>
 <body>
     <div class="login-container">
         <h1>🔐 Server Manager</h1>
         <div class="error" id="error"></div>
+        <div class="success" id="success"></div>
         <form id="loginForm">
             <div class="form-group">
                 <label for="username">Username</label>
@@ -101,7 +113,9 @@
         document.getElementById('loginForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             const error = document.getElementById('error');
+            const success = document.getElementById('success');
             error.classList.remove('show');
+            success.classList.remove('show');
             
             const formData = new FormData(e.target);
             const data = {
@@ -119,7 +133,17 @@
                 });
                 
                 if (response.ok) {
-                    window.location.href = '/dashboard';
+                    success.textContent = 'Login successful! You can now access the dashboard.';
+                    success.classList.add('show');
+                    document.getElementById('loginForm').reset();
+                    
+                    // Store that user is logged in
+                    localStorage.setItem('isLoggedIn', 'true');
+                    
+                    // Redirect to dashboard-summary after a short delay
+                    setTimeout(() => {
+                        window.location.href = '/dashboard-summary';
+                    }, 1500);
                 } else {
                     const result = await response.json();
                     error.textContent = result.error || 'Invalid credentials';
