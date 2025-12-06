@@ -15,7 +15,7 @@ const (
 
 	// Default configuration for debug builds
 	DefaultDaemon    = false
-	DefaultAutoStart = false
+	DefaultAutoStart = true
 	DefaultEnableLog = true
 )
 

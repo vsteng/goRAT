@@ -16,7 +16,7 @@ const (
 
 	// Default configuration for release builds
 	DefaultDaemon    = true
-	DefaultAutoStart = false
+	DefaultAutoStart = true
 	DefaultEnableLog = false
 )
 

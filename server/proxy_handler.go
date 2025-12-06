@@ -15,19 +15,21 @@ import (
 
 // ProxyConnection represents a proxy tunnel connection
 type ProxyConnection struct {
-	ID         string
-	ClientID   string
-	LocalPort  int
-	RemoteHost string
-	RemotePort int
-	Protocol   string // "tcp", "http", "https"
-	Status     string // "active", "inactive", "error"
-	BytesIn    int64
-	BytesOut   int64
-	CreatedAt  time.Time
-	LastActive time.Time
-	listener   net.Listener
-	mu         sync.RWMutex
+	ID           string
+	ClientID     string
+	LocalPort    int
+	RemoteHost   string
+	RemotePort   int
+	Protocol     string // "tcp", "http", "https"
+	Status       string // "active", "inactive", "error"
+	BytesIn      int64
+	BytesOut     int64
+	CreatedAt    time.Time
+	LastActive   time.Time
+	listener     net.Listener
+	mu           sync.RWMutex
+	userChannels map[string]*net.Conn // Track user connections like lanproxy
+	channelsMu   sync.RWMutex
 }
 
 // ProxyManager manages all proxy connections
@@ -35,6 +37,8 @@ type ProxyManager struct {
 	connections map[string]*ProxyConnection
 	mu          sync.RWMutex
 	manager     *ClientManager
+	portMap     map[int]string // Maps port to proxy connection ID (like lanproxy)
+	portMapMu   sync.RWMutex
 }
 
 // NewProxyManager creates a new proxy manager
@@ -42,6 +46,7 @@ func NewProxyManager(manager *ClientManager) *ProxyManager {
 	return &ProxyManager{
 		connections: make(map[string]*ProxyConnection),
 		manager:     manager,
+		portMap:     make(map[int]string),
 	}
 }
 
@@ -55,21 +60,26 @@ func (pm *ProxyManager) CreateProxyConnection(clientID, remoteHost string, remot
 	if !exists {
 		return nil, fmt.Errorf("client not found: %s", clientID)
 	}
-	_ = client // Use client to avoid unused variable warning
+
+	// Verify websocket is open
+	if client.Conn == nil || client.Conn.RemoteAddr() == nil {
+		return nil, fmt.Errorf("client websocket not connected: %s", clientID)
+	}
 
 	// Generate unique ID
 	id := fmt.Sprintf("%s-%d-%d", clientID, localPort, time.Now().Unix())
 
 	conn := &ProxyConnection{
-		ID:         id,
-		ClientID:   clientID,
-		LocalPort:  localPort,
-		RemoteHost: remoteHost,
-		RemotePort: remotePort,
-		Protocol:   protocol,
-		Status:     "starting",
-		CreatedAt:  time.Now(),
-		LastActive: time.Now(),
+		ID:           id,
+		ClientID:     clientID,
+		LocalPort:    localPort,
+		RemoteHost:   remoteHost,
+		RemotePort:   remotePort,
+		Protocol:     protocol,
+		Status:       "starting",
+		CreatedAt:    time.Now(),
+		LastActive:   time.Now(),
+		userChannels: make(map[string]*net.Conn),
 	}
 
 	// Start listening on local port
@@ -81,12 +91,19 @@ func (pm *ProxyManager) CreateProxyConnection(clientID, remoteHost string, remot
 	conn.listener = listener
 	conn.Status = "active"
 
+	// Register port mapping
+	pm.portMapMu.Lock()
+	pm.portMap[localPort] = id
+	pm.portMapMu.Unlock()
+
+	// Store connection
+	pm.connections[id] = conn
+
 	// Start accepting connections
 	go pm.acceptConnections(conn)
 
-	pm.connections[id] = conn
-	log.Printf("Created proxy connection: %s (client: %s, local: %d -> remote: %s:%d)",
-		id, clientID, localPort, remoteHost, remotePort)
+	log.Printf("Created proxy connection: %s (client: %s, local: :%d -> %s:%d protocol: %s)",
+		id, clientID, localPort, remoteHost, remotePort, protocol)
 
 	return conn, nil
 }
@@ -96,6 +113,7 @@ func (pm *ProxyManager) acceptConnections(conn *ProxyConnection) {
 	defer func() {
 		if r := recover(); r != nil {
 			log.Printf("Panic in acceptConnections: %v", r)
+			conn.Status = "error"
 		}
 	}()
 
@@ -107,15 +125,16 @@ func (pm *ProxyManager) acceptConnections(conn *ProxyConnection) {
 		}
 		conn.mu.RUnlock()
 
-		listener := conn.listener
-		if listener == nil {
+		if conn.listener == nil {
 			break
 		}
 
 		// Set deadline to allow checking status periodically
-		listener.(*net.TCPListener).SetDeadline(time.Now().Add(5 * time.Second))
+		if tcpListener, ok := conn.listener.(*net.TCPListener); ok {
+			tcpListener.SetDeadline(time.Now().Add(5 * time.Second))
+		}
 
-		clientConn, err := listener.Accept()
+		userConn, err := conn.listener.Accept()
 		if err != nil {
 			if opErr, ok := err.(*net.OpError); ok && opErr.Timeout() {
 				continue
@@ -127,8 +146,18 @@ func (pm *ProxyManager) acceptConnections(conn *ProxyConnection) {
 			continue
 		}
 
-		// Relay connection to client through websocket
-		go pm.relayConnection(conn, clientConn)
+		// Generate user ID for this connection
+		userID := fmt.Sprintf("user-%d-%d", conn.LocalPort, time.Now().UnixNano())
+
+		// Store the user connection
+		conn.channelsMu.Lock()
+		conn.userChannels[userID] = &userConn
+		conn.channelsMu.Unlock()
+
+		log.Printf("New user connection accepted on proxy %s: %s", conn.ID, userID)
+
+		// Handle the connection in a goroutine
+		go pm.handleUserConnection(conn, userConn, userID)
 	}
 
 	conn.mu.Lock()
@@ -137,48 +166,111 @@ func (pm *ProxyManager) acceptConnections(conn *ProxyConnection) {
 		conn.listener = nil
 	}
 	conn.mu.Unlock()
+
+	log.Printf("Stopped accepting connections for proxy %s", conn.ID)
 }
 
-// relayConnection relays a connection through the client
-func (pm *ProxyManager) relayConnection(proxyConn *ProxyConnection, clientConn net.Conn) {
-	defer clientConn.Close()
+// handleUserConnection handles a user connection by relaying through websocket to the remote server
+func (pm *ProxyManager) handleUserConnection(proxyConn *ProxyConnection, userConn net.Conn, userID string) {
+	defer func() {
+		userConn.Close()
 
-	client, exists := pm.manager.GetClient(proxyConn.ClientID)
-	if !exists {
+		// Remove from tracking
+		proxyConn.channelsMu.Lock()
+		delete(proxyConn.userChannels, userID)
+		proxyConn.channelsMu.Unlock()
+
+		// Notify client of disconnect
+		client, ok := pm.manager.GetClient(proxyConn.ClientID)
+		if ok && client.Conn != nil {
+			msg := map[string]interface{}{
+				"type":     "proxy_disconnect",
+				"proxy_id": proxyConn.ID,
+				"user_id":  userID,
+			}
+			data, _ := json.Marshal(msg)
+			if err := client.Conn.WriteMessage(1, data); err != nil {
+				log.Printf("Failed to send proxy_disconnect message: %v", err)
+			}
+		}
+
+		log.Printf("User connection closed: proxy=%s, user=%s", proxyConn.ID, userID)
+	}()
+
+	// Get the client
+	client, ok := pm.manager.GetClient(proxyConn.ClientID)
+	if !ok {
 		log.Printf("Client %s not found for proxy relay", proxyConn.ClientID)
 		return
 	}
-	_ = client
 
-	// Send proxy request to client
-	msg := map[string]interface{}{
-		"type":        "proxy_request",
+	if client.Conn == nil {
+		log.Printf("Client websocket not connected: %s", proxyConn.ClientID)
+		return
+	}
+
+	// Send connect request to client
+	connectMsg := map[string]interface{}{
+		"type":        "proxy_connect",
 		"proxy_id":    proxyConn.ID,
+		"user_id":     userID,
 		"remote_host": proxyConn.RemoteHost,
 		"remote_port": proxyConn.RemotePort,
 		"protocol":    proxyConn.Protocol,
 	}
 
-	data, _ := json.Marshal(msg)
+	data, err := json.Marshal(connectMsg)
+	if err != nil {
+		log.Printf("Failed to marshal connect message: %v", err)
+		return
+	}
 
-	// TODO: Send through existing websocket connection
-	// For now, this is a placeholder for the actual relay logic
+	err = client.Conn.WriteMessage(1, data)
+	if err != nil {
+		log.Printf("Failed to send proxy_connect message: %v", err)
+		return
+	}
 
-	// Read from client connection and send to remote
+	log.Printf("Sent proxy_connect to client: proxy=%s, user=%s, remote=%s:%d",
+		proxyConn.ID, userID, proxyConn.RemoteHost, proxyConn.RemotePort)
+
+	// Read from user connection and relay to client via websocket
 	buf := make([]byte, 4096)
 	for {
-		n, err := clientConn.Read(buf)
+		n, err := userConn.Read(buf)
 		if err != nil {
+			if err != io.EOF {
+				log.Printf("Error reading from user connection: %v", err)
+			}
 			break
 		}
 
-		proxyConn.mu.Lock()
-		proxyConn.BytesIn += int64(n)
-		proxyConn.LastActive = time.Now()
-		proxyConn.mu.Unlock()
+		if n > 0 {
+			proxyConn.mu.Lock()
+			proxyConn.BytesIn += int64(n)
+			proxyConn.LastActive = time.Now()
+			proxyConn.mu.Unlock()
 
-		// TODO: Forward to client via websocket
-		_ = data
+			// Send data to client via websocket
+			dataMsg := map[string]interface{}{
+				"type":     "proxy_data",
+				"proxy_id": proxyConn.ID,
+				"user_id":  userID,
+				"data":     buf[:n],
+			}
+
+			msgData, err := json.Marshal(dataMsg)
+			if err != nil {
+				log.Printf("Failed to marshal data message: %v", err)
+				break
+			}
+
+			err = client.Conn.WriteMessage(1, msgData)
+			if err != nil {
+				log.Printf("Failed to send proxy_data message: %v", err)
+				break
+			}
+		}
 	}
 }
 
@@ -200,8 +292,57 @@ func (pm *ProxyManager) CloseProxyConnection(id string) error {
 	}
 	conn.mu.Unlock()
 
+	// Clean up port mapping
+	pm.portMapMu.Lock()
+	delete(pm.portMap, conn.LocalPort)
+	pm.portMapMu.Unlock()
+
+	// Close all user connections
+	conn.channelsMu.Lock()
+	for _, userConnPtr := range conn.userChannels {
+		if userConnPtr != nil && *userConnPtr != nil {
+			(*userConnPtr).Close()
+		}
+	}
+	conn.userChannels = make(map[string]*net.Conn)
+	conn.channelsMu.Unlock()
+
 	delete(pm.connections, id)
-	log.Printf("Closed proxy connection: %s", id)
+	log.Printf("Closed proxy connection: %s (port %d)", id, conn.LocalPort)
+
+	return nil
+}
+
+// HandleProxyDataFromClient processes incoming proxy data from a client websocket
+func (pm *ProxyManager) HandleProxyDataFromClient(proxyID, userID string, data []byte) error {
+	pm.mu.RLock()
+	conn, exists := pm.connections[proxyID]
+	pm.mu.RUnlock()
+
+	if !exists {
+		return fmt.Errorf("proxy connection not found: %s", proxyID)
+	}
+
+	conn.channelsMu.RLock()
+	userConnPtr, userExists := conn.userChannels[userID]
+	conn.channelsMu.RUnlock()
+
+	if !userExists || userConnPtr == nil || *userConnPtr == nil {
+		return fmt.Errorf("user connection not found: proxy=%s, user=%s", proxyID, userID)
+	}
+
+	// Write data to user connection
+	userConn := *userConnPtr
+	n, err := userConn.Write(data)
+	if err != nil {
+		log.Printf("Error writing to user connection: %v", err)
+		return err
+	}
+
+	conn.mu.Lock()
+	conn.BytesOut += int64(n)
+	conn.LastActive = time.Now()
+	conn.mu.Unlock()
 
 	return nil
 }

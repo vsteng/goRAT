@@ -372,8 +372,9 @@ func (s *Server) readPump(client *Client) {
 	})
 
 	for {
-		var msg common.Message
-		err := client.Conn.ReadJSON(&msg)
+		// First, read as raw JSON to check the message type
+		var rawMsg map[string]interface{}
+		err := client.Conn.ReadJSON(&rawMsg)
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 				log.Printf("WebSocket error: %v", err)
@@ -385,6 +386,44 @@ func (s *Server) readPump(client *Client) {
 		s.manager.UpdateClientMetadata(client.ID, func(m *common.ClientMetadata) {
 			m.LastSeen = time.Now()
 		})
+
+		// Check if this is a proxy message
+		if msgType, ok := rawMsg["type"].(string); ok {
+			switch msgType {
+			case "proxy_data":
+				// Handle proxy data message
+				proxyID, _ := rawMsg["proxy_id"].(string)
+				userID, _ := rawMsg["user_id"].(string)
+
+				// Data might be base64 encoded or binary
+				var data []byte
+				if dataVal, ok := rawMsg["data"]; ok {
+					switch v := dataVal.(type) {
+					case []byte:
+						data = v
+					case string:
+						// Assuming it's base64 encoded, try to decode
+						// For now, just use as string bytes
+						data = []byte(v)
+					}
+				}
+
+				if s.proxyManager != nil && proxyID != "" && userID != "" {
+					if err := s.proxyManager.HandleProxyDataFromClient(proxyID, userID, data); err != nil {
+						log.Printf("Error handling proxy data: %v", err)
+					}
+				}
+				continue
+			}
+		}
+
+		// Not a proxy message, parse as common.Message
+		jsonData, _ := json.Marshal(rawMsg)
+		var msg common.Message
+		if err := json.Unmarshal(jsonData, &msg); err != nil {
+			log.Printf("Failed to parse message from %s: %v", client.ID, err)
+			continue
+		}
 
 		// Handle message
 		s.handleMessage(client, &msg)
