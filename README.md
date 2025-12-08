@@ -1,649 +1,772 @@
-# Server Manager
+# goRAT - Remote Access Tool Server & Client
 
-A comprehensive Go-based solution for managing multiple Windows and Linux servers from a central server node. The system consists of three components: Server, Client, and Client Monitor, communicating via secure WebSocket (WSS) connections.
+A powerful, feature-rich Remote Access Tool (RAT) built in Go with real-time client management, WebSocket communication, file transfer, terminal access, screenshot capture, and comprehensive web-based control panel.
 
-## Features
+## 📋 Table of Contents
+
+- [Features](#features)
+- [Architecture](#architecture)
+- [System Requirements](#system-requirements)
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [Configuration](#configuration)
+- [Web Dashboard](#web-dashboard)
+- [API Endpoints](#api-endpoints)
+- [Command Line Usage](#command-line-usage)
+- [Database](#database)
+- [Security](#security)
+- [Troubleshooting](#troubleshooting)
+
+---
+
+## ✨ Features
 
 ### Server
-- **Multi-client Management**: Accept and manage multiple simultaneous client connections
-- **Unique Client IDs**: Enforce unique machine identifiers, automatically disconnect duplicates
-- **Authentication**: Token-based authentication before executing commands
-- **Client Metadata**: Store and track client OS, IP, status, and health metrics
-- **RESTful API**: HTTP endpoints for client management and command execution
-- **Web-based Management Interface**: Modern web UI with session-based authentication for managing clients
-- **Real-time Terminal Sessions**: Interactive terminal access to connected clients via WebSocket
-- **Nginx Ready**: Designed to run behind nginx reverse proxy with TLS termination
-- **Flexible Deployment**: Supports both HTTP (with nginx) and direct TLS modes
+- **WebSocket-based Communication** - Real-time bidirectional client-server communication
+- **Multi-Client Management** - Handle multiple connected clients simultaneously
+- **Web Dashboard** - Modern, responsive web-based control panel with real-time updates
+- **User Management** - Multi-user support with role-based access control (admin/operator/viewer)
+- **Database Persistence** - SQLite backend for clients, proxies, and user data
+- **Terminal Proxy** - Remote terminal access to connected clients
+- **Session Management** - Secure session-based authentication with cookie support
+- **Graceful Shutdown** - Clean startup/stop/restart/status commands
 
 ### Client
-- **Auto-Configuration**: Generates unique machine ID automatically (no config file needed)
-- **Remote Command Execution**: Execute system commands with proper encoding handling (GBK on Windows)
-- **Real-time Terminal**: Interactive shell sessions (bash/sh on Linux/macOS, cmd on Windows)
-- **File Browser**: Browse, download, and upload files with metadata
-- **Screenshot Capture**: Capture screen with configurable quality
-- **Keylogger**: Monitor keyboard input (SSH, RDP, or general monitoring)
-- **Self-Update**: Download and install updates with checksum verification
-- **Auto-Start**: Configure automatic startup on boot (Windows registry / Linux systemd)
-- **Secure Communication**: Enforces TLS certificate verification (HTTPS only)
-- **Cross-Platform**: Full support for Windows and Linux
+- **Auto-Connection** - Automatically reconnects on connection loss
+- **File Browser** - Browse, upload, and download files from remote machines
+- **Terminal Access** - Execute commands and interact with remote terminal
+- **Screenshot Capture** - Take real-time screenshots of remote systems
+- **System Information** - Gather OS details, process lists, and system stats
+- **Keylogger** (Windows/Linux) - Optional keystroke logging capability
+- **Auto-Start** - Configure automatic startup on system boot
+- **Daemon Mode** - Run as background service/daemon
+- **Update System** - Push updates to clients from server
+- **Proxy Tunneling** - Create local proxy tunnels to remote ports
+- **Silent Mode** - Release builds run with zero console output
 
-### Client Monitor
-- **Health Monitoring**: Continuously check if client is running
-- **Auto-Restart**: Automatically restart client if it crashes
-- **Installation**: Install client binary if not present
-- **Configurable**: Adjustable check intervals and restart policies
+---
 
-## Project Structure
+## 🏗️ Architecture
 
+### System Overview
 ```
-.
-├── cmd/
-│   ├── server/          # Server main entry point
-│   └── client/          # Client main entry point
-├── server/              # Server implementation
-│   ├── main.go
-│   ├── client_manager.go
-│   ├── handlers.go
-│   ├── utils.go
-│   └── errors.go
-├── client/              # Client implementation
-│   ├── main.go
-│   ├── command.go       # Command execution
-│   ├── file_browser.go  # File operations
-│   ├── screenshot.go    # Screenshot capture
-│   ├── keylogger.go     # Keylogging functionality
-│   ├── updater.go       # Self-update mechanism
-│   ├── autostart_windows.go  # Windows auto-start
-│   ├── autostart_unix.go     # Linux auto-start
-│   └── errors.go
-├── client_monitor/      # Monitor implementation
-│   ├── main.go
-│   ├── monitor.go
-│   ├── monitor_unix.go
-│   └── monitor_windows.go
-├── common/              # Shared types and protocols
-│   ├── protocol.go      # Message types and payloads
-│   └── utils.go         # Utility functions
-├── scripts/
-│   └── generate-certs.sh  # TLS certificate generation
-├── config.example.json  # Example configuration
-├── go.mod
-└── README.md
+┌─────────────────────────────────────────────────────────────┐
+│                      Web Browser                             │
+│                  (Dashboard / Control Panel)                 │
+└────────────────────────┬────────────────────────────────────┘
+                         │ HTTPS/HTTP
+┌────────────────────────▼────────────────────────────────────┐
+│                    Web Server (nginx)                        │
+│                 (TLS Termination)                            │
+└────────────────────────┬────────────────────────────────────┘
+                         │ HTTP
+┌────────────────────────▼────────────────────────────────────┐
+│                   goRAT Server                               │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │ WebSocket Handler     │ REST API Handler             │   │
+│  │ Client Manager        │ Terminal Proxy               │   │
+│  │ Session Manager       │ File Operations              │   │
+│  └──────────────────────────────────────────────────────┘   │
+│                         │                                    │
+│                    SQLite DB                                 │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │ Clients Table  │ Proxies Table  │ Web Users Table    │   │
+│  └──────────────────────────────────────────────────────┘   │
+└────────────────┬───────────────────────────────────────────┘
+                 │ WebSocket (wss://)
+    ┌────────────┼────────────┬──────────────┐
+    │            │            │              │
+┌───▼──┐    ┌───▼──┐    ┌───▼──┐    ┌───▼──┐
+│ RAT  │    │ RAT  │    │ RAT  │    │ RAT  │
+│Client│    │Client│    │Client│    │Client│
+└──────┘    └──────┘    └──────┘    └──────┘
+ Linux      Windows       macOS      Linux
 ```
 
-## Installation
+### Component Architecture
 
-### Prerequisites
+**Server Components:**
+- `ClientManager` - Manages active client connections
+- `ClientStore` - SQLite persistence layer
+- `WebHandler` - HTTP request handling and web UI routing
+- `ProxyManager` - Manages proxy tunnel connections
+- `TerminalProxy` - Remote terminal session management
+- `SessionManager` - User session handling with cookie-based auth
 
-- Go 1.21 or higher
-- Nginx (for production deployment with TLS termination)
-- OpenSSL (for generating TLS certificates for nginx)
+**Client Components:**
+- `CommandExecutor` - Command execution and process management
+- `FileBrowser` - File system operations
+- `ScreenshotCapture` - Screen capture and image encoding
+- `TerminalManager` - Interactive terminal sessions
+- `Keylogger` - Keystroke logging (platform-specific)
+- `Updater` - Client update management
+- `InstanceManager` - Single instance enforcement and lifecycle control
 
-### Build
+---
 
-The client has two build configurations for different use cases:
+## 🖥️ System Requirements
 
-**Debug Version** (development/troubleshooting):
+### Server Requirements
+- **OS**: Linux, Windows, or macOS
+- **Go**: 1.18 or higher (for building from source)
+- **RAM**: Minimum 256MB (recommended 512MB)
+- **Storage**: Minimum 100MB free disk space
+- **Network**: Outbound HTTPS for client connections
+
+### Client Requirements
+- **OS**: Windows, Linux, or macOS
+- **Go**: 1.18 or higher (for building from source)
+- **RAM**: Minimal footprint, ~50MB per instance
+- **Network**: Reliable connection to server (auto-reconnect on failure)
+
+### Optional Dependencies
+- **nginx**: For TLS termination and reverse proxy (recommended for production)
+- **Screenshots**: Linux requires X11 or Wayland support
+
+---
+
+## 📦 Installation
+
+### From Source
+
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/vsteng/goRAT.git
+   cd goRAT
+   ```
+
+2. **Build the server:**
+   ```bash
+   go build -o bin/server ./cmd/server
+   ```
+
+3. **Build the client (release - silent):**
+   ```bash
+   go build -o bin/client ./cmd/client
+   ```
+
+4. **Build the client (debug - verbose):**
+   ```bash
+   go build -tags debug -o bin/client-debug ./cmd/client
+   ```
+
+5. **Build minimal client:**
+   ```bash
+   go build -o bin/client-minimal ./cmd/client-minimal
+   ```
+
+### Using Make
+
 ```bash
-make client-debug
-# Default: daemon=false, autostart=false, logging=enabled
-# Logs to stderr or client_debug.log if daemon
-```
-
-**Release Version** (production):
-```bash
-make client-release
-# OR
-make client  # (default is release)
-# Default: daemon=true, autostart=false, logging=disabled
-# Silent operation, ideal for deployment
-```
-
-**Build all components:**
-```bash
-# Build server, client (release), and monitor
+# Build all binaries
 make build
 
-# Build both debug and release for all platforms
-make build-all
+# Build server only
+make build-server
+
+# Build client only
+make build-client
+
+# Clean build artifacts
+make clean
 ```
 
-For detailed information about build versions, see [BUILD_VERSIONS.md](BUILD_VERSIONS.md).
+---
 
-**Build individually:**
+## 🚀 Quick Start
+
+### 1. Start the Server
+
+**Basic startup (HTTP behind nginx):**
 ```bash
-# Server
-go build -o bin/server cmd/server/main.go
-
-# Client (release)
-go build -o bin/client cmd/client/main.go
-
-# Client (debug)
-go build -tags debug -o bin/client-debug cmd/client/main.go
-
-# Monitor
-go build -o bin/client_monitor client_monitor/*.go
+./bin/server -addr :8080 -web-user admin -web-pass yourpassword
 ```
 
-### Production Deployment with Nginx
-
-The recommended production setup uses nginx as a reverse proxy with TLS termination:
-
-1. **Generate TLS Certificates** (for nginx):
+**With TLS enabled:**
 ```bash
-# Option 1: Self-signed (development/testing)
-chmod +x scripts/generate-certs.sh
-./scripts/generate-certs.sh
-
-# Option 2: Let's Encrypt (production)
-sudo certbot --nginx -d your-domain.com
+./bin/server -addr :443 -tls -cert /path/to/cert.pem -key /path/to/key.pem
 ```
 
-2. **Configure Nginx**:
+**Available options:**
 ```bash
-# Copy the example nginx config
-sudo cp configs/nginx.conf /etc/nginx/sites-available/servermanager
-sudo ln -s /etc/nginx/sites-available/servermanager /etc/nginx/sites-enabled/
-
-# Edit the configuration
-sudo nano /etc/nginx/sites-available/servermanager
-# - Update server_name to your domain
-# - Update ssl_certificate paths
-# - Verify backend port matches server (default :8080)
-
-# Test and reload
-sudo nginx -t
-sudo systemctl reload nginx
+./bin/server -h
 ```
 
-3. **Start the Server** (HTTP mode for nginx):
+### 2. Access Web Dashboard
+
+Open your browser and navigate to:
+```
+http://localhost:8080/login
+```
+
+Default credentials:
+- **Username**: admin
+- **Password**: yourpassword (or value of `-web-pass` flag)
+
+### 3. Connect a Client
+
+**On the client machine:**
 ```bash
-./bin/server -addr :8080 -token your-secret-token
+./bin/client -server wss://your-server.com/ws
 ```
 
-### Development/Testing with Direct TLS
+**Options:**
+- `-server`: Server WebSocket URL (required, must include `/ws` path)
+- `-daemon`: Run as background service (default: true for release builds)
+- `-autostart`: Enable auto-start on boot (default: true)
 
-For development or testing without nginx:
+**Example with all options:**
+```bash
+./bin/client -server wss://control.example.com/ws -daemon=false -autostart=true
+```
+
+### 4. Manage Server Process
 
 ```bash
-# Generate certificates for direct TLS
-./scripts/generate-certs.sh
+# Check server status
+./bin/server status
 
-# Start server with TLS enabled
-./bin/server -addr :8443 -tls -cert certs/server.crt -key certs/server.key -token your-secret-token
+# Stop server
+./bin/server stop
+
+# Restart server
+./bin/server restart
+
+# Start server (default)
+./bin/server start
 ```
 
-## Configuration
+### 5. Manage Client Process
+
+```bash
+# Check client status
+./bin/client status
+
+# Stop client
+./bin/client stop
+
+# Restart client
+./bin/client restart
+```
+
+---
+
+## ⚙️ Configuration
 
 ### Server Configuration
 
-The server can run in two modes:
+All settings are passed via command-line flags:
 
-**Production (HTTP mode with nginx):**
 ```bash
-# Start server without TLS (nginx handles it)
-./bin/server -addr :8080 -token your-secret-token -web-user admin -web-pass your-password
+./bin/server \
+  -addr :8080 \
+  -cert /etc/ssl/certs/server.crt \
+  -key /etc/ssl/private/server.key \
+  -tls \
+  -web-user admin \
+  -web-pass securepassword
 ```
 
-**2. TLS Mode (Development/Testing - direct access):**
-```bash
-# Start server with TLS
-./bin/server -addr :8443 -tls -cert certs/server.crt -key certs/server.key -token your-secret-token -web-user admin -web-pass your-password
-```
+**Configuration Reference:**
 
-**Command-line Flags:**
-- `-addr` - Listen address (default: `:8080`)
-- `-tls` - Enable TLS (default: `false`)
-- `-cert` - TLS certificate file (required if `-tls` enabled)
-- `-key` - TLS private key file (required if `-tls` enabled)
-- `-token` - Authentication token (required)
-- `-web-user` - Web UI username (default: `admin`)
-- `-web-pass` - Web UI password (default: `admin`)
-
-**Accessing the Web Interface:**
-
-After starting the server, open your web browser and navigate to:
-- Production (with nginx): `https://your-domain.com/login`
-- Development (direct): `http://localhost:8080/login`
-
-Log in with the credentials specified in `-web-user` and `-web-pass` flags.
+| Flag | Default | Description |
+|------|---------|-------------|
+| `-addr` | `:8080` | Server listen address and port |
+| `-cert` | `""` | Path to TLS certificate file |
+| `-key` | `""` | Path to TLS private key file |
+| `-tls` | `false` | Enable TLS (set true for HTTPS) |
+| `-web-user` | `admin` | Web UI username |
+| `-web-pass` | `admin` | Web UI password |
 
 ### Client Configuration
 
-**The client no longer requires a configuration file.** It automatically generates a unique machine ID based on system hardware.
-
-**Basic Usage:**
-```bash
-# Start (default command)
-./bin/client start -server wss://your-domain.com/ws
-
-# Stop running instance
-./bin/client stop
-
-# Restart
-./bin/client restart -server wss://your-domain.com/ws
-
-# Status
-./bin/client status
-
-# Development (direct TLS connection)
-./bin/client start -server wss://localhost:8443/ws
-```
-
-**Command-line Flags:**
-- `start|stop|restart|status` - Optional subcommand (default `start`)
-- `-server` - WebSocket server URL (required for start/restart)
-- `-autostart` - Configure auto-start on boot (optional)
-- `-daemon` - Run as background daemon/service (non-Windows typical)
-
-**Single Instance & Machine ID:**
-The client automatically generates a unique identifier from:
-- Hostname
-- Host UUID (from SMBIOS/DMI)
-- OS-specific identifiers:
-  - Windows: Machine GUID from registry
-  - Linux: `/etc/machine-id` or `/var/lib/dbus/machine-id`
-  - macOS: IOPlatformUUID
-
-The ID is cached in:
-Single-instance enforcement uses a PID file stored alongside the cached machine ID. Use `client stop` or `client restart` to control a running instance cleanly—avoid killing from Task Manager when possible.
-- Windows: `%APPDATA%\ServerManager\machine-id`
-- Linux: `~/.config/servermanager/machine-id`
-- macOS: `~/Library/Application Support/servermanager/machine-id`
-
-**Security:**
-- The client **always** verifies TLS certificates (no skip option)
-- Use `wss://` (WebSocket Secure) protocol
-- Ensure server certificates are from a trusted CA in production
-
-### Monitor Configuration
-
-Create `monitor-config.json`:
-
-```json
-{
-  "client_path": "/path/to/client",
-  "client_args": ["-config", "/path/to/client-config.json"],
-  "check_interval": "10s",
-  "restart_delay": "5s",
-  "max_restarts": -1
-}
-```
-
-## Usage
-
-### Start the Server
-
-**Production (HTTP mode with nginx):**
-```bash
-# Server listens on localhost:8080, nginx handles TLS
-./bin/server -addr :8080 -token your-secret-token -web-user admin -web-pass your-password
-```
-
-**Development (Direct TLS):**
-```bash
-# Server listens with TLS on :8443
-./bin/server -addr :8443 -tls -cert certs/server.crt -key certs/server.key -token your-secret-token -web-user admin -web-pass your-password
-```
-
-The server will display:
-```
-Web UI will be available at http://localhost:8080/login
-Web UI credentials - Username: admin, Password: your-password
-```
-
-### Using the Web Interface
-
-1. **Access the Login Page**
-   - Open your browser and navigate to the server URL (e.g., `http://localhost:8080/login`)
-   - Enter the username and password configured when starting the server
-
-2. **Dashboard**
-   - View all connected clients with their status, OS, IP address, and last seen time
-   - See real-time statistics (total clients, online, offline)
-   - Click "Refresh" to manually update the client list (auto-refreshes every 10 seconds)
-
-3. **Execute Commands**
-   - Click the "Command" button next to any client
-   - Enter a command to execute on that client
-   - Results are sent asynchronously to the client
-
-4. **Open Terminal Session**
-   - Click the "Terminal" button next to any client
-   - A new window opens with an interactive terminal
-   - Type commands and see real-time output
-   - Use Ctrl+C (or click "Interrupt") to stop running commands
-   - Command history available with Up/Down arrow keys
-   - Terminal sessions are fully interactive with the client's shell
-
-5. **Security**
-   - Sessions expire after 24 hours of inactivity
-   - Always use HTTPS in production (via nginx)
-   - Change default credentials immediately
-
-### Start the Client
-
-**Production (HTTPS through nginx):**
-```bash
-./bin/client -server wss://your-domain.com/ws -token your-secret-token
-
-# Enable auto-start
-./bin/client -server wss://your-domain.com/ws -token your-secret-token -autostart
-```
-
-**Development (Direct TLS):**
-```bash
-./bin/client -server wss://localhost:8443/ws -token your-secret-token
-```
-
-**Note:** The client automatically generates and caches a unique machine ID. No configuration file is needed.
-
-### Start the Client Monitor
+**Command-line flags:**
 
 ```bash
-# Basic usage
-./bin/client_monitor -client /path/to/client
-
-# With client arguments
-./bin/client_monitor -client /path/to/client -- -config /path/to/client-config.json
-
-# Install and monitor
-./bin/client_monitor -client /path/to/client -install /path/to/client-binary
-
-# With config file
-./bin/client_monitor -config monitor-config.json
+./bin/client \
+  -server wss://control.example.com/ws \
+  -daemon=false \
+  -autostart=true
 ```
 
-## API Endpoints
+**Configuration Reference:**
 
-### Web UI Endpoints
+| Flag | Default (Release) | Default (Debug) | Description |
+|------|-----------------|-----------------|-------------|
+| `-server` | `wss://localhost/ws` | `wss://localhost/ws` | Server WebSocket URL |
+| `-daemon` | `true` | `false` | Run as background daemon |
+| `-autostart` | `true` | `true` | Enable auto-start on boot |
 
-#### GET /login
-Login page for web interface.
+**Environment Variables:**
 
-#### POST /api/login
-Authenticate user for web interface.
+- `SERVER_URL`: Override default server URL if not specified via `-server` flag
+- `CLIENT_ENABLE_LOG`: Set to `1` or `true` to enable logging in release builds
 
-**Request:**
-```json
+### Database
+
+The server uses SQLite for persistence. Database file location:
+```
+./clients.db
+```
+
+The database automatically creates tables on first run:
+- `clients` - Connected client information
+- `proxies` - Proxy tunnel configurations
+- `web_users` - User accounts and authentication
+
+---
+
+## 🌐 Web Dashboard
+
+### Overview
+
+The web dashboard provides real-time management of connected clients with:
+
+- **Dashboard** - Overview with statistics (online clients, proxies, users)
+- **Clients** - View all connected clients with filter options (all/online/offline)
+- **Proxy Management** - Create and manage proxy tunnels
+- **Users** - Add/edit/delete user accounts and manage roles
+- **Terminal** - Interactive terminal access to client systems
+- **File Manager** - Browse and transfer files
+
+### User Roles
+
+| Role | Permissions |
+|------|-------------|
+| `admin` | Full access to all features and user management |
+| `operator` | Access to clients, terminal, files, and proxies |
+| `viewer` | Read-only access to view clients and statistics |
+
+### Managing Users
+
+1. Navigate to **Users** section in dashboard
+2. Click **+ Add User** button
+3. Fill in:
+   - **Username** - Unique username for login
+   - **Password** - Minimum 6 characters
+   - **Full Name** - Display name
+   - **Role** - admin, operator, or viewer
+
+4. To disable/enable users: Click the 🔒/🔓 icon in the Actions column
+5. To delete users: Click the 🗑️ icon (requires confirmation)
+
+### Session Management
+
+- Sessions expire after 24 hours of inactivity
+- Secure cookies with HttpOnly flag
+- Logout clears session immediately
+
+---
+
+## 🔌 API Endpoints
+
+### Authentication
+
+```http
+POST /api/login
+Content-Type: application/json
+
 {
   "username": "admin",
-  "password": "your-password"
+  "password": "password"
 }
-```
 
-**Response:**
-```json
+Response: 200 OK
 {
   "status": "success"
 }
 ```
 
-#### POST /api/logout
-Logout from web interface.
+```http
+POST /api/logout
+Response: 200 OK
+```
 
-#### GET /dashboard
-Dashboard showing connected clients (requires authentication).
+### Clients
 
-#### GET /terminal?client=CLIENT_ID
-Interactive terminal interface for a specific client (requires authentication).
-
-#### WebSocket /api/terminal?client=CLIENT_ID
-WebSocket endpoint for real-time terminal sessions (requires authentication).
-
-### API Endpoints (Client Management)
-
-### GET /api/clients
-
-Get list of connected clients.
-
-**Response:**
-```json
+```http
+GET /api/clients
+Response: 200 OK
 [
   {
-    "id": "client-001",
-    "os": "linux",
-    "arch": "amd64",
-    "hostname": "server-01",
-    "ip": "192.168.1.100",
+    "id": "machine-id-1",
+    "hostname": "workstation-01",
+    "os": "windows",
     "status": "online",
-    "connected_at": "2024-01-01T00:00:00Z",
-    "last_seen": "2024-01-01T00:01:00Z"
-  }
+    "connected_at": "2025-12-08T10:30:00Z",
+    "last_seen": "2025-12-08T11:45:00Z"
+  },
+  ...
 ]
 ```
 
-### POST /api/command
+### Proxies
 
-Execute a command on a specific client.
+```http
+GET /api/proxies?clientId=machine-id-1
+Response: 200 OK
+[
+  {
+    "id": "proxy-1",
+    "client_id": "machine-id-1",
+    "local_port": 3306,
+    "remote_host": "192.168.1.100",
+    "remote_port": 3306,
+    "protocol": "tcp",
+    "status": "active"
+  },
+  ...
+]
 
-**Request:**
-```json
+POST /api/proxies
+Content-Type: application/json
+
 {
-  "client_id": "client-001",
-  "command": {
-    "command": "ls",
-    "args": ["-la"],
-    "work_dir": "/tmp",
-    "timeout": 30
-  }
+  "client_id": "machine-id-1",
+  "local_port": 3306,
+  "remote_host": "localhost",
+  "remote_port": 3306,
+  "protocol": "tcp"
+}
+
+POST /api/proxy/close
+Content-Type: application/json
+
+{
+  "proxy_id": "proxy-1",
+  "client_id": "machine-id-1"
 }
 ```
 
-**Response:**
-```json
+### Users
+
+```http
+GET /api/users
+Response: 200 OK
+[
+  {
+    "id": 1,
+    "username": "admin",
+    "full_name": "Administrator",
+    "role": "admin",
+    "status": "active",
+    "created_at": "2025-12-08T10:00:00Z",
+    "last_login": "2025-12-08T11:45:00Z"
+  },
+  ...
+]
+
+POST /api/users
+Content-Type: application/json
+
 {
-  "status": "sent"
+  "username": "newuser",
+  "password": "securepass123",
+  "full_name": "New User",
+  "role": "operator"
 }
+
+PUT /api/users/{username}
+Content-Type: application/json
+
+{
+  "status": "inactive",
+  "role": "viewer",
+  "full_name": "Updated Name"
+}
+
+DELETE /api/users/{username}
 ```
 
-## Message Types
+### Terminal
 
-The system uses a WebSocket-based protocol with the following message types:
+```http
+GET /ws?client={clientId}&session={sessionId}
+
+WebSocket protocol for interactive terminal sessions
+Messages: {"type":"input","data":"command text"}
+```
+
+---
+
+## 💻 Command Line Usage
+
+### Server Commands
+
+```bash
+# Start server (default command)
+./bin/server
+
+# Check if server is running
+./bin/server status
+
+# Stop running server
+./bin/server stop
+
+# Restart server
+./bin/server restart
+
+# Start with help
+./bin/server -h
+```
+
+### Client Commands
+
+```bash
+# Start client (default command)
+./bin/client -server wss://control.example.com/ws
+
+# Check if client is running
+./bin/client status
+
+# Stop running client
+./bin/client stop
+
+# Restart client
+./bin/client restart
+
+# Start in foreground (debug)
+./bin/client-debug -server wss://control.example.com/ws -daemon=false
+```
+
+---
+
+## 📊 Database
+
+### Database File
+
+Location: `./clients.db` (SQLite)
+
+### Tables Schema
+
+**clients:**
+```sql
+CREATE TABLE clients (
+  id TEXT PRIMARY KEY,
+  hostname TEXT,
+  username TEXT,
+  os TEXT,
+  arch TEXT,
+  status TEXT,
+  connected_at DATETIME,
+  last_seen DATETIME,
+  metadata TEXT
+);
+```
+
+**proxies:**
+```sql
+CREATE TABLE proxies (
+  id TEXT PRIMARY KEY,
+  client_id TEXT,
+  local_port INTEGER,
+  remote_host TEXT,
+  remote_port INTEGER,
+  protocol TEXT,
+  status TEXT,
+  created_at DATETIME,
+  updated_at DATETIME,
+  FOREIGN KEY(client_id) REFERENCES clients(id)
+);
+```
+
+**web_users:**
+```sql
+CREATE TABLE web_users (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  username TEXT UNIQUE NOT NULL,
+  password_hash TEXT NOT NULL,
+  full_name TEXT,
+  role TEXT DEFAULT 'user',
+  status TEXT DEFAULT 'active',
+  created_at DATETIME,
+  updated_at DATETIME,
+  last_login DATETIME
+);
+```
+
+### Database Backup
+
+```bash
+# Backup database
+cp clients.db clients.db.backup
+
+# Restore from backup
+cp clients.db.backup clients.db
+```
+
+---
+
+## 🔒 Security
+
+### Best Practices
+
+1. **Use TLS in Production**
+   - Always use HTTPS with valid certificates
+   - Enable `-tls` flag with proper certificates
+   - Use nginx reverse proxy for TLS termination
+
+2. **Strong Credentials**
+   - Use strong, unique passwords for web UI (minimum 8 characters)
+   - Change default username and password
+   - Rotate passwords regularly
+
+3. **Firewall Rules**
+   - Restrict server port to trusted networks
+   - Use network-level access controls
+   - Monitor connection logs
+
+4. **Database Security**
+   - Restrict file permissions on `clients.db`
+   - Back up database regularly
+   - Keep database on encrypted storage
+
+5. **Client Communication**
+   - Always use `wss://` (WebSocket Secure) in production
+   - Verify server certificates on clients
+   - Keep clients updated
 
 ### Authentication
-- `auth` - Client authentication
-- `auth_response` - Authentication response
 
-### Commands
-- `execute_command` - Execute a system command
-- `command_result` - Command execution result
+- **Server-to-Client**: Machine ID-based authentication
+- **Web UI**: Username/password with session cookies
+- **Passwords**: SHA256 hashing with hex encoding
+- **Sessions**: 24-hour expiration, secure HttpOnly cookies
 
-### File Operations
-- `browse_files` - Browse directory
-- `file_list` - Directory listing result
-- `download_file` - Request file download
-- `upload_file` - Upload file
-- `file_data` - File content transfer
+---
 
-### Screenshots
-- `take_screenshot` - Request screenshot
-- `screenshot_data` - Screenshot data
+## 🐛 Troubleshooting
 
-### Keylogger
-- `start_keylogger` - Start keylogger
-- `stop_keylogger` - Stop keylogger
-- `keylogger_data` - Logged keystrokes
+### Server Issues
 
-### Terminal Sessions
-- `start_terminal` - Start interactive terminal session
-- `stop_terminal` - Stop terminal session
-- `terminal_input` - Input to terminal
-- `terminal_output` - Output from terminal
-- `terminal_resize` - Resize terminal window
-
-### Updates
-- `update` - Update client
-- `update_status` - Update status report
-
-### Health
-- `heartbeat` - Client health status
-- `ping`/`pong` - Connection keepalive
-
-## Platform-Specific Features
-
-### Windows
-- Command output encoding conversion (GBK → UTF-8)
-- Registry-based auto-start
-- Batch file startup alternative
-- Process management via tasklist
-
-### Linux
-- Systemd service auto-start
-- Process management via pgrep
-- Init script support (rc.local)
-
-## Security Considerations
-
-1. **TLS Certificates**: 
-   - Use certificates from a trusted CA (Let's Encrypt) in production
-   - Client always enforces TLS certificate verification
-   - No option to skip certificate validation
-
-2. **Authentication Tokens**: 
-   - Use strong, randomly generated tokens
-   - Keep tokens secret and never commit to version control
-   - Rotate tokens regularly
-
-3. **Network Security**: 
-   - Run server behind nginx reverse proxy in production
-   - Use firewall to restrict access to server port (8080)
-   - Whitelist client IPs if possible
-   - Use HTTPS/WSS only, never HTTP/WS
-
-4. **Client Identity**:
-   - Server enforces unique machine IDs
-   - Duplicate IDs trigger automatic disconnection of old session
-   - Machine IDs are hardware-based and persistent
-
-5. **File Permissions**: 
-   - Ensure client runs with minimal required permissions
-   - Restrict file browser access to necessary directories
-
-6. **Keylogger**: 
-   - Use responsibly and ensure compliance with local laws
-   - Obtain proper authorization before deployment
-   - Store logs securely
-
-7. **Update Verification**: 
-   - Always verify checksums before applying updates
-   - Use secure channel for update distribution
-
-8. **Nginx Configuration**:
-   - Keep nginx updated with security patches
-   - Use strong TLS ciphers (TLS 1.2+)
-   - Enable HSTS, OCSP stapling
-   - Monitor access logs for suspicious activity
-
-## Development
-
-### Dependencies
-
-- `github.com/gorilla/websocket` - WebSocket support
-- `github.com/kbinani/screenshot` - Cross-platform screenshots
-- `github.com/shirou/gopsutil/v3` - System statistics
-- `golang.org/x/text` - Text encoding (GBK support)
-- `golang.org/x/sys` - System-specific APIs
-
-### Running Tests
-
+**Server fails to start:**
 ```bash
-go test ./...
+# Check if port is already in use
+lsof -i :8080  # macOS/Linux
+netstat -ano | findstr :8080  # Windows
+
+# Try different port
+./bin/server -addr :9090
 ```
 
-### Building for Multiple Platforms
-
+**TLS certificate errors:**
 ```bash
-# Linux
-GOOS=linux GOARCH=amd64 go build -o bin/client-linux cmd/client/main.go
+# Verify certificate and key match
+openssl x509 -noout -modulus -in cert.pem | openssl md5
+openssl rsa -noout -modulus -in key.pem | openssl md5
 
-# Windows
-GOOS=windows GOARCH=amd64 go build -o bin/client-windows.exe cmd/client/main.go
-
-# macOS
-GOOS=darwin GOARCH=amd64 go build -o bin/client-darwin cmd/client/main.go
+# Generate self-signed certificate for testing
+openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -days 365 -nodes
 ```
 
-## Troubleshooting
+**Database errors:**
+```bash
+# Delete corrupted database (warning: loses all data)
+rm clients.db
 
-### Client Can't Connect
-- Verify server is running and accessible
-- Check firewall rules (nginx: port 443, direct: port 8443)
-- Verify TLS certificates are valid and trusted
-- Ensure auth token matches server configuration
-- Check nginx logs: `/var/log/nginx/servermanager_error.log`
-- Verify nginx upstream is reachable: `curl http://localhost:8080/health`
+# Server will recreate on next start
+```
 
-### Duplicate Client ID Error
-- Each client automatically generates a unique machine ID
-- If you see "duplicate ID" errors, the machine ID cache may be corrupted
-- Delete the cached ID file:
-  - Windows: `%APPDATA%\ServerManager\machine-id`
-  - Linux: `~/.config/servermanager/machine-id`
-  - macOS: `~/Library/Application Support/servermanager/machine-id`
-- Restart the client to regenerate
+### Client Issues
 
-### TLS Certificate Verification Fails
-- Ensure server is using a certificate from a trusted CA
-- For nginx, check certificate paths in config
-- Verify certificate is not expired: `openssl x509 -in /path/to/cert.crt -noout -dates`
-- Client cannot skip certificate verification (by design)
+**Client fails to connect:**
+```bash
+# Verify server URL format
+# Correct: wss://server.com/ws
+# Wrong:  wss://server.com
 
-### Nginx WebSocket Upgrade Fails
-- Check nginx error log for "failed to send http2 header" or "upstream sent no valid HTTP/1.0 header"
-- Verify `proxy_http_version 1.1` and upgrade headers are set
-- Ensure server is listening on the correct port (default 8080)
-- Test direct connection: `wscat -c ws://localhost:8080/ws`
+# Check firewall/network
+ping server.com
+curl -v wss://server.com/ws
 
-### Command Encoding Issues (Windows)
-- The client automatically handles GBK → UTF-8 conversion
-- If issues persist, check system locale settings: `chcp` (should show 936 for GBK)
+# Use debug build for logs
+./bin/client-debug -server wss://server.com/ws -daemon=false
+```
 
-### Auto-Start Not Working
-**Windows:**
-- Check registry key: `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`
-- Verify executable path is correct and accessible
-- Check Windows Event Viewer for startup errors
+**Client doesn't appear in dashboard:**
+```bash
+# Check client is running
+./bin/client status
 
-**Linux:**
-- Check systemd service: `systemctl --user status ServerManagerClient.service`
-- View logs: `journalctl --user -u ServerManagerClient.service`
-- Ensure service is enabled: `systemctl --user enable ServerManagerClient.service`
+# Verify server is accepting connections
+./bin/server status
 
-### Screenshot Fails
-- Ensure display is available (not headless)
-- Check permissions for screen capture
-- On Linux, may need X11 session
-- On macOS 15+, screenshot library is incompatible (known issue)
-  - Build with `-tags noscreenshot` to disable
+# Check client logs (debug build)
+./bin/client-debug -server wss://server.com/ws -daemon=false 2>&1 | head -20
+```
 
-### Server Won't Start
-- Check if port is already in use: `lsof -i :8080` (Linux/macOS) or `netstat -ano | findstr :8080` (Windows)
-- Verify token is provided: `-token` flag is required
-- In TLS mode, ensure cert and key files exist and are readable
-- Check server logs for specific error messages
+**Screenshot/file transfer issues:**
+```bash
+# Check client permissions
+ls -la /proc/[pid]/fd  # Linux
+# or
+ps aux | grep client   # Find PID
 
-## License
+# Verify file paths
+ls -la /target/file/path
 
-This project is provided as-is for educational and internal use.
+# Use debug build for detailed logs
+```
 
-## Contributing
+### Web Dashboard Issues
 
-Contributions are welcome! Please ensure:
-- Code follows Go best practices
-- Cross-platform compatibility is maintained
-- Security implications are considered
-- Tests are included for new features
+**Can't login:**
+- Verify credentials are correct
+- Check browser cookies are enabled
+- Clear browser cache and cookies
+- Try different browser
 
-## Future Enhancements
+**Clients show offline:**
+- Verify client process is running: `./bin/client status`
+- Check network connectivity from client to server
+- Review firewall rules
+- Check server logs for errors
 
-- [ ] gRPC transport option
-- [ ] End-to-end encryption for sensitive data
-- [ ] Database for client history and logs
-- [ ] Multi-tenancy support
-- [ ] Role-based access control
-- [ ] File transfer resume capability
-- [x] ~~Real-time terminal session~~ (Completed)
-- [x] ~~Web-based management interface~~ (Completed)
-- [ ] Scheduled task execution
-- [ ] Client grouping and bulk operations
+**Proxy tunnels not working:**
+- Verify remote host and port are correct
+- Check client system can reach remote host
+- Verify local port is not already in use
+- Use `netstat` to confirm port is listening
+
+---
+
+## 📝 License
+
+This project is licensed under the MIT License - see LICENSE file for details.
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome! Please follow these guidelines:
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+---
+
+## 📞 Support
+
+For issues and questions:
+
+1. Check the Troubleshooting section above
+2. Review existing GitHub issues
+3. Create a new issue with:
+   - System information (OS, Go version)
+   - Error messages or logs
+   - Steps to reproduce
+   - Expected vs actual behavior
+
+---
+
+## ⚠️ Disclaimer
+
+This tool is provided for authorized security testing and administrative purposes only. Unauthorized access to computer systems is illegal. Users are responsible for obtaining proper authorization before using this tool on any system they do not own or have explicit permission to access.
+
+---
+
+**Last Updated**: December 8, 2025  
+**Version**: 1.0.0

@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -11,6 +12,51 @@ import (
 )
 
 func Main() {
+	// Handle subcommands: start|stop|restart|status (default: start)
+	command := "start"
+	if len(os.Args) > 1 {
+		first := os.Args[1]
+		if first == "start" || first == "stop" || first == "restart" || first == "status" {
+			command = first
+			// Remove subcommand from args before flag parsing
+			os.Args = append([]string{os.Args[0]}, os.Args[2:]...)
+		}
+	}
+
+	instanceMgr := NewServerInstanceManager()
+
+	// Handle subcommands
+	if command != "start" {
+		switch command {
+		case "status":
+			if running, pid := instanceMgr.IsRunning(); running {
+				fmt.Printf("Server running (PID %d)\n", pid)
+			} else {
+				fmt.Println("Server not running")
+			}
+			return
+		case "stop":
+			if err := instanceMgr.Kill(); err != nil {
+				fmt.Printf("Stop failed: %v\n", err)
+			} else {
+				fmt.Println("Server stopped")
+			}
+			return
+		case "restart":
+			_ = instanceMgr.Kill() // Ignore error; may not be running
+			// Continue to start below.
+			fmt.Println("Restarting server...")
+		}
+	}
+
+	// Enforce single instance before starting
+	if command == "start" {
+		if running, pid := instanceMgr.IsRunning(); running {
+			fmt.Printf("Server already running (PID %d)\n", pid)
+			return
+		}
+	}
+
 	// Parse command line flags
 	addr := flag.String("addr", ":8080", "Server address")
 	certFile := flag.String("cert", "", "TLS certificate file (leave empty for HTTP behind nginx)")
@@ -38,6 +84,12 @@ func Main() {
 		log.Println("Attempting to continue with limited functionality...")
 		return
 	}
+
+	// Write PID file for instance management
+	if err := instanceMgr.WritePID(); err != nil {
+		log.Printf("Warning: Failed to write PID file: %v", err)
+	}
+	defer instanceMgr.RemovePID()
 
 	if config.UseTLS {
 		log.Printf("Starting server with TLS on %s", *addr)
