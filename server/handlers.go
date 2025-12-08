@@ -192,6 +192,7 @@ func (s *Server) Start() error {
 	mux.HandleFunc("/api/proxy/create", s.HandleProxyCreate)
 	mux.HandleFunc("/api/proxy/list", s.HandleProxyList)
 	mux.HandleFunc("/api/proxy/close", s.HandleProxyClose)
+	mux.HandleFunc("/api/proxy/suggest", s.HandleProxySuggestPorts)
 	mux.HandleFunc("/api/proxy/edit", s.HandleProxyEdit)
 	mux.HandleFunc("/api/proxy/stats", s.HandleProxyStats)
 
@@ -334,24 +335,35 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	// Get public IP from request headers
 	publicIP := getClientIP(r)
 
+	// Create client metadata
+	metadata := &common.ClientMetadata{
+		ID:          authPayload.ClientID,
+		Token:       token,
+		OS:          authPayload.OS,
+		Arch:        authPayload.Arch,
+		Hostname:    authPayload.Hostname,
+		IP:          authPayload.IP,
+		PublicIP:    publicIP,
+		Status:      "online",
+		ConnectedAt: time.Now(),
+		LastSeen:    time.Now(),
+	}
+
+	// Load saved metadata (including alias) if available
+	if s.store != nil {
+		if savedClient, err := s.store.GetClient(authPayload.ClientID); err == nil && savedClient != nil {
+			// Preserve the alias from saved data
+			metadata.Alias = savedClient.Alias
+		}
+	}
+
 	// Create client
 	client := &Client{
-		ID:   authPayload.ClientID,
-		Conn: conn,
-		Metadata: &common.ClientMetadata{
-			ID:          authPayload.ClientID,
-			Token:       token,
-			OS:          authPayload.OS,
-			Arch:        authPayload.Arch,
-			Hostname:    authPayload.Hostname,
-			IP:          authPayload.IP,
-			PublicIP:    publicIP,
-			Status:      "online",
-			ConnectedAt: time.Now(),
-			LastSeen:    time.Now(),
-		},
-		Send:   make(chan *common.Message, 256),
-		closed: false,
+		ID:       authPayload.ClientID,
+		Conn:     conn,
+		Metadata: metadata,
+		Send:     make(chan *common.Message, 256),
+		closed:   false,
 	}
 
 	s.manager.register <- client

@@ -369,14 +369,13 @@ func (s *ClientStore) SaveProxy(proxy *ProxyConnection) error {
 	defer s.mu.Unlock()
 
 	query := `
-	INSERT INTO proxies (id, client_id, local_port, remote_host, remote_port, protocol, status, updated_at)
-	VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+	INSERT INTO proxies (id, client_id, local_port, remote_host, remote_port, protocol, updated_at)
+	VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
 	ON CONFLICT(id) DO UPDATE SET
 		local_port = excluded.local_port,
 		remote_host = excluded.remote_host,
 		remote_port = excluded.remote_port,
 		protocol = excluded.protocol,
-		status = excluded.status,
 		updated_at = CURRENT_TIMESTAMP
 	`
 
@@ -387,7 +386,6 @@ func (s *ClientStore) SaveProxy(proxy *ProxyConnection) error {
 		proxy.RemoteHost,
 		proxy.RemotePort,
 		proxy.Protocol,
-		proxy.Status,
 	)
 
 	return err
@@ -399,9 +397,9 @@ func (s *ClientStore) GetProxies(clientID string) ([]*ProxyConnection, error) {
 	defer s.mu.RUnlock()
 
 	query := `
-	SELECT id, client_id, local_port, remote_host, remote_port, protocol, status, created_at
+	SELECT id, client_id, local_port, remote_host, remote_port, protocol, created_at
 	FROM proxies
-	WHERE client_id = ? AND status = 'active'
+	WHERE client_id = ?
 	ORDER BY created_at DESC
 	`
 
@@ -423,7 +421,6 @@ func (s *ClientStore) GetProxies(clientID string) ([]*ProxyConnection, error) {
 			&proxy.RemoteHost,
 			&proxy.RemotePort,
 			&proxy.Protocol,
-			&proxy.Status,
 			&createdAt,
 		)
 
@@ -448,9 +445,8 @@ func (s *ClientStore) GetAllProxies() ([]*ProxyConnection, error) {
 	defer s.mu.RUnlock()
 
 	query := `
-	SELECT id, client_id, local_port, remote_host, remote_port, protocol, status, created_at
+	SELECT id, client_id, local_port, remote_host, remote_port, protocol, created_at
 	FROM proxies
-	WHERE status = 'active'
 	`
 
 	rows, err := s.db.Query(query)
@@ -471,7 +467,6 @@ func (s *ClientStore) GetAllProxies() ([]*ProxyConnection, error) {
 			&proxy.RemoteHost,
 			&proxy.RemotePort,
 			&proxy.Protocol,
-			&proxy.Status,
 			&createdAt,
 		)
 

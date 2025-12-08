@@ -8,6 +8,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -23,7 +24,6 @@ type ProxyConnection struct {
 	RemoteHost   string
 	RemotePort   int
 	Protocol     string // "tcp", "http", "https"
-	Status       string // "active", "inactive", "error"
 	BytesIn      int64
 	BytesOut     int64
 	CreatedAt    time.Time
@@ -54,6 +54,53 @@ func NewProxyManager(manager *ClientManager, store *ClientStore) *ProxyManager {
 	}
 }
 
+// FindAvailablePort finds an available port starting from the suggested port
+func (pm *ProxyManager) FindAvailablePort(suggestedPort int) (int, error) {
+	pm.portMapMu.RLock()
+	defer pm.portMapMu.RUnlock()
+
+	// Check if suggested port is available
+	if _, exists := pm.portMap[suggestedPort]; !exists {
+		// Try to bind to verify it's truly available
+		listener, err := net.Listen("tcp", fmt.Sprintf(":%d", suggestedPort))
+		if err == nil {
+			listener.Close()
+			return suggestedPort, nil
+		}
+	}
+
+	// If suggested port is taken, find next available
+	for port := suggestedPort + 1; port < suggestedPort+100; port++ {
+		if _, exists := pm.portMap[port]; !exists {
+			listener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+			if err == nil {
+				listener.Close()
+				return port, nil
+			}
+		}
+	}
+
+	return 0, fmt.Errorf("no available ports found in range %d-%d", suggestedPort, suggestedPort+99)
+}
+
+// GetSuggestedPorts returns a list of suggested available ports
+func (pm *ProxyManager) GetSuggestedPorts(basePort int, count int) []int {
+	pm.portMapMu.RLock()
+	defer pm.portMapMu.RUnlock()
+
+	var suggested []int
+	for port := basePort; len(suggested) < count && port < basePort+1000; port++ {
+		if _, exists := pm.portMap[port]; !exists {
+			listener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+			if err == nil {
+				listener.Close()
+				suggested = append(suggested, port)
+			}
+		}
+	}
+	return suggested
+}
+
 // CreateProxyConnection creates a new proxy tunnel
 func (pm *ProxyManager) CreateProxyConnection(clientID, remoteHost string, remotePort, localPort int, protocol string) (*ProxyConnection, error) {
 	pm.mu.Lock()
@@ -69,6 +116,14 @@ func (pm *ProxyManager) CreateProxyConnection(clientID, remoteHost string, remot
 	if client.Conn == nil || client.Conn.RemoteAddr() == nil {
 		return nil, fmt.Errorf("client websocket not connected: %s", clientID)
 	}
+
+	// Check for port conflict
+	pm.portMapMu.RLock()
+	if existingID, exists := pm.portMap[localPort]; exists {
+		pm.portMapMu.RUnlock()
+		return nil, fmt.Errorf("port %d is already in use by proxy %s", localPort, existingID)
+	}
+	pm.portMapMu.RUnlock()
 
 	// Normalize protocol to lowercase
 	protocol = strings.ToLower(protocol)
@@ -86,7 +141,6 @@ func (pm *ProxyManager) CreateProxyConnection(clientID, remoteHost string, remot
 		RemoteHost:   remoteHost,
 		RemotePort:   remotePort,
 		Protocol:     protocol,
-		Status:       "starting",
 		CreatedAt:    time.Now(),
 		LastActive:   time.Now(),
 		userChannels: make(map[string]*net.Conn),
@@ -99,7 +153,6 @@ func (pm *ProxyManager) CreateProxyConnection(clientID, remoteHost string, remot
 	}
 
 	conn.listener = listener
-	conn.Status = "active"
 
 	// Register port mapping
 	pm.portMapMu.Lock()
@@ -130,18 +183,11 @@ func (pm *ProxyManager) acceptConnections(conn *ProxyConnection) {
 	defer func() {
 		if r := recover(); r != nil {
 			log.Printf("Panic in acceptConnections: %v", r)
-			conn.Status = "error"
 		}
 	}()
 
 	for {
-		conn.mu.RLock()
-		if conn.Status != "active" {
-			conn.mu.RUnlock()
-			break
-		}
-		conn.mu.RUnlock()
-
+		// Check if listener is still active
 		if conn.listener == nil {
 			break
 		}
@@ -156,7 +202,7 @@ func (pm *ProxyManager) acceptConnections(conn *ProxyConnection) {
 			if opErr, ok := err.(*net.OpError); ok && opErr.Timeout() {
 				continue
 			}
-			if conn.Status != "active" {
+			if conn.listener == nil {
 				break
 			}
 			log.Printf("Error accepting connection on proxy %s: %v", conn.ID, err)
@@ -300,7 +346,6 @@ func (pm *ProxyManager) CloseProxyConnection(id string) error {
 	}
 
 	conn.mu.Lock()
-	conn.Status = "inactive"
 	if conn.listener != nil {
 		conn.listener.Close()
 		conn.listener = nil
@@ -677,6 +722,40 @@ func (s *Server) HandleProxyClose(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "closed"})
+}
+
+// HandleProxySuggestPorts suggests available ports for a new proxy
+func (s *Server) HandleProxySuggestPorts(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	basePort := 10000 // Default base port
+	if bp := r.URL.Query().Get("basePort"); bp != "" {
+		if p, err := strconv.Atoi(bp); err == nil {
+			basePort = p
+		}
+	}
+
+	count := 5 // Default number of suggestions
+	if c := r.URL.Query().Get("count"); c != "" {
+		if n, err := strconv.Atoi(c); err == nil && n > 0 && n <= 20 {
+			count = n
+		}
+	}
+
+	if s.proxyManager == nil {
+		s.proxyManager = NewProxyManager(s.manager, s.store)
+	}
+
+	suggested := s.proxyManager.GetSuggestedPorts(basePort, count)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"basePort":       basePort,
+		"suggestedPorts": suggested,
+	})
 }
 
 // HandleProxyEdit updates an existing proxy connection via HTTP
