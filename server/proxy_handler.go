@@ -369,6 +369,40 @@ func (pm *ProxyManager) HandleProxyDataFromClient(proxyID, userID string, data [
 	return nil
 }
 
+// HandleProxyDisconnect handles a user disconnecting from a proxy tunnel
+func (pm *ProxyManager) HandleProxyDisconnect(proxyID, userID string) error {
+	pm.mu.RLock()
+	conn, exists := pm.connections[proxyID]
+	pm.mu.RUnlock()
+
+	if !exists {
+		return fmt.Errorf("proxy connection not found: %s", proxyID)
+	}
+
+	conn.channelsMu.RLock()
+	userConnPtr, userExists := conn.userChannels[userID]
+	conn.channelsMu.RUnlock()
+
+	if !userExists || userConnPtr == nil || *userConnPtr == nil {
+		// Already closed or doesn't exist - that's fine
+		return nil
+	}
+
+	// Close the user's connection
+	userConn := *userConnPtr
+	if userConn != nil {
+		userConn.Close()
+	}
+
+	// Remove from tracking
+	conn.channelsMu.Lock()
+	delete(conn.userChannels, userID)
+	conn.channelsMu.Unlock()
+
+	log.Printf("User disconnected from proxy: proxy=%s, user=%s", proxyID, userID)
+	return nil
+}
+
 // GetProxyConnection retrieves a proxy connection by ID
 func (pm *ProxyManager) GetProxyConnection(id string) *ProxyConnection {
 	pm.mu.RLock()

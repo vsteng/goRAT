@@ -428,6 +428,18 @@ func (s *Server) readPump(client *Client) {
 					}
 				}
 				continue
+
+			case "proxy_disconnect":
+				// Handle proxy disconnect message - user closed the connection
+				proxyID, _ := rawMsg["proxy_id"].(string)
+				userID, _ := rawMsg["user_id"].(string)
+
+				if s.proxyManager != nil && proxyID != "" && userID != "" {
+					if err := s.proxyManager.HandleProxyDisconnect(proxyID, userID); err != nil {
+						log.Printf("Error handling proxy disconnect: %v", err)
+					}
+				}
+				continue
 			}
 		}
 
