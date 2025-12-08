@@ -1054,7 +1054,9 @@
     <script>
         let selectedClient = null;
         let clients = [];
-    let currentFilter = 'all';
+        let currentFilter = 'all';
+        // Cache suggested ports per client to avoid re-fetching when not adding
+        const suggestedPortCache = {};
 
         async function loadClients() {
             try {
@@ -1217,6 +1219,53 @@
             }
         }
 
+        function setSuggestedPortValue(port) {
+            const input = document.getElementById('proxyLocalPort');
+            if (!input) return;
+            // Only set if the user has not typed anything and not editing
+            const isEditing = document.getElementById('proxyIdToEdit');
+            if (isEditing && isEditing.value) return;
+            if (input.value) return;
+            input.value = port;
+            input.placeholder = port;
+        }
+
+        async function fetchSuggestedPortForNewProxy(proxies) {
+            const input = document.getElementById('proxyLocalPort');
+            if (!input) return;
+
+            const isEditing = document.getElementById('proxyIdToEdit');
+            if (isEditing && isEditing.value) return; // do not override when editing
+
+            // Only fetch when no proxies for this client (new proxy scenario)
+            if (Array.isArray(proxies) && proxies.length > 0) return;
+
+            // Do not fetch if user already typed a value
+            if (input.value) return;
+
+            const clientId = selectedClient?.ID || selectedClient?.id;
+            if (!clientId) return;
+
+            // Use cached suggestion if available
+            if (suggestedPortCache[clientId]) {
+                setSuggestedPortValue(suggestedPortCache[clientId]);
+                return;
+            }
+
+            try {
+                const resp = await fetch(`/api/proxy/suggest?clientId=${encodeURIComponent(clientId)}`);
+                if (!resp.ok) return;
+                const data = await resp.json();
+                const ports = data.suggestedPorts || data.ports || [];
+                if (ports.length > 0) {
+                    suggestedPortCache[clientId] = ports[0];
+                    setSuggestedPortValue(ports[0]);
+                }
+            } catch (err) {
+                console.warn('Failed to fetch suggested port', err);
+            }
+        }
+
         function renderProxies(proxies) {
             const list = document.getElementById('proxyList');
                         if (!list) return;
@@ -1227,6 +1276,8 @@
                         <p style="font-size: 13px;">No proxy connections</p>
                     </div>
                 `;
+                // Suggest a port only when adding the first proxy and not in edit mode
+                fetchSuggestedPortForNewProxy(proxies);
                 return;
             }
 
@@ -1355,13 +1406,19 @@
             document.getElementById('proxyRemoteAddr').value = '';
             document.getElementById('proxyLocalPort').value = '';
             document.getElementById('proxyProtocol').value = 'TCP';
-            document.getElementById('proxyIdToEdit').value = '';
+            const hiddenId = document.getElementById('proxyIdToEdit');
+            if (hiddenId) {
+                hiddenId.value = '';
+            }
             
             const addBtn = document.querySelector('button[onclick="updateProxy()"]');
             if (addBtn) {
                 addBtn.textContent = '➕ Add Proxy Connection';
                 addBtn.onclick = function() { addProxy(); };
             }
+
+            // If there are no proxies, re-suggest a port after cancelling edit
+            fetchSuggestedPortForNewProxy([]);
         }
 
         async function addProxy() {
