@@ -1575,14 +1575,43 @@
             showConfirm('Uninstall Client', `Uninstall from ${escapeHtml(selectedClient.hostname || selectedClient.id)}?\n\nThis cannot be undone.`, uninstallClient);
         }
 
-        function removeClient() {
+        async function removeClient() {
+            if (!selectedClient) {
+                showStatus('Error', 'Please select a client first');
+                return;
+            }
+
             closeModal();
-            showStatus('Removed', 'Client removed from list');
+
+            try {
+                const response = await fetch('/api/client', {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: selectedClient.id })
+                });
+
+                if (!response.ok) {
+                    let message = 'Failed to remove client';
+                    try {
+                        const err = await response.json();
+                        if (err && err.error) message = err.error;
+                    } catch (_) {
+                        // ignore JSON parse errors
+                    }
+                    throw new Error(message);
+                }
+
+                showStatus('Removed', 'Client removed from list');
+            } catch (err) {
+                showStatus('Error', err.message || 'Failed to remove client');
+                return;
+            }
+
             selectedClient = null;
             // Clear middle and right columns
             document.getElementById('proxyMiddle').innerHTML = '<div style="text-align: center; padding: 60px 20px; color: var(--text-light);"><p style="font-size: 48px; margin-bottom: 15px;">🌐</p><p>Select a client to manage proxies</p></div>';
             document.getElementById('clientRight').innerHTML = '<div style="text-align: center; padding: 60px 20px; color: var(--text-light);"><p style="font-size: 48px; margin-bottom: 15px;">📋</p><p>Select a client to view details</p></div>';
-            loadClients();
+            await loadClients();
         }
 
         function uninstallClient() {

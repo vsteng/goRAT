@@ -768,6 +768,18 @@ func (s *Server) ClearProcessListResult(clientID string) {
 	delete(s.processListResults, clientID)
 }
 
+// clearCachedClientData removes any cached result blobs for a client
+func (s *Server) clearCachedClientData(clientID string) {
+	s.resultsMu.Lock()
+	delete(s.commandResults, clientID)
+	delete(s.fileListResults, clientID)
+	delete(s.driveListResults, clientID)
+	delete(s.fileDataResults, clientID)
+	delete(s.screenshotResults, clientID)
+	delete(s.processListResults, clientID)
+	s.resultsMu.Unlock()
+}
+
 // monitorClientStatus monitors client status and updates database
 func (s *Server) monitorClientStatus() {
 	defer func() {

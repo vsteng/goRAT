@@ -317,13 +317,27 @@ func (s *ClientStore) MarkOffline(timeout time.Duration) error {
 	return err
 }
 
-// DeleteClient removes a client from the database
+// DeleteClient removes a client and its proxies from the database
 func (s *ClientStore) DeleteClient(id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	_, err := s.db.Exec("DELETE FROM clients WHERE id = ?", id)
-	return err
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+
+	if _, err := tx.Exec("DELETE FROM proxies WHERE client_id = ?", id); err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	if _, err := tx.Exec("DELETE FROM clients WHERE id = ?", id); err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	return tx.Commit()
 }
 
 // Close closes the database connection

@@ -932,8 +932,20 @@ func (s *Server) ProxyFileServer(w http.ResponseWriter, r *http.Request) {
 	io.WriteString(w, "File content placeholder")
 }
 
-// HandleClientGet retrieves a specific client by ID
+// HandleClientGet retrieves or deletes a specific client by ID
 func (s *Server) HandleClientGet(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		s.handleClientLookup(w, r)
+	case http.MethodDelete:
+		s.handleClientDelete(w, r)
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+// handleClientLookup returns metadata for a single client
+func (s *Server) handleClientLookup(w http.ResponseWriter, r *http.Request) {
 	clientID := r.URL.Query().Get("id")
 	if clientID == "" {
 		// Try from path parameter
@@ -969,6 +981,76 @@ func (s *Server) HandleClientGet(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(meta)
+}
+
+// handleClientDelete removes a client record (and any proxies) and disconnects if connected
+func (s *Server) handleClientDelete(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	// Basic session check to ensure the request comes from the web UI
+	if s.webHandler != nil && s.webHandler.sessionMgr != nil {
+		cookie, err := r.Cookie("session_id")
+		if err != nil {
+			w.WriteHeader(http.StatusUnauthorized)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Unauthorized"})
+			return
+		}
+
+		if session, exists := s.webHandler.sessionMgr.GetSession(cookie.Value); exists {
+			s.webHandler.sessionMgr.RefreshSession(session.ID)
+		} else {
+			w.WriteHeader(http.StatusUnauthorized)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Unauthorized"})
+			return
+		}
+	}
+
+	clientID := r.URL.Query().Get("id")
+	if clientID == "" {
+		clientID = r.PathValue("id")
+	}
+
+	if clientID == "" {
+		var req struct {
+			ID       string `json:"id"`
+			ClientID string `json:"client_id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err == nil {
+			if req.ID != "" {
+				clientID = req.ID
+			} else {
+				clientID = req.ClientID
+			}
+		}
+	}
+
+	if clientID == "" {
+		http.Error(w, "Missing client ID", http.StatusBadRequest)
+		return
+	}
+
+	// Disconnect the client if it is currently connected
+	disconnected := s.manager.RemoveClient(clientID)
+
+	// Clear any cached results tied to this client to avoid stale data
+	s.clearCachedClientData(clientID)
+
+	// Remove persistent data (client record and proxies)
+	if s.store != nil {
+		if err := s.store.DeleteClient(clientID); err != nil {
+			log.Printf("Failed to delete client %s from store: %v", clientID, err)
+			http.Error(w, "Failed to delete client", http.StatusInternalServerError)
+			return
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"status":       "deleted",
+		"id":           clientID,
+		"disconnected": disconnected,
+		"persisted":    s.store != nil,
+	})
 }
 
 // HandleUpdateClientAlias updates the alias for a client

@@ -139,6 +139,25 @@ func (m *ClientManager) GetClient(id string) (*Client, bool) {
 	return client, ok
 }
 
+// RemoveClient forcibly disconnects and forgets a client by ID
+func (m *ClientManager) RemoveClient(id string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	client, ok := m.clients[id]
+	if !ok {
+		return false
+	}
+
+	m.safeCloseClient(client)
+	if client.Conn != nil {
+		client.Conn.Close()
+	}
+
+	delete(m.clients, id)
+	return true
+}
+
 // GetAllClients returns all connected clients
 func (m *ClientManager) GetAllClients() []*Client {
 	m.mu.RLock()
