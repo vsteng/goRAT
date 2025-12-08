@@ -93,7 +93,59 @@ func (s *ClientStore) initDB() error {
 	`
 
 	_, err := s.db.Exec(schema)
-	return err
+	if err != nil {
+		return err
+	}
+
+	// Run migrations for existing databases
+	return s.runMigrations()
+}
+
+// runMigrations handles database schema migrations for existing databases
+func (s *ClientStore) runMigrations() error {
+	// Check if alias column exists, add it if not
+	var columnName string
+	err := s.db.QueryRow("PRAGMA table_info(clients)").Scan(&columnName)
+	if err == nil {
+		// Table exists, check if alias column exists
+		rows, err := s.db.Query("PRAGMA table_info(clients)")
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+
+		hasAlias := false
+		for rows.Next() {
+			var cid int
+			var name string
+			var type_ string
+			var notnull int
+			var dflt_value interface{}
+			var pk int
+
+			err := rows.Scan(&cid, &name, &type_, &notnull, &dflt_value, &pk)
+			if err != nil {
+				continue
+			}
+
+			if name == "alias" {
+				hasAlias = true
+				break
+			}
+		}
+
+		if !hasAlias {
+			// Add alias column to existing table
+			_, err := s.db.Exec("ALTER TABLE clients ADD COLUMN alias TEXT")
+			if err != nil {
+				log.Printf("Migration warning: Could not add alias column: %v (may already exist)", err)
+			} else {
+				log.Printf("Migration successful: Added alias column to clients table")
+			}
+		}
+	}
+
+	return nil
 }
 
 // SaveClient saves or updates a client in the database
