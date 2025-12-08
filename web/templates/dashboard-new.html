@@ -915,6 +915,11 @@
                         <!-- LEFT COLUMN: Client List -->
                         <div class="clients-left">
                             <h3>👥 Clients</h3>
+                            <div style="margin-bottom: 12px;">
+                                <input type="text" id="clientSearchInput" placeholder="🔍 Search by alias, IP, hostname..." 
+                                    style="width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px;"
+                                    oninput="updateSearch(this.value)">
+                            </div>
                             <div class="filter-tabs">
                                 <button class="filter-tab active" onclick="filterClients('all')">All</button>
                                 <button class="filter-tab" onclick="filterClients('online')">Online</button>
@@ -1055,22 +1060,31 @@
         let selectedClient = null;
         let clients = [];
         let currentFilter = 'all';
+        let currentPage = 1;
+        const itemsPerPage = 10;
+        let searchQuery = '';
+        let clientsLoadTimeout = null;
         // Cache suggested ports per client to avoid re-fetching when not adding
         const suggestedPortCache = {};
 
         async function loadClients() {
-            try {
-                const response = await fetch('/api/clients');
-                if (response.status === 401) {
-                    window.location.href = '/login';
-                    return;
+            // Debounce multiple rapid calls
+            if (clientsLoadTimeout) clearTimeout(clientsLoadTimeout);
+            clientsLoadTimeout = setTimeout(async () => {
+                try {
+                    const response = await fetch('/api/clients');
+                    if (response.status === 401) {
+                        window.location.href = '/login';
+                        return;
+                    }
+                    clients = await response.json() || [];
+                    currentPage = 1;
+                    renderClientList();
+                    updateStats();
+                } catch (err) {
+                    console.error('Error loading clients:', err);
                 }
-                clients = await response.json() || [];
-                renderClientList();
-                updateStats();
-            } catch (err) {
-                console.error('Error loading clients:', err);
-            }
+            }, 800);
         }
 
         function renderClientList() {
@@ -1084,6 +1098,17 @@
                 filteredClients = clients.filter(c => c.status !== 'online');
             }
             
+            // Apply search filter
+            if (searchQuery.trim()) {
+                const q = searchQuery.toLowerCase();
+                filteredClients = filteredClients.filter(c => {
+                    const alias = (c.alias || '').toLowerCase();
+                    const hostname = (c.hostname || '').toLowerCase();
+                    const ip = (c.ip || '').toLowerCase();
+                    return alias.includes(q) || hostname.includes(q) || ip.includes(q);
+                });
+            }
+            
             if (filteredClients.length === 0) {
                 list.innerHTML = `
                     <div class="empty-state" style="padding: 40px 10px;">
@@ -1093,18 +1118,82 @@
                 return;
             }
 
-            list.innerHTML = filteredClients.map(client => `
+            // Pagination
+            const totalPages = Math.ceil(filteredClients.length / itemsPerPage);
+            const start = (currentPage - 1) * itemsPerPage;
+            const end = start + itemsPerPage;
+            const pageClients = filteredClients.slice(start, end);
+
+            let html = pageClients.map(client => `
                 <li class="client-item ${selectedClient?.id === client.id ? 'active' : ''}" 
                     onclick="selectClient(event, ${JSON.stringify(client).replace(/"/g, '&quot;')})">
-                    <div class="client-name">${escapeHtml(client.alias || client.hostname || client.id)}</div>
-                    <div class="client-meta">${escapeHtml(client.os || 'Unknown')}</div>
-                    <span class="status-badge ${client.status === 'online' ? 'online' : 'offline'}">${client.status}</span>
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;">
+                        <div style="flex: 1;">
+                            <div class="client-name">${escapeHtml(client.alias || client.hostname || client.id)}</div>
+                            <div class="client-meta">${escapeHtml(client.ip || 'Unknown IP')} • ${escapeHtml(client.os || 'Unknown OS')}</div>
+                        </div>
+                        <span class="status-badge ${client.status === 'online' ? 'online' : 'offline'}" style="white-space: nowrap;">${client.status}</span>
+                    </div>
                 </li>
             `).join('');
+
+            // Add pagination controls
+            if (totalPages > 1) {
+                html += `
+                    <div style="display: flex; justify-content: center; gap: 8px; margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border);">
+                        <button onclick="prevPage()" class="btn btn-secondary" style="padding: 6px 10px; font-size: 12px;" ${currentPage === 1 ? 'disabled' : ''}>← Prev</button>
+                        <div style="display: flex; align-items: center; font-size: 12px; color: var(--text-light);">${currentPage} / ${totalPages}</div>
+                        <button onclick="nextPage()" class="btn btn-secondary" style="padding: 6px 10px; font-size: 12px;" ${currentPage === totalPages ? 'disabled' : ''}>Next →</button>
+                    </div>
+                `;
+            }
+
+            list.innerHTML = html;
+        }
+
+        function nextPage() {
+            const totalPages = Math.ceil(getFilteredClients().length / itemsPerPage);
+            if (currentPage < totalPages) {
+                currentPage++;
+                renderClientList();
+            }
+        }
+
+        function prevPage() {
+            if (currentPage > 1) {
+                currentPage--;
+                renderClientList();
+            }
+        }
+
+        function getFilteredClients() {
+            let filtered = clients;
+            if (currentFilter === 'online') {
+                filtered = clients.filter(c => c.status === 'online');
+            } else if (currentFilter === 'offline') {
+                filtered = clients.filter(c => c.status !== 'online');
+            }
+            if (searchQuery.trim()) {
+                const q = searchQuery.toLowerCase();
+                filtered = filtered.filter(c => {
+                    const alias = (c.alias || '').toLowerCase();
+                    const hostname = (c.hostname || '').toLowerCase();
+                    const ip = (c.ip || '').toLowerCase();
+                    return alias.includes(q) || hostname.includes(q) || ip.includes(q);
+                });
+            }
+            return filtered;
+        }
+
+        function updateSearch(value) {
+            searchQuery = value;
+            currentPage = 1;
+            renderClientList();
         }
 
         function filterClients(filter) {
             currentFilter = filter;
+            currentPage = 1;
             
             // Update active filter tab
             document.querySelectorAll('.filter-tab').forEach(tab => {
