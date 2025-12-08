@@ -103,45 +103,39 @@ func (s *ClientStore) initDB() error {
 
 // runMigrations handles database schema migrations for existing databases
 func (s *ClientStore) runMigrations() error {
-	// Check if alias column exists, add it if not
-	var columnName string
-	err := s.db.QueryRow("PRAGMA table_info(clients)").Scan(&columnName)
-	if err == nil {
-		// Table exists, check if alias column exists
-		rows, err := s.db.Query("PRAGMA table_info(clients)")
+	// Check if alias column exists in clients table, add it if not
+	rows, err := s.db.Query("PRAGMA table_info(clients)")
+	if err != nil {
+		// Table might not exist yet (new database), no migration needed
+		return nil
+	}
+	defer rows.Close()
+
+	hasAlias := false
+	for rows.Next() {
+		var cid int
+		var name string
+		var type_ string
+		var notnull int
+		var dflt_value interface{}
+		var pk int
+
+		err := rows.Scan(&cid, &name, &type_, &notnull, &dflt_value, &pk)
 		if err != nil {
-			return err
-		}
-		defer rows.Close()
-
-		hasAlias := false
-		for rows.Next() {
-			var cid int
-			var name string
-			var type_ string
-			var notnull int
-			var dflt_value interface{}
-			var pk int
-
-			err := rows.Scan(&cid, &name, &type_, &notnull, &dflt_value, &pk)
-			if err != nil {
-				continue
-			}
-
-			if name == "alias" {
-				hasAlias = true
-				break
-			}
+			continue
 		}
 
-		if !hasAlias {
-			// Add alias column to existing table
-			_, err := s.db.Exec("ALTER TABLE clients ADD COLUMN alias TEXT")
-			if err != nil {
-				log.Printf("Migration warning: Could not add alias column: %v (may already exist)", err)
-			} else {
-				log.Printf("Migration successful: Added alias column to clients table")
-			}
+		if name == "alias" {
+			hasAlias = true
+			break
+		}
+	}
+
+	if !hasAlias {
+		// Add alias column to existing table
+		_, err := s.db.Exec("ALTER TABLE clients ADD COLUMN alias TEXT DEFAULT ''")
+		if err != nil {
+			log.Printf("Migration warning: Could not add alias column: %v (may already exist)", err)
 		}
 	}
 
@@ -159,6 +153,7 @@ func (s *ClientStore) SaveClient(metadata *common.ClientMetadata) error {
 		return err
 	}
 
+	// Try with alias column first, fall back to without if it doesn't exist
 	query := `
 	INSERT INTO clients (id, hostname, os, arch, ip, public_ip, alias, status, last_seen, first_seen, metadata, updated_at)
 	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
@@ -188,6 +183,37 @@ func (s *ClientStore) SaveClient(metadata *common.ClientMetadata) error {
 		metadata.LastSeen, // first_seen only set on insert
 		metadataJSON,
 	)
+
+	// If alias column doesn't exist, try without it
+	if err != nil && err.Error() == "table clients has no column named alias" {
+		query := `
+		INSERT INTO clients (id, hostname, os, arch, ip, public_ip, status, last_seen, first_seen, metadata, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+		ON CONFLICT(id) DO UPDATE SET
+			hostname = excluded.hostname,
+			os = excluded.os,
+			arch = excluded.arch,
+			ip = excluded.ip,
+			public_ip = excluded.public_ip,
+			status = excluded.status,
+			last_seen = excluded.last_seen,
+			metadata = excluded.metadata,
+			updated_at = CURRENT_TIMESTAMP
+		`
+
+		_, err = s.db.Exec(query,
+			metadata.ID,
+			metadata.Hostname,
+			metadata.OS,
+			metadata.Arch,
+			metadata.IP,
+			metadata.PublicIP,
+			metadata.Status,
+			metadata.LastSeen,
+			metadata.LastSeen, // first_seen only set on insert
+			metadataJSON,
+		)
+	}
 
 	return err
 }
@@ -226,13 +252,26 @@ func (s *ClientStore) GetAllClients() ([]*common.ClientMetadata, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	query := `SELECT id, hostname, os, arch, ip, public_ip, alias, status, last_seen, metadata 
+	// Use COALESCE to handle alias column gracefully if it doesn't exist in older databases
+	query := `SELECT id, hostname, os, arch, ip, public_ip, COALESCE(alias, ''), status, last_seen, metadata 
 	          FROM clients 
 	          ORDER BY last_seen DESC`
 
 	rows, err := s.db.Query(query)
 	if err != nil {
-		return nil, err
+		log.Printf("GetAllClients query error: %v", err)
+		// If alias column doesn't exist, try without it
+		if err.Error() == "no such column: alias" {
+			query = `SELECT id, hostname, os, arch, ip, public_ip, '', status, last_seen, metadata 
+			          FROM clients 
+			          ORDER BY last_seen DESC`
+			rows, err = s.db.Query(query)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			return nil, err
+		}
 	}
 	defer rows.Close()
 
