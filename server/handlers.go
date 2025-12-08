@@ -192,6 +192,7 @@ func (s *Server) Start() error {
 	mux.HandleFunc("/api/proxy/create", s.HandleProxyCreate)
 	mux.HandleFunc("/api/proxy/list", s.HandleProxyList)
 	mux.HandleFunc("/api/proxy/close", s.HandleProxyClose)
+	mux.HandleFunc("/api/proxy/edit", s.HandleProxyEdit)
 	mux.HandleFunc("/api/proxy/stats", s.HandleProxyStats)
 
 	// Client management endpoints

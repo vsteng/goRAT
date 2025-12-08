@@ -8,6 +8,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -68,6 +69,12 @@ func (pm *ProxyManager) CreateProxyConnection(clientID, remoteHost string, remot
 	// Verify websocket is open
 	if client.Conn == nil || client.Conn.RemoteAddr() == nil {
 		return nil, fmt.Errorf("client websocket not connected: %s", clientID)
+	}
+
+	// Normalize protocol to lowercase
+	protocol = strings.ToLower(protocol)
+	if protocol == "" {
+		protocol = "tcp"
 	}
 
 	// Generate unique ID
@@ -379,6 +386,70 @@ func (pm *ProxyManager) GetProxyConnection(id string) *ProxyConnection {
 	return pm.connections[id]
 }
 
+// UpdateProxyConnection updates an existing proxy connection settings
+func (pm *ProxyManager) UpdateProxyConnection(id, remoteHost string, remotePort, localPort int, protocol string) error {
+	pm.mu.Lock()
+	defer pm.mu.Unlock()
+
+	conn, exists := pm.connections[id]
+	if !exists {
+		return fmt.Errorf("proxy connection not found: %s", id)
+	}
+
+	// Normalize protocol to lowercase
+	protocol = strings.ToLower(protocol)
+	if protocol == "" {
+		protocol = "tcp"
+	}
+
+	// If port changed, update port mapping
+	if localPort != conn.LocalPort {
+		// Check if new port is available
+		listener, err := net.Listen("tcp", fmt.Sprintf(":%d", localPort))
+		if err != nil {
+			return fmt.Errorf("failed to listen on new port %d: %v", localPort, err)
+		}
+
+		// Close old listener
+		if conn.listener != nil {
+			conn.listener.Close()
+		}
+
+		// Update port mapping
+		pm.portMapMu.Lock()
+		delete(pm.portMap, conn.LocalPort)
+		pm.portMap[localPort] = id
+		pm.portMapMu.Unlock()
+
+		// Update listener
+		conn.listener = listener
+		conn.LocalPort = localPort
+
+		// Restart accepting connections with new listener
+		go pm.acceptConnections(conn)
+	}
+
+	// Update other fields
+	conn.mu.Lock()
+	conn.RemoteHost = remoteHost
+	conn.RemotePort = remotePort
+	conn.Protocol = protocol
+	conn.LastActive = time.Now()
+	conn.mu.Unlock()
+
+	// Persist changes to database
+	if pm.store != nil {
+		if err := pm.store.UpdateProxy(conn); err != nil {
+			log.Printf("WARNING: Failed to update proxy in database: %v", err)
+		}
+	}
+
+	log.Printf("Updated proxy connection: %s (local: :%d -> %s:%d, protocol: %s)",
+		id, localPort, remoteHost, remotePort, protocol)
+
+	return nil
+}
+
 // ListProxyConnections lists all proxy connections for a client
 func (pm *ProxyManager) ListProxyConnections(clientID string) []*ProxyConnection {
 	pm.mu.RLock()
@@ -542,6 +613,92 @@ func (s *Server) HandleProxyClose(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "closed"})
+}
+
+// HandleProxyEdit updates an existing proxy connection via HTTP
+func (s *Server) HandleProxyEdit(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var rawReq map[string]interface{}
+	if err := json.NewDecoder(r.Body).Decode(&rawReq); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// Extract fields
+	proxyID := ""
+	remoteHost := ""
+	remotePort := 0
+	localPort := 0
+	protocol := ""
+
+	// Try snake_case and camelCase
+	if v, ok := rawReq["proxy_id"].(string); ok {
+		proxyID = v
+	} else if v, ok := rawReq["proxyId"].(string); ok {
+		proxyID = v
+	}
+
+	if v, ok := rawReq["remote_host"].(string); ok {
+		remoteHost = v
+	} else if v, ok := rawReq["remoteHost"].(string); ok {
+		remoteHost = v
+	}
+
+	if v, ok := rawReq["remote_port"].(float64); ok {
+		remotePort = int(v)
+	} else if v, ok := rawReq["remotePort"].(float64); ok {
+		remotePort = int(v)
+	}
+
+	if v, ok := rawReq["local_port"].(float64); ok {
+		localPort = int(v)
+	} else if v, ok := rawReq["localPort"].(float64); ok {
+		localPort = int(v)
+	}
+
+	if v, ok := rawReq["protocol"].(string); ok {
+		protocol = v
+	}
+
+	// Validate required fields
+	if proxyID == "" {
+		http.Error(w, "Missing proxy_id", http.StatusBadRequest)
+		return
+	}
+	if remoteHost == "" {
+		http.Error(w, "Missing remote_host", http.StatusBadRequest)
+		return
+	}
+	if remotePort == 0 {
+		http.Error(w, "Missing remote_port", http.StatusBadRequest)
+		return
+	}
+	if localPort == 0 {
+		http.Error(w, "Missing local_port", http.StatusBadRequest)
+		return
+	}
+
+	if protocol == "" {
+		protocol = "tcp"
+	}
+
+	if s.proxyManager == nil {
+		http.Error(w, "Proxy manager not initialized", http.StatusInternalServerError)
+		return
+	}
+
+	if err := s.proxyManager.UpdateProxyConnection(proxyID, remoteHost, remotePort, localPort, protocol); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	conn := s.proxyManager.GetProxyConnection(proxyID)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(conn)
 }
 
 // HandleProxyStats retrieves statistics for a proxy connection

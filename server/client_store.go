@@ -388,6 +388,28 @@ func (s *ClientStore) DeleteProxy(id string) error {
 	return err
 }
 
+// UpdateProxy updates an existing proxy connection in the database
+func (s *ClientStore) UpdateProxy(proxy *ProxyConnection) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	query := `
+	UPDATE proxies
+	SET local_port = ?, remote_host = ?, remote_port = ?, protocol = ?, updated_at = CURRENT_TIMESTAMP
+	WHERE id = ?
+	`
+
+	_, err := s.db.Exec(query,
+		proxy.LocalPort,
+		proxy.RemoteHost,
+		proxy.RemotePort,
+		proxy.Protocol,
+		proxy.ID,
+	)
+
+	return err
+}
+
 // WebUser represents a web UI user
 type WebUser struct {
 	ID        int        `json:"id"`

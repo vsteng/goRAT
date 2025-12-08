@@ -1230,6 +1230,7 @@
                         <span>Protocol: ${escapeHtml(proxy.Protocol)}</span>
                         <span>Status: ${escapeHtml(proxy.Status)}</span>
                     </div>
+                    <button onclick="editProxy('${escapeHtml(proxy.ID)}', '${escapeHtml(proxy.RemoteHost)}', ${proxy.RemotePort}, ${proxy.LocalPort}, '${escapeHtml(proxy.Protocol)}')">✏️ Edit</button>
                     <button onclick="deleteProxy('${escapeHtml(proxy.ID)}')">🗑️ Delete</button>
                 </li>
             `).join('');
@@ -1257,6 +1258,102 @@
             } catch (err) {
                 console.error('Error:', err);
                 showStatus('Error', 'Error closing proxy connection');
+            }
+        }
+
+        function editProxy(proxyId, remoteHost, remotePort, localPort, protocol) {
+            // Set form fields with current values
+            document.getElementById('proxyRemoteAddr').value = `${remoteHost}:${remotePort}`;
+            document.getElementById('proxyLocalPort').value = localPort;
+            document.getElementById('proxyProtocol').value = protocol.toUpperCase();
+            
+            // Store the proxy ID in a hidden field for update
+            let hiddenId = document.getElementById('proxyIdToEdit');
+            if (!hiddenId) {
+                hiddenId = document.createElement('input');
+                hiddenId.id = 'proxyIdToEdit';
+                hiddenId.type = 'hidden';
+                document.getElementById('proxyLocalPort').parentElement.appendChild(hiddenId);
+            }
+            hiddenId.value = proxyId;
+            
+            // Change button text
+            const addBtn = document.querySelector('button[onclick="addProxy()"]');
+            if (addBtn) {
+                addBtn.textContent = '💾 Update Proxy Connection';
+                addBtn.onclick = function() { updateProxy(); };
+            }
+            
+            // Scroll to form
+            document.getElementById('proxyLocalPort').focus();
+        }
+
+        async function updateProxy() {
+            const remoteAddr = document.getElementById('proxyRemoteAddr').value.trim();
+            const localPort = document.getElementById('proxyLocalPort').value.trim();
+            const protocol = document.getElementById('proxyProtocol').value;
+            const proxyId = document.getElementById('proxyIdToEdit').value;
+
+            if (!proxyId) {
+                showStatus('Error', 'No proxy selected for edit');
+                return;
+            }
+
+            if (!remoteAddr || !localPort) {
+                showStatus('Error', 'Please fill in all fields');
+                return;
+            }
+
+            const [remoteHost, remotePort] = remoteAddr.split(':');
+            if (!remoteHost || !remotePort) {
+                showStatus('Error', 'Invalid address format. Use: 127.0.0.1:22');
+                return;
+            }
+
+            if (isNaN(localPort) || isNaN(remotePort)) {
+                showStatus('Error', 'Port numbers must be numeric');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/proxy/edit', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        proxyId: proxyId,
+                        remoteHost: remoteHost,
+                        remotePort: parseInt(remotePort),
+                        localPort: parseInt(localPort),
+                        protocol: protocol
+                    })
+                });
+
+                if (response.ok) {
+                    showStatus('Success', 'Proxy connection updated!');
+                    cancelProxyEdit();
+                    setTimeout(loadProxies, 500);
+                } else if (response.status === 401) {
+                    window.location.href = '/login';
+                } else {
+                    const errText = await response.text();
+                    showStatus('Error', 'Failed to update proxy: ' + errText);
+                }
+            } catch (err) {
+                console.error('Error:', err);
+                showStatus('Error', 'Error updating proxy connection');
+            }
+        }
+
+        function cancelProxyEdit() {
+            document.getElementById('proxyRemoteAddr').value = '';
+            document.getElementById('proxyLocalPort').value = '';
+            document.getElementById('proxyProtocol').value = 'TCP';
+            document.getElementById('proxyIdToEdit').value = '';
+            
+            const addBtn = document.querySelector('button[onclick="updateProxy()"]');
+            if (addBtn) {
+                addBtn.textContent = '➕ Add Proxy Connection';
+                addBtn.onclick = function() { addProxy(); };
             }
         }
 
