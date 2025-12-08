@@ -510,8 +510,13 @@ func (pm *ProxyManager) UpdateProxyConnection(id, remoteHost string, remotePort,
 	// Persist changes to database
 	if pm.store != nil {
 		if err := pm.store.UpdateProxy(conn); err != nil {
-			log.Printf("WARNING: Failed to update proxy in database: %v", err)
+			log.Printf("ERROR: Failed to update proxy in database: %v", err)
+			return fmt.Errorf("failed to update database: %v", err)
 		}
+		log.Printf("✅ Updated proxy in database: %s (local: :%d -> %s:%d, protocol: %s)",
+			id, localPort, remoteHost, remotePort, protocol)
+	} else {
+		log.Printf("⚠️  No database store available, proxy updated in memory only")
 	}
 
 	log.Printf("Updated proxy connection: %s (local: :%d -> %s:%d, protocol: %s)",
