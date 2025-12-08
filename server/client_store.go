@@ -649,3 +649,13 @@ func (s *ClientStore) UserExists(username string) (bool, error) {
 	err := s.db.QueryRow("SELECT COUNT(*) FROM web_users WHERE username = ?", username).Scan(&count)
 	return count > 0, err
 }
+
+// AdminExists checks if any admin user exists
+func (s *ClientStore) AdminExists() (bool, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var count int
+	err := s.db.QueryRow("SELECT COUNT(*) FROM web_users WHERE role = ?", "admin").Scan(&count)
+	return count > 0, err
+}

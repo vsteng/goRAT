@@ -566,6 +566,22 @@ func (pm *ProxyManager) RestoreProxiesForClient(clientID string) {
 	log.Printf("Restoring %d proxies for client %s...", len(proxies), clientID)
 
 	for _, proxy := range proxies {
+		// Check if this proxy already exists in memory (already running)
+		pm.mu.RLock()
+		alreadyExists := false
+		for _, conn := range pm.connections {
+			if conn.ClientID == clientID && conn.LocalPort == proxy.LocalPort {
+				alreadyExists = true
+				log.Printf("  ℹ️  Proxy already running on :%d, skipping restore", proxy.LocalPort)
+				break
+			}
+		}
+		pm.mu.RUnlock()
+
+		if alreadyExists {
+			continue
+		}
+
 		// Try to recreate the proxy
 		conn, err := pm.CreateProxyConnection(
 			proxy.ClientID,
