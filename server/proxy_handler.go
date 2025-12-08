@@ -103,6 +103,11 @@ func (pm *ProxyManager) GetSuggestedPorts(basePort int, count int) []int {
 
 // CreateProxyConnection creates a new proxy tunnel
 func (pm *ProxyManager) CreateProxyConnection(clientID, remoteHost string, remotePort, localPort int, protocol string) (*ProxyConnection, error) {
+	return pm.createProxyConnectionWithID("", clientID, remoteHost, remotePort, localPort, protocol)
+}
+
+// createProxyConnectionWithID creates a proxy with an optional specific ID (used for restores)
+func (pm *ProxyManager) createProxyConnectionWithID(id, clientID, remoteHost string, remotePort, localPort int, protocol string) (*ProxyConnection, error) {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
 
@@ -131,8 +136,10 @@ func (pm *ProxyManager) CreateProxyConnection(clientID, remoteHost string, remot
 		protocol = "tcp"
 	}
 
-	// Generate unique ID
-	id := fmt.Sprintf("%s-%d-%d", clientID, localPort, time.Now().Unix())
+	// Generate unique ID if not provided
+	if id == "" {
+		id = fmt.Sprintf("%s-%d-%d", clientID, localPort, time.Now().Unix())
+	}
 
 	conn := &ProxyConnection{
 		ID:           id,
@@ -587,8 +594,9 @@ func (pm *ProxyManager) RestoreProxiesForClient(clientID string) {
 			continue
 		}
 
-		// Try to recreate the proxy
-		conn, err := pm.CreateProxyConnection(
+		// Try to recreate the proxy with the ORIGINAL ID from database
+		conn, err := pm.createProxyConnectionWithID(
+			proxy.ID, // Use the original proxy ID
 			proxy.ClientID,
 			proxy.RemoteHost,
 			proxy.RemotePort,
@@ -603,6 +611,11 @@ func (pm *ProxyManager) RestoreProxiesForClient(clientID string) {
 
 		log.Printf("  ✅ Restored proxy: :%d -> %s:%d (protocol: %s)",
 			conn.LocalPort, conn.RemoteHost, conn.RemotePort, conn.Protocol)
+	}
+
+	// Clean up old/duplicate proxy records with same client_id and local_port but different IDs
+	if pm.store != nil {
+		pm.store.CleanupDuplicateProxies(clientID)
 	}
 }
 

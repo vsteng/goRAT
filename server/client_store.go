@@ -519,6 +519,33 @@ func (s *ClientStore) UpdateProxy(proxy *ProxyConnection) error {
 	return err
 }
 
+// CleanupDuplicateProxies removes old proxy records with the same client_id and local_port
+// Keeps only the most recent one (by id timestamp)
+func (s *ClientStore) CleanupDuplicateProxies(clientID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	query := `
+	DELETE FROM proxies 
+	WHERE (client_id, local_port, id) IN (
+		SELECT client_id, local_port, id 
+		FROM proxies 
+		WHERE client_id = ? 
+		GROUP BY client_id, local_port 
+		HAVING COUNT(*) > 1
+	)
+	AND id NOT IN (
+		SELECT MAX(id) 
+		FROM proxies 
+		WHERE client_id = ? 
+		GROUP BY client_id, local_port
+	)
+	`
+
+	_, err := s.db.Exec(query, clientID, clientID)
+	return err
+}
+
 // WebUser represents a web UI user
 type WebUser struct {
 	ID        int        `json:"id"`
