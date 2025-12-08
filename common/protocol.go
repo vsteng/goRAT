@@ -258,6 +258,7 @@ type ClientMetadata struct {
 	OS            string    `json:"os"`
 	Arch          string    `json:"arch"`
 	Hostname      string    `json:"hostname"`
+	Alias         string    `json:"alias"`     // User-defined alias for the client
 	IP            string    `json:"ip"`        // Local/private IP
 	PublicIP      string    `json:"public_ip"` // Public IP (from proxy)
 	Status        string    `json:"status"`

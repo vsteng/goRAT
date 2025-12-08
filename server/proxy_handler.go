@@ -467,6 +467,45 @@ func (pm *ProxyManager) ListAllProxyConnections() []*ProxyConnection {
 	return result
 }
 
+// RestoreProxiesForClient restores saved proxies for a client when they reconnect
+func (pm *ProxyManager) RestoreProxiesForClient(clientID string) {
+	if pm.store == nil {
+		return
+	}
+
+	// Get proxies for this client from database
+	proxies, err := pm.store.GetProxies(clientID)
+	if err != nil {
+		log.Printf("Error loading proxies for client %s: %v", clientID, err)
+		return
+	}
+
+	if len(proxies) == 0 {
+		return // No proxies to restore
+	}
+
+	log.Printf("Restoring %d proxies for client %s...", len(proxies), clientID)
+
+	for _, proxy := range proxies {
+		// Try to recreate the proxy
+		conn, err := pm.CreateProxyConnection(
+			proxy.ClientID,
+			proxy.RemoteHost,
+			proxy.RemotePort,
+			proxy.LocalPort,
+			proxy.Protocol,
+		)
+
+		if err != nil {
+			log.Printf("  ⚠️  Failed to restore proxy %s: %v", proxy.ID, err)
+			continue
+		}
+
+		log.Printf("  ✅ Restored proxy: :%d -> %s:%d (protocol: %s)",
+			conn.LocalPort, conn.RemoteHost, conn.RemotePort, conn.Protocol)
+	}
+}
+
 // HandleProxyCreate handles creating a new proxy connection via HTTP
 func (s *Server) HandleProxyCreate(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -783,6 +822,45 @@ func (s *Server) HandleClientGet(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(meta)
+}
+
+// HandleUpdateClientAlias updates the alias for a client
+func (s *Server) HandleUpdateClientAlias(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req map[string]string
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	clientID := req["client_id"]
+	alias := req["alias"]
+
+	if clientID == "" {
+		http.Error(w, "Missing client_id", http.StatusBadRequest)
+		return
+	}
+
+	// Update in database
+	if s.store != nil {
+		if err := s.store.UpdateClientAlias(clientID, alias); err != nil {
+			http.Error(w, "Failed to update alias", http.StatusInternalServerError)
+			return
+		}
+	}
+
+	// Update in memory
+	client, exists := s.manager.GetClient(clientID)
+	if exists && client.Metadata != nil {
+		client.Metadata.Alias = alias
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "updated", "alias": alias})
 }
 
 // HandleFilesAPI serves file list for a client

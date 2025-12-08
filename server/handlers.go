@@ -197,6 +197,7 @@ func (s *Server) Start() error {
 
 	// Client management endpoints
 	mux.HandleFunc("/api/client", s.HandleClientGet)
+	mux.HandleFunc("/api/client/alias", s.HandleUpdateClientAlias)
 	mux.HandleFunc("/api/files", s.HandleFilesAPI)
 	mux.HandleFunc("/api/processes", s.HandleProcessesAPI)
 	mux.HandleFunc("/api/proxy-file", s.ProxyFileServer)
@@ -354,6 +355,12 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.manager.register <- client
+
+	// Restore proxies for this client if it was previously configured
+	if s.proxyManager == nil {
+		s.proxyManager = NewProxyManager(s.manager, s.store)
+	}
+	go s.proxyManager.RestoreProxiesForClient(client.ID)
 
 	// Start goroutines for reading and writing
 	go s.readPump(client)

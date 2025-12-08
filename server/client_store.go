@@ -48,6 +48,7 @@ func (s *ClientStore) initDB() error {
 		arch TEXT,
 		ip TEXT,
 		public_ip TEXT,
+		alias TEXT,
 		status TEXT,
 		last_seen DATETIME,
 		first_seen DATETIME,
@@ -107,14 +108,15 @@ func (s *ClientStore) SaveClient(metadata *common.ClientMetadata) error {
 	}
 
 	query := `
-	INSERT INTO clients (id, hostname, os, arch, ip, public_ip, status, last_seen, first_seen, metadata, updated_at)
-	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+	INSERT INTO clients (id, hostname, os, arch, ip, public_ip, alias, status, last_seen, first_seen, metadata, updated_at)
+	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
 	ON CONFLICT(id) DO UPDATE SET
 		hostname = excluded.hostname,
 		os = excluded.os,
 		arch = excluded.arch,
 		ip = excluded.ip,
 		public_ip = excluded.public_ip,
+		alias = excluded.alias,
 		status = excluded.status,
 		last_seen = excluded.last_seen,
 		metadata = excluded.metadata,
@@ -128,6 +130,7 @@ func (s *ClientStore) SaveClient(metadata *common.ClientMetadata) error {
 		metadata.Arch,
 		metadata.IP,
 		metadata.PublicIP,
+		metadata.Alias,
 		metadata.Status,
 		metadata.LastSeen,
 		metadata.LastSeen, // first_seen only set on insert
@@ -145,7 +148,7 @@ func (s *ClientStore) GetClient(id string) (*common.ClientMetadata, error) {
 	var metadata common.ClientMetadata
 	var metadataJSON string
 
-	query := `SELECT id, hostname, os, arch, ip, public_ip, status, last_seen, metadata FROM clients WHERE id = ?`
+	query := `SELECT id, hostname, os, arch, ip, public_ip, alias, status, last_seen, metadata FROM clients WHERE id = ?`
 	err := s.db.QueryRow(query, id).Scan(
 		&metadata.ID,
 		&metadata.Hostname,
@@ -153,6 +156,7 @@ func (s *ClientStore) GetClient(id string) (*common.ClientMetadata, error) {
 		&metadata.Arch,
 		&metadata.IP,
 		&metadata.PublicIP,
+		&metadata.Alias,
 		&metadata.Status,
 		&metadata.LastSeen,
 		&metadataJSON,
@@ -170,7 +174,7 @@ func (s *ClientStore) GetAllClients() ([]*common.ClientMetadata, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	query := `SELECT id, hostname, os, arch, ip, public_ip, status, last_seen, metadata 
+	query := `SELECT id, hostname, os, arch, ip, public_ip, alias, status, last_seen, metadata 
 	          FROM clients 
 	          ORDER BY last_seen DESC`
 
@@ -192,6 +196,7 @@ func (s *ClientStore) GetAllClients() ([]*common.ClientMetadata, error) {
 			&metadata.Arch,
 			&metadata.IP,
 			&metadata.PublicIP,
+			&metadata.Alias,
 			&metadata.Status,
 			&metadata.LastSeen,
 			&metadataJSON,
@@ -254,6 +259,19 @@ func (s *ClientStore) GetStats() (total, online, offline int, err error) {
 	return
 }
 
+// UpdateClientAlias updates the alias for a client
+func (s *ClientStore) UpdateClientAlias(clientID, alias string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	_, err := s.db.Exec(
+		"UPDATE clients SET alias = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+		alias,
+		clientID,
+	)
+	return err
+}
+
 // SaveProxy saves a proxy connection to the database
 func (s *ClientStore) SaveProxy(proxy *ProxyConnection) error {
 	s.mu.Lock()
@@ -263,6 +281,10 @@ func (s *ClientStore) SaveProxy(proxy *ProxyConnection) error {
 	INSERT INTO proxies (id, client_id, local_port, remote_host, remote_port, protocol, status, updated_at)
 	VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
 	ON CONFLICT(id) DO UPDATE SET
+		local_port = excluded.local_port,
+		remote_host = excluded.remote_host,
+		remote_port = excluded.remote_port,
+		protocol = excluded.protocol,
 		status = excluded.status,
 		updated_at = CURRENT_TIMESTAMP
 	`
@@ -289,6 +311,7 @@ func (s *ClientStore) GetProxies(clientID string) ([]*ProxyConnection, error) {
 	SELECT id, client_id, local_port, remote_host, remote_port, protocol, status, created_at
 	FROM proxies
 	WHERE client_id = ? AND status = 'active'
+	ORDER BY created_at DESC
 	`
 
 	rows, err := s.db.Query(query, clientID)

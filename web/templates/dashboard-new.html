@@ -1094,7 +1094,7 @@
             list.innerHTML = filteredClients.map(client => `
                 <li class="client-item ${selectedClient?.id === client.id ? 'active' : ''}" 
                     onclick="selectClient(event, ${JSON.stringify(client).replace(/"/g, '&quot;')})">
-                    <div class="client-name">${escapeHtml(client.hostname || client.id)}</div>
+                    <div class="client-name">${escapeHtml(client.alias || client.hostname || client.id)}</div>
                     <div class="client-meta">${escapeHtml(client.os || 'Unknown')}</div>
                     <span class="status-badge ${client.status === 'online' ? 'online' : 'offline'}">${client.status}</span>
                 </li>
@@ -1157,6 +1157,13 @@
                     <div class="details-row">
                         <div class="details-label">Client ID</div>
                         <div class="details-value" style="font-family: monospace; font-size: 11px; word-break: break-all;">${escapeHtml(client.id)}</div>
+                    </div>
+                    <div class="details-row">
+                        <div class="details-label">Alias</div>
+                        <div style="display: flex; gap: 8px; align-items: center;">
+                            <input type="text" id="aliasInput" placeholder="Enter alias..." value="${escapeHtml(client.alias || '')}" style="flex: 1; padding: 6px 8px; border: 1px solid var(--border); border-radius: 4px;">
+                            <button onclick="saveAlias()" style="padding: 6px 12px; background: var(--primary); color: white; border: none; border-radius: 4px; cursor: pointer;">✓</button>
+                        </div>
                     </div>
                     <div class="details-row">
                         <div class="details-label">Hostname</div>
@@ -1441,6 +1448,37 @@
         function openClientPanel() {
             if (!selectedClient) return;
             window.open(`/client-details?id=${encodeURIComponent(selectedClient.id)}`, '_blank', 'width=1400,height=800');
+        }
+
+        async function saveAlias() {
+            if (!selectedClient) return;
+            
+            const aliasInput = document.getElementById('aliasInput');
+            const alias = aliasInput.value.trim();
+            
+            try {
+                const response = await fetch('/api/client/alias', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        client_id: selectedClient.id,
+                        alias: alias
+                    })
+                });
+                
+                if (response.ok) {
+                    selectedClient.alias = alias;
+                    showStatus('Success', 'Alias updated!');
+                    renderClientList();
+                } else if (response.status === 401) {
+                    window.location.href = '/login';
+                } else {
+                    showStatus('Error', 'Failed to update alias');
+                }
+            } catch (err) {
+                console.error('Error:', err);
+                showStatus('Error', 'Error updating alias');
+            }
         }
 
         function sendCommand() {
