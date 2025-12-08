@@ -17,6 +17,8 @@ const (
 	DefaultDaemon    = false
 	DefaultAutoStart = true
 	DefaultEnableLog = true
+	// ShowHelp controls whether to show help/usage information
+	ShowHelp = true
 )
 
 func init() {

