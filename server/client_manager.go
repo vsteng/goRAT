@@ -17,7 +17,8 @@ type Client struct {
 	Metadata *common.ClientMetadata
 	Send     chan *common.Message
 	mu       sync.RWMutex
-	closed   bool // Track if Send channel is closed
+	closed   bool       // Track if Send channel is closed
+	writeMu  sync.Mutex // Protects WebSocket writes (not thread-safe)
 }
 
 // ClientManager manages all connected clients

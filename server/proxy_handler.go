@@ -12,7 +12,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gorilla/websocket"
 	"mww2.com/server_manager/common"
 )
 
@@ -188,26 +187,18 @@ func (pm *ProxyManager) acceptConnections(conn *ProxyConnection) {
 	log.Printf("Stopped accepting connections for proxy %s", conn.ID)
 }
 
-// sendWebSocketMessage sends a message to websocket with timeout (non-blocking)
-func (pm *ProxyManager) sendWebSocketMessage(conn interface{}, msg interface{}) error {
-	// Type assert to get the actual websocket connection
-	wsConn, ok := conn.(*websocket.Conn)
-	if !ok || wsConn == nil {
+// sendWebSocketMessage sends a message to websocket (thread-safe write)
+func (pm *ProxyManager) sendWebSocketMessage(client *Client, msg interface{}) error {
+	if client == nil || client.Conn == nil {
 		return fmt.Errorf("websocket connection is invalid")
 	}
 
-	// Use a channel to track write completion with timeout
-	done := make(chan error, 1)
-	go func() {
-		done <- wsConn.WriteJSON(msg)
-	}()
+	// Use client's write mutex to ensure thread-safe writes
+	client.writeMu.Lock()
+	err := client.Conn.WriteJSON(msg)
+	client.writeMu.Unlock()
 
-	select {
-	case err := <-done:
-		return err
-	case <-time.After(5 * time.Second):
-		return fmt.Errorf("websocket write timeout")
-	}
+	return err
 }
 
 // handleUserConnection handles a user connection by relaying through websocket to the remote server
@@ -228,7 +219,7 @@ func (pm *ProxyManager) handleUserConnection(proxyConn *ProxyConnection, userCon
 				"proxy_id": proxyConn.ID,
 				"user_id":  userID,
 			}
-			go pm.sendWebSocketMessage(client.Conn, msg) // Async, don't block
+			go pm.sendWebSocketMessage(client, msg) // Async, don't block
 		}
 
 		log.Printf("User connection closed: proxy=%s, user=%s", proxyConn.ID, userID)
@@ -256,7 +247,7 @@ func (pm *ProxyManager) handleUserConnection(proxyConn *ProxyConnection, userCon
 		"protocol":    proxyConn.Protocol,
 	}
 
-	if err := pm.sendWebSocketMessage(client.Conn, connectMsg); err != nil {
+	if err := pm.sendWebSocketMessage(client, connectMsg); err != nil {
 		log.Printf("Failed to send proxy_connect message: %v", err)
 		return
 	}
@@ -290,7 +281,7 @@ func (pm *ProxyManager) handleUserConnection(proxyConn *ProxyConnection, userCon
 				"data":     base64.StdEncoding.EncodeToString(buf[:n]),
 			}
 
-			if err := pm.sendWebSocketMessage(client.Conn, dataMsg); err != nil {
+			if err := pm.sendWebSocketMessage(client, dataMsg); err != nil {
 				log.Printf("Failed to send proxy_data message: %v", err)
 				break
 			}
