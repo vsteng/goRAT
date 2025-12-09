@@ -23,7 +23,241 @@ import (
 
 const (
 	ClientVersion = "1.0.0"
+
+	// Connection pool settings
+	MaxPooledConns   = 10               // Maximum connections per remote host
+	PoolConnIdleTime = 5 * time.Minute  // Idle timeout
+	PoolConnLifetime = 30 * time.Minute // Max connection lifetime
 )
+
+// PooledConnection represents a pooled connection
+type PooledConnection struct {
+	conn       net.Conn
+	lastUsed   time.Time
+	created    time.Time
+	inUse      bool
+	usageCount int
+}
+
+// ConnectionPool manages connections to a specific remote address
+type ConnectionPool struct {
+	addr        string
+	connections []*PooledConnection
+	mu          sync.Mutex
+	maxConns    int
+	idleTimeout time.Duration
+	maxLifetime time.Duration
+}
+
+// PoolManager manages all connection pools
+type PoolManager struct {
+	pools map[string]*ConnectionPool
+	mu    sync.RWMutex
+}
+
+// NewPoolManager creates a new pool manager
+func NewPoolManager() *PoolManager {
+	return &PoolManager{
+		pools: make(map[string]*ConnectionPool),
+	}
+}
+
+// GetPool returns or creates a connection pool for an address
+func (pm *PoolManager) GetPool(addr string) *ConnectionPool {
+	pm.mu.RLock()
+	pool, exists := pm.pools[addr]
+	pm.mu.RUnlock()
+
+	if exists {
+		return pool
+	}
+
+	pm.mu.Lock()
+	defer pm.mu.Unlock()
+
+	// Double-check after acquiring write lock
+	if pool, exists = pm.pools[addr]; exists {
+		return pool
+	}
+
+	pool = &ConnectionPool{
+		addr:        addr,
+		connections: make([]*PooledConnection, 0, MaxPooledConns),
+		maxConns:    MaxPooledConns,
+		idleTimeout: PoolConnIdleTime,
+		maxLifetime: PoolConnLifetime,
+	}
+	pm.pools[addr] = pool
+	return pool
+}
+
+// Get retrieves or creates a connection from the pool
+func (cp *ConnectionPool) Get() (net.Conn, error) {
+	cp.mu.Lock()
+	defer cp.mu.Unlock()
+
+	now := time.Now()
+
+	// Try to find an available connection
+	for _, pc := range cp.connections {
+		if pc.inUse {
+			continue
+		}
+
+		// Check if connection is expired
+		if now.Sub(pc.created) > cp.maxLifetime || now.Sub(pc.lastUsed) > cp.idleTimeout {
+			pc.conn.Close()
+			continue
+		}
+
+		// Mark as in-use and return
+		pc.inUse = true
+		pc.lastUsed = now
+		pc.usageCount++
+		return pc.conn, nil
+	}
+
+	// No available connection, create new if under limit
+	if len(cp.connections) < cp.maxConns {
+		conn, err := net.Dial("tcp", cp.addr)
+		if err != nil {
+			return nil, err
+		}
+
+		pc := &PooledConnection{
+			conn:       conn,
+			lastUsed:   now,
+			created:    now,
+			inUse:      true,
+			usageCount: 1,
+		}
+		cp.connections = append(cp.connections, pc)
+		return conn, nil
+	}
+
+	// Pool is full, create a temporary connection
+	return net.Dial("tcp", cp.addr)
+}
+
+// Put returns a connection to the pool
+func (cp *ConnectionPool) Put(conn net.Conn) {
+	cp.mu.Lock()
+	defer cp.mu.Unlock()
+
+	for _, pc := range cp.connections {
+		if pc.conn == conn {
+			pc.inUse = false
+			pc.lastUsed = time.Now()
+			return
+		}
+	}
+
+	// Connection not from pool, close it
+	conn.Close()
+}
+
+// CleanIdle removes idle and expired connections
+func (cp *ConnectionPool) CleanIdle() {
+	cp.mu.Lock()
+	defer cp.mu.Unlock()
+
+	now := time.Now()
+	active := make([]*PooledConnection, 0, len(cp.connections))
+
+	for _, pc := range cp.connections {
+		// Keep in-use connections
+		if pc.inUse {
+			active = append(active, pc)
+			continue
+		}
+
+		// Remove expired or idle connections
+		if now.Sub(pc.created) > cp.maxLifetime || now.Sub(pc.lastUsed) > cp.idleTimeout {
+			pc.conn.Close()
+			continue
+		}
+
+		active = append(active, pc)
+	}
+
+	cp.connections = active
+}
+
+// Close closes all connections in the pool
+func (cp *ConnectionPool) Close() {
+	cp.mu.Lock()
+	defer cp.mu.Unlock()
+
+	for _, pc := range cp.connections {
+		pc.conn.Close()
+	}
+	cp.connections = nil
+}
+
+// Stats returns pool statistics
+func (cp *ConnectionPool) Stats() map[string]interface{} {
+	cp.mu.Lock()
+	defer cp.mu.Unlock()
+
+	totalConns := len(cp.connections)
+	inUseConns := 0
+	idleConns := 0
+	totalUsage := 0
+
+	for _, pc := range cp.connections {
+		if pc.inUse {
+			inUseConns++
+		} else {
+			idleConns++
+		}
+		totalUsage += pc.usageCount
+	}
+
+	return map[string]interface{}{
+		"total_connections": totalConns,
+		"in_use":            inUseConns,
+		"idle":              idleConns,
+		"total_usage":       totalUsage,
+		"address":           cp.addr,
+	}
+}
+
+// CleanAll cleans idle connections in all pools
+func (pm *PoolManager) CleanAll() {
+	pm.mu.RLock()
+	pools := make([]*ConnectionPool, 0, len(pm.pools))
+	for _, pool := range pm.pools {
+		pools = append(pools, pool)
+	}
+	pm.mu.RUnlock()
+
+	for _, pool := range pools {
+		pool.CleanIdle()
+	}
+}
+
+// CloseAll closes all connection pools
+func (pm *PoolManager) CloseAll() {
+	pm.mu.Lock()
+	defer pm.mu.Unlock()
+
+	for _, pool := range pm.pools {
+		pool.Close()
+	}
+	pm.pools = make(map[string]*ConnectionPool)
+}
+
+// GetAllStats returns statistics for all pools
+func (pm *PoolManager) GetAllStats() []map[string]interface{} {
+	pm.mu.RLock()
+	defer pm.mu.RUnlock()
+
+	stats := make([]map[string]interface{}, 0, len(pm.pools))
+	for _, pool := range pm.pools {
+		stats = append(stats, pool.Stats())
+	}
+	return stats
+}
 
 // Client represents the client application
 type Client struct {
@@ -49,6 +283,12 @@ type Client struct {
 	// Proxy connections: map[proxyID-userID]net.Conn
 	proxyConns map[string]net.Conn
 	proxyMu    sync.RWMutex
+
+	// Track remote addresses for pool return: map[proxyID-userID]remoteAddr
+	proxyAddrs map[string]string
+
+	// Connection pool manager
+	poolMgr *PoolManager
 }
 
 // Config holds client configuration
@@ -108,6 +348,8 @@ func NewClient(config *Config, instanceMgr *InstanceManager) *Client {
 		stopChan:    make(chan bool),
 		instanceMgr: instanceMgr,
 		proxyConns:  make(map[string]net.Conn),
+		proxyAddrs:  make(map[string]string),
+		poolMgr:     NewPoolManager(),
 	}
 	if ShouldLog() {
 		log.Printf("[DEBUG] NewClient: Client created successfully")
@@ -158,6 +400,9 @@ func (c *Client) Start() error {
 
 	// Start connection loop in background
 	go c.connectionLoop()
+
+	// Start pool cleanup goroutine
+	go c.poolCleanupLoop()
 
 	log.Printf("Client started successfully")
 	return nil
@@ -236,8 +481,28 @@ func (c *Client) Stop() {
 		c.conn.Close()
 	}
 
+	// Close all connection pools
+	if c.poolMgr != nil {
+		c.poolMgr.CloseAll()
+	}
+
 	c.instanceMgr.RemovePID()
 	log.Printf("Client stopped")
+}
+
+// poolCleanupLoop periodically cleans idle connections from pools
+func (c *Client) poolCleanupLoop() {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	for c.running {
+		select {
+		case <-ticker.C:
+			c.poolMgr.CleanAll()
+		case <-c.stopChan:
+			return
+		}
+	}
 }
 
 // connect establishes connection to the server
@@ -512,9 +777,10 @@ func (c *Client) handleProxyConnect(rawMsg map[string]interface{}) {
 	log.Printf("Proxy connect request: proxy=%s, user=%s, remote=%s:%d, protocol=%s",
 		proxyID, userID, remoteHost, int(remotePort), protocol)
 
-	// Try to connect to the remote host
+	// Get connection from pool
 	remoteAddr := fmt.Sprintf("%s:%d", remoteHost, int(remotePort))
-	remoteConn, err := net.Dial("tcp", remoteAddr)
+	pool := c.poolMgr.GetPool(remoteAddr)
+	remoteConn, err := pool.Get()
 	if err != nil {
 		log.Printf("Failed to connect to remote host %s: %v", remoteAddr, err)
 		// Send disconnect message to server
@@ -522,18 +788,19 @@ func (c *Client) handleProxyConnect(rawMsg map[string]interface{}) {
 		return
 	}
 
-	log.Printf("Connected to remote host: %s", remoteAddr)
+	log.Printf("Connected to remote host: %s (from pool)", remoteAddr)
 
-	// Store the connection for data relay
+	// Store the connection and remote address for data relay
 	connKey := fmt.Sprintf("%s-%s", proxyID, userID)
 	c.proxyMu.Lock()
 	c.proxyConns[connKey] = remoteConn
+	c.proxyAddrs[connKey] = remoteAddr
 	c.proxyMu.Unlock()
 
 	log.Printf("Stored proxy connection: key=%s", connKey)
 
 	// Start relaying data from remote to server
-	go c.relayProxyData(proxyID, userID, remoteConn)
+	go c.relayProxyData(proxyID, userID, remoteConn, remoteAddr)
 }
 
 // handleProxyData handles proxy data from the server
@@ -569,11 +836,21 @@ func (c *Client) handleProxyData(rawMsg map[string]interface{}) {
 		_, err := remoteConn.Write(data)
 		if err != nil {
 			log.Printf("Error writing to remote connection: proxy=%s, user=%s: %v", proxyID, userID, err)
-			// Close the connection and clean up
-			remoteConn.Close()
+
+			// Get remote address and return connection to pool
 			c.proxyMu.Lock()
+			remoteAddr, hasAddr := c.proxyAddrs[connKey]
 			delete(c.proxyConns, connKey)
+			delete(c.proxyAddrs, connKey)
 			c.proxyMu.Unlock()
+
+			if hasAddr {
+				pool := c.poolMgr.GetPool(remoteAddr)
+				pool.Put(remoteConn)
+			} else {
+				remoteConn.Close()
+			}
+
 			// Notify server
 			c.sendProxyMessage("proxy_disconnect", proxyID, userID, nil)
 			return
@@ -588,15 +865,25 @@ func (c *Client) handleProxyDisconnect(rawMsg map[string]interface{}) {
 
 	log.Printf("Proxy disconnect: proxy=%s, user=%s", proxyID, userID)
 
-	// Close remote connection if it exists
+	// Return remote connection to pool if it exists
 	connKey := fmt.Sprintf("%s-%s", proxyID, userID)
 	c.proxyMu.Lock()
-	if remoteConn, ok := c.proxyConns[connKey]; ok {
-		remoteConn.Close()
-		delete(c.proxyConns, connKey)
-		log.Printf("Closed proxy connection: key=%s", connKey)
-	}
+	remoteConn, hasConn := c.proxyConns[connKey]
+	remoteAddr, hasAddr := c.proxyAddrs[connKey]
+	delete(c.proxyConns, connKey)
+	delete(c.proxyAddrs, connKey)
 	c.proxyMu.Unlock()
+
+	if hasConn {
+		if hasAddr {
+			pool := c.poolMgr.GetPool(remoteAddr)
+			pool.Put(remoteConn)
+			log.Printf("Returned connection to pool: key=%s, addr=%s", connKey, remoteAddr)
+		} else {
+			remoteConn.Close()
+			log.Printf("Closed proxy connection: key=%s", connKey)
+		}
+	}
 }
 
 // sendProxyMessage sends a proxy message to the server
@@ -615,16 +902,21 @@ func (c *Client) sendProxyMessage(msgType, proxyID, userID string, data []byte) 
 }
 
 // relayProxyData relays data from remote host back to the server
-func (c *Client) relayProxyData(proxyID, userID string, remoteConn net.Conn) {
+func (c *Client) relayProxyData(proxyID, userID string, remoteConn net.Conn, remoteAddr string) {
 	connKey := fmt.Sprintf("%s-%s", proxyID, userID)
+	pool := c.poolMgr.GetPool(remoteAddr)
+
 	defer func() {
-		remoteConn.Close()
+		// Return connection to pool instead of closing
+		pool.Put(remoteConn)
 		c.proxyMu.Lock()
 		delete(c.proxyConns, connKey)
+		delete(c.proxyAddrs, connKey)
 		c.proxyMu.Unlock()
+		log.Printf("Returned connection to pool: %s", remoteAddr)
 	}()
 
-	buf := make([]byte, 4096)
+	buf := make([]byte, 16384) // Increased buffer size
 	for {
 		remoteConn.SetReadDeadline(time.Now().Add(30 * time.Second))
 		n, err := remoteConn.Read(buf)

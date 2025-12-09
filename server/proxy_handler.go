@@ -32,6 +32,182 @@ type ProxyConnection struct {
 	mu           sync.RWMutex
 	userChannels map[string]*net.Conn // Track user connections like lanproxy
 	channelsMu   sync.RWMutex
+	MaxIdleTime  time.Duration   // Auto-close if idle for this duration (0 = never)
+	UserCount    int             // Current number of active user connections
+	connPool     *ConnectionPool // Connection pool for reusing client connections
+}
+
+// PooledConnection represents a reusable connection to the remote target
+type PooledConnection struct {
+	conn       net.Conn
+	lastUsed   time.Time
+	inUse      bool
+	created    time.Time
+	usageCount int
+}
+
+// ConnectionPool manages a pool of connections to remote targets
+type ConnectionPool struct {
+	mu          sync.RWMutex
+	connections []*PooledConnection
+	maxSize     int
+	maxIdleTime time.Duration
+	maxLifetime time.Duration
+}
+
+// NewConnectionPool creates a new connection pool
+func NewConnectionPool(maxSize int, maxIdleTime, maxLifetime time.Duration) *ConnectionPool {
+	return &ConnectionPool{
+		connections: make([]*PooledConnection, 0, maxSize),
+		maxSize:     maxSize,
+		maxIdleTime: maxIdleTime,
+		maxLifetime: maxLifetime,
+	}
+}
+
+// Get retrieves a connection from the pool or creates a new one
+func (cp *ConnectionPool) Get(remoteHost string, remotePort int) (net.Conn, error) {
+	cp.mu.Lock()
+	defer cp.mu.Unlock()
+
+	now := time.Now()
+
+	// Try to find an available connection
+	for i, pc := range cp.connections {
+		if pc.inUse {
+			continue
+		}
+
+		// Check if connection is still valid
+		idleTime := now.Sub(pc.lastUsed)
+		lifetime := now.Sub(pc.created)
+
+		// Remove stale connections
+		if idleTime > cp.maxIdleTime || lifetime > cp.maxLifetime {
+			pc.conn.Close()
+			cp.connections = append(cp.connections[:i], cp.connections[i+1:]...)
+			continue
+		}
+
+		// Test if connection is still alive
+		pc.conn.SetReadDeadline(time.Now().Add(1 * time.Millisecond))
+		one := make([]byte, 1)
+		_, err := pc.conn.Read(one)
+		pc.conn.SetReadDeadline(time.Time{}) // Clear deadline
+
+		if err == nil {
+			// Connection has data, put it back and skip
+			continue
+		}
+
+		// Connection is good (timeout or EOF is expected for idle connection)
+		if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+			pc.inUse = true
+			pc.lastUsed = now
+			pc.usageCount++
+			return pc.conn, nil
+		}
+	}
+
+	// No available connection, create new one if under limit
+	if len(cp.connections) < cp.maxSize {
+		conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", remoteHost, remotePort), 10*time.Second)
+		if err != nil {
+			return nil, err
+		}
+
+		pc := &PooledConnection{
+			conn:       conn,
+			lastUsed:   now,
+			inUse:      true,
+			created:    now,
+			usageCount: 1,
+		}
+		cp.connections = append(cp.connections, pc)
+		return conn, nil
+	}
+
+	// Pool is full, create a temporary connection (not pooled)
+	return net.DialTimeout("tcp", fmt.Sprintf("%s:%d", remoteHost, remotePort), 10*time.Second)
+}
+
+// Put returns a connection to the pool
+func (cp *ConnectionPool) Put(conn net.Conn) {
+	cp.mu.Lock()
+	defer cp.mu.Unlock()
+
+	for _, pc := range cp.connections {
+		if pc.conn == conn {
+			pc.inUse = false
+			pc.lastUsed = time.Now()
+			return
+		}
+	}
+
+	// Connection not in pool, just close it
+	conn.Close()
+}
+
+// Close closes all connections in the pool
+func (cp *ConnectionPool) Close() {
+	cp.mu.Lock()
+	defer cp.mu.Unlock()
+
+	for _, pc := range cp.connections {
+		pc.conn.Close()
+	}
+	cp.connections = nil
+}
+
+// CleanIdle removes idle connections that exceeded max idle time
+func (cp *ConnectionPool) CleanIdle() int {
+	cp.mu.Lock()
+	defer cp.mu.Unlock()
+
+	now := time.Now()
+	removed := 0
+	newConns := make([]*PooledConnection, 0, len(cp.connections))
+
+	for _, pc := range cp.connections {
+		if pc.inUse {
+			newConns = append(newConns, pc)
+			continue
+		}
+
+		idleTime := now.Sub(pc.lastUsed)
+		lifetime := now.Sub(pc.created)
+
+		if idleTime > cp.maxIdleTime || lifetime > cp.maxLifetime {
+			pc.conn.Close()
+			removed++
+		} else {
+			newConns = append(newConns, pc)
+		}
+	}
+
+	cp.connections = newConns
+	return removed
+}
+
+// Stats returns pool statistics
+func (cp *ConnectionPool) Stats() map[string]interface{} {
+	cp.mu.RLock()
+	defer cp.mu.RUnlock()
+
+	total := len(cp.connections)
+	inUse := 0
+	for _, pc := range cp.connections {
+		if pc.inUse {
+			inUse++
+		}
+	}
+
+	return map[string]interface{}{
+		"total":     total,
+		"in_use":    inUse,
+		"available": total - inUse,
+		"max_size":  cp.maxSize,
+	}
 }
 
 // ProxyManager manages all proxy connections
@@ -42,16 +218,23 @@ type ProxyManager struct {
 	store       *ClientStore   // For persistent storage
 	portMap     map[int]string // Maps port to proxy connection ID (like lanproxy)
 	portMapMu   sync.RWMutex
+	stopMonitor chan struct{} // Signal to stop idle monitoring
 }
 
 // NewProxyManager creates a new proxy manager
 func NewProxyManager(manager *ClientManager, store *ClientStore) *ProxyManager {
-	return &ProxyManager{
+	pm := &ProxyManager{
 		connections: make(map[string]*ProxyConnection),
 		manager:     manager,
 		store:       store,
 		portMap:     make(map[int]string),
+		stopMonitor: make(chan struct{}),
 	}
+
+	// Start idle connection monitor
+	go pm.monitorIdleConnections()
+
+	return pm
 }
 
 // FindAvailablePort finds an available port starting from the suggested port
@@ -151,6 +334,9 @@ func (pm *ProxyManager) createProxyConnectionWithID(id, clientID, remoteHost str
 		CreatedAt:    time.Now(),
 		LastActive:   time.Now(),
 		userChannels: make(map[string]*net.Conn),
+		MaxIdleTime:  0, // 0 = never auto-close (can be configured per proxy)
+		UserCount:    0,
+		connPool:     NewConnectionPool(10, 5*time.Minute, 30*time.Minute), // Pool: max 10 conns, 5min idle, 30min lifetime
 	}
 
 	// Start listening on local port
@@ -222,9 +408,10 @@ func (pm *ProxyManager) acceptConnections(conn *ProxyConnection) {
 		// Store the user connection
 		conn.channelsMu.Lock()
 		conn.userChannels[userID] = &userConn
+		conn.UserCount++
 		conn.channelsMu.Unlock()
 
-		log.Printf("New user connection accepted on proxy %s: %s", conn.ID, userID)
+		log.Printf("New user connection accepted on proxy %s: %s (total users: %d)", conn.ID, userID, conn.UserCount)
 
 		// Handle the connection in a goroutine
 		go pm.handleUserConnection(conn, userConn, userID)
@@ -262,6 +449,7 @@ func (pm *ProxyManager) handleUserConnection(proxyConn *ProxyConnection, userCon
 		// Remove from tracking
 		proxyConn.channelsMu.Lock()
 		delete(proxyConn.userChannels, userID)
+		proxyConn.UserCount--
 		proxyConn.channelsMu.Unlock()
 
 		// Notify client of disconnect (best effort, async)
@@ -275,7 +463,7 @@ func (pm *ProxyManager) handleUserConnection(proxyConn *ProxyConnection, userCon
 			go pm.sendWebSocketMessage(client, msg) // Async, don't block
 		}
 
-		log.Printf("User connection closed: proxy=%s, user=%s", proxyConn.ID, userID)
+		log.Printf("User connection closed: proxy=%s, user=%s (remaining users: %d)", proxyConn.ID, userID, proxyConn.UserCount)
 	}()
 
 	// Get the client
@@ -309,7 +497,13 @@ func (pm *ProxyManager) handleUserConnection(proxyConn *ProxyConnection, userCon
 		proxyConn.ID, userID, proxyConn.RemoteHost, proxyConn.RemotePort)
 
 	// Read from user connection and relay to client via websocket
-	buf := make([]byte, 4096)
+	// Increased buffer size for better throughput (16KB like LanProxy's typical frame size)
+	buf := make([]byte, 16384)
+
+	// Batching mechanism to reduce WebSocket message overhead
+	batchTimeout := time.NewTimer(5 * time.Millisecond)
+	defer batchTimeout.Stop()
+
 	for {
 		userConn.SetReadDeadline(time.Now().Add(30 * time.Second))
 		n, err := userConn.Read(buf)
@@ -373,6 +567,11 @@ func (pm *ProxyManager) CloseProxyConnection(id string) error {
 	}
 	conn.userChannels = make(map[string]*net.Conn)
 	conn.channelsMu.Unlock()
+
+	// Close connection pool
+	if conn.connPool != nil {
+		conn.connPool.Close()
+	}
 
 	delete(pm.connections, id)
 	log.Printf("Closed proxy connection: %s (port %d)", id, conn.LocalPort)
@@ -530,6 +729,71 @@ func (pm *ProxyManager) UpdateProxyConnection(id, remoteHost string, remotePort,
 		id, localPort, remoteHost, remotePort, protocol)
 
 	return nil
+}
+
+// monitorIdleConnections periodically checks for idle connections and closes them if needed
+func (pm *ProxyManager) monitorIdleConnections() {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			pm.mu.RLock()
+			var toClose []string
+			totalPoolCleaned := 0
+
+			for id, conn := range pm.connections {
+				// Clean idle connections in pool
+				if conn.connPool != nil {
+					cleaned := conn.connPool.CleanIdle()
+					if cleaned > 0 {
+						totalPoolCleaned += cleaned
+					}
+				}
+
+				if conn.MaxIdleTime > 0 {
+					conn.mu.RLock()
+					idle := time.Since(conn.LastActive)
+					userCount := conn.UserCount
+					conn.mu.RUnlock()
+
+					if idle > conn.MaxIdleTime && userCount == 0 {
+						toClose = append(toClose, id)
+						log.Printf("Proxy %s idle for %v (max: %v), scheduling for closure",
+							id, idle, conn.MaxIdleTime)
+					}
+				}
+			}
+			pm.mu.RUnlock()
+
+			if totalPoolCleaned > 0 {
+				log.Printf("Cleaned %d idle pooled connections across all proxies", totalPoolCleaned)
+			}
+
+			// Close idle connections
+			for _, id := range toClose {
+				if err := pm.CloseProxyConnection(id); err != nil {
+					log.Printf("Failed to close idle proxy %s: %v", id, err)
+				}
+			}
+
+		case <-pm.stopMonitor:
+			return
+		}
+	}
+}
+
+// Shutdown stops the proxy manager and closes all connections
+func (pm *ProxyManager) Shutdown() {
+	close(pm.stopMonitor)
+
+	pm.mu.Lock()
+	defer pm.mu.Unlock()
+
+	for id := range pm.connections {
+		pm.CloseProxyConnection(id)
+	}
 }
 
 // ListProxyConnections lists all proxy connections for a client
@@ -897,8 +1161,33 @@ func (s *Server) HandleProxyStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Build enhanced stats response
+	conn.mu.RLock()
+	stats := map[string]interface{}{
+		"id":            conn.ID,
+		"client_id":     conn.ClientID,
+		"local_port":    conn.LocalPort,
+		"remote_host":   conn.RemoteHost,
+		"remote_port":   conn.RemotePort,
+		"protocol":      conn.Protocol,
+		"bytes_in":      conn.BytesIn,
+		"bytes_out":     conn.BytesOut,
+		"created_at":    conn.CreatedAt,
+		"last_active":   conn.LastActive,
+		"user_count":    conn.UserCount,
+		"uptime":        time.Since(conn.CreatedAt).Seconds(),
+		"idle_time":     time.Since(conn.LastActive).Seconds(),
+		"max_idle_time": conn.MaxIdleTime.Seconds(),
+	}
+
+	// Add connection pool stats if available
+	if conn.connPool != nil {
+		stats["pool"] = conn.connPool.Stats()
+	}
+	conn.mu.RUnlock()
+
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(conn)
+	json.NewEncoder(w).Encode(stats)
 }
 
 // ProxyFileServer serves files through proxy connections (similar to LanProxy)
