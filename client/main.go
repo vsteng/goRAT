@@ -766,6 +766,17 @@ func (c *Client) handleMessage(msg *common.Message) {
 	}
 }
 
+// shouldPoolConnection checks if protocol should use connection pooling
+func shouldPoolConnection(protocol string) bool {
+	// Only pool stateless/idempotent protocols
+	// Don't pool interactive protocols like SSH, Telnet, RDP, etc.
+	poolable := map[string]bool{
+		"http":  true,
+		"https": true,
+	}
+	return poolable[strings.ToLower(protocol)]
+}
+
 // handleProxyConnect handles proxy connection requests from the server
 func (c *Client) handleProxyConnect(rawMsg map[string]interface{}) {
 	proxyID, _ := rawMsg["proxy_id"].(string)
@@ -777,30 +788,46 @@ func (c *Client) handleProxyConnect(rawMsg map[string]interface{}) {
 	log.Printf("Proxy connect request: proxy=%s, user=%s, remote=%s:%d, protocol=%s",
 		proxyID, userID, remoteHost, int(remotePort), protocol)
 
-	// Get connection from pool
 	remoteAddr := fmt.Sprintf("%s:%d", remoteHost, int(remotePort))
-	pool := c.poolMgr.GetPool(remoteAddr)
-	remoteConn, err := pool.Get()
-	if err != nil {
-		log.Printf("Failed to connect to remote host %s: %v", remoteAddr, err)
-		// Send disconnect message to server
-		c.sendProxyMessage("proxy_disconnect", proxyID, userID, nil)
-		return
+	usePooling := shouldPoolConnection(protocol)
+
+	var remoteConn net.Conn
+	var err error
+
+	if usePooling {
+		// Get connection from pool for stateless protocols
+		pool := c.poolMgr.GetPool(remoteAddr)
+		remoteConn, err = pool.Get()
+		if err != nil {
+			log.Printf("Failed to get pooled connection to remote host %s: %v", remoteAddr, err)
+			c.sendProxyMessage("proxy_disconnect", proxyID, userID, nil)
+			return
+		}
+		log.Printf("Connected to remote host: %s (from pool)", remoteAddr)
+	} else {
+		// Create new connection for interactive protocols
+		remoteConn, err = net.Dial("tcp", remoteAddr)
+		if err != nil {
+			log.Printf("Failed to connect to remote host %s: %v", remoteAddr, err)
+			c.sendProxyMessage("proxy_disconnect", proxyID, userID, nil)
+			return
+		}
+		log.Printf("Connected to remote host: %s (new connection)", remoteAddr)
 	}
 
-	log.Printf("Connected to remote host: %s (from pool)", remoteAddr)
-
-	// Store the connection and remote address for data relay
+	// Store the connection
 	connKey := fmt.Sprintf("%s-%s", proxyID, userID)
 	c.proxyMu.Lock()
 	c.proxyConns[connKey] = remoteConn
-	c.proxyAddrs[connKey] = remoteAddr
+	if usePooling {
+		c.proxyAddrs[connKey] = remoteAddr
+	}
 	c.proxyMu.Unlock()
 
-	log.Printf("Stored proxy connection: key=%s", connKey)
+	log.Printf("Stored proxy connection: key=%s (pooled=%v)", connKey, usePooling)
 
 	// Start relaying data from remote to server
-	go c.relayProxyData(proxyID, userID, remoteConn, remoteAddr)
+	go c.relayProxyData(proxyID, userID, remoteConn, remoteAddr, usePooling)
 }
 
 // handleProxyData handles proxy data from the server
@@ -876,10 +903,12 @@ func (c *Client) handleProxyDisconnect(rawMsg map[string]interface{}) {
 
 	if hasConn {
 		if hasAddr {
+			// Connection from pool - return it
 			pool := c.poolMgr.GetPool(remoteAddr)
 			pool.Put(remoteConn)
 			log.Printf("Returned connection to pool: key=%s, addr=%s", connKey, remoteAddr)
 		} else {
+			// Interactive protocol - close immediately
 			remoteConn.Close()
 			log.Printf("Closed proxy connection: key=%s", connKey)
 		}
@@ -902,18 +931,25 @@ func (c *Client) sendProxyMessage(msgType, proxyID, userID string, data []byte) 
 }
 
 // relayProxyData relays data from remote host back to the server
-func (c *Client) relayProxyData(proxyID, userID string, remoteConn net.Conn, remoteAddr string) {
+func (c *Client) relayProxyData(proxyID, userID string, remoteConn net.Conn, remoteAddr string, usePooling bool) {
 	connKey := fmt.Sprintf("%s-%s", proxyID, userID)
-	pool := c.poolMgr.GetPool(remoteAddr)
 
 	defer func() {
-		// Return connection to pool instead of closing
-		pool.Put(remoteConn)
 		c.proxyMu.Lock()
 		delete(c.proxyConns, connKey)
 		delete(c.proxyAddrs, connKey)
 		c.proxyMu.Unlock()
-		log.Printf("Returned connection to pool: %s", remoteAddr)
+
+		if usePooling {
+			// Return connection to pool for reuse
+			pool := c.poolMgr.GetPool(remoteAddr)
+			pool.Put(remoteConn)
+			log.Printf("Returned connection to pool: %s", remoteAddr)
+		} else {
+			// Close connection for interactive protocols
+			remoteConn.Close()
+			log.Printf("Closed connection: %s", remoteAddr)
+		}
 	}()
 
 	buf := make([]byte, 16384) // Increased buffer size
