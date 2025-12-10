@@ -12,6 +12,20 @@ import (
 )
 
 func Main() {
+	// Check for help flag early before instance check
+	if len(os.Args) > 1 && (os.Args[len(os.Args)-1] == "-h" || os.Args[len(os.Args)-1] == "--help") {
+		// Parse flags to display help
+		fs := flag.NewFlagSet("server", flag.ContinueOnError)
+		fs.String("addr", ":8080", "Server address")
+		fs.String("cert", "", "TLS certificate file (leave empty for HTTP behind nginx)")
+		fs.String("key", "", "TLS key file (leave empty for HTTP behind nginx)")
+		fs.Bool("tls", false, "Enable TLS (use false when behind nginx)")
+		fs.String("web-user", "admin", "Web UI username")
+		fs.String("web-pass", "admin", "Web UI password")
+		printHelp(fs)
+		return
+	}
+
 	// Handle subcommands: start|stop|restart|status (default: start)
 	command := "start"
 	if len(os.Args) > 1 {
@@ -138,4 +152,28 @@ func Main() {
 		}
 		return
 	}
+}
+
+// printHelp displays help information for the server
+func printHelp(fs *flag.FlagSet) {
+	fmt.Print(`Server Manager - Usage:
+
+Commands:
+  start              Start the server (default if no command given)
+  stop               Stop the running server
+  restart            Restart the server
+  status             Show server status
+
+Flags:
+`)
+	fs.PrintDefaults()
+	fmt.Print(`
+Examples:
+  ./bin/server                                    # Start on default port 8080
+  ./bin/server -addr 127.0.0.1:8081              # Start on custom port
+  ./bin/server -addr :8080 -tls                  # Start with TLS
+  ./bin/server stop                              # Stop the server
+  ./bin/server restart                           # Restart the server
+  ./bin/server status                            # Check if server is running
+`)
 }
