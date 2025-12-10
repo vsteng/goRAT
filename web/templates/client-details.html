@@ -936,9 +936,9 @@
 
             if (panel.style.display === 'block' && drivesCache && drivesCache.length) {
                 list.innerHTML = drivesCache.map(drive => {
-                    const escapedPath = drive.name.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+                    const encodedPath = encodeURIComponent(drive.name || '');
                     return `
-                        <div class="file-card" style="background: #151826; border: 1px solid #1f2230; border-radius: 10px; padding: 10px; cursor: pointer;" onclick="browseDrive('${escapedPath}')">
+                        <div class="file-card" style="background: #151826; border: 1px solid #1f2230; border-radius: 10px; padding: 10px; cursor: pointer;" onclick="browseDrive('${encodedPath}')">
                             <div style="font-weight: 600; color: #fff;">💾 ${escapeHtml(drive.name)}</div>
                             <div style="color: var(--text-light); font-size: 12px;">${escapeHtml(drive.label || 'Local Disk')}</div>
                             <div style="color: var(--text-muted); font-size: 12px; margin-top: 6px;">${drive.type} | ${formatBytes(drive.free_size)} free of ${formatBytes(drive.total_size)}</div>
@@ -948,7 +948,8 @@
             }
         }
 
-        function browseDrive(path) {
+        function browseDrive(encodedPath) {
+            const path = decodePathValue(encodedPath);
             const pathInput = document.getElementById('filePath');
             pathInput.value = path;
             loadFiles(path);
@@ -961,32 +962,38 @@
                 return;
             }
 
-            tbody.innerHTML = files.map(file => `
+            tbody.innerHTML = files.map(file => {
+                const encodedPath = encodeURIComponent(file.path || '');
+                const modified = file.modified ? new Date(file.modified).toLocaleString() : '';
+                return `
                 <tr>
                     <td><span class="file-icon">${file.is_dir ? '📁' : '📄'}</span>
-                        <span class="file-name" onclick="handleFileClick('${escapeHtml(file.path)}')">${escapeHtml(file.name)}</span>
+                        <span class="file-name" onclick="handleFileClick('${encodedPath}')">${escapeHtml(file.name)}</span>
                     </td>
                     <td>${formatBytes(file.size)}</td>
-                    <td>${new Date(file.modified).toLocaleString()}</td>
+                    <td>${modified}</td>
                     <td>
-                        <button class="btn btn-small btn-primary" onclick="downloadFile('${escapeHtml(file.path)}')">Download</button>
-                        <button class="btn btn-small btn-secondary" onclick="deleteFile('${escapeHtml(file.path)}')">Delete</button>
+                        <button class="btn btn-small btn-primary" onclick="downloadFile('${encodedPath}')">Download</button>
+                        <button class="btn btn-small btn-secondary" onclick="deleteFile('${encodedPath}')">Delete</button>
                     </td>
                 </tr>
-            `).join('');
+                `;
+            }).join('');
         }
 
-        function handleFileClick(path) {
+        function handleFileClick(encodedPath) {
+            const path = decodePathValue(encodedPath);
             document.getElementById('filePath').value = path;
             loadFiles(path);
         }
 
-        function downloadFile(path) {
-            // Download file via proxy
+        function downloadFile(encodedPath) {
+            const path = decodePathValue(encodedPath);
             window.location.href = `/api/files/download?client_id=${encodeURIComponent(clientId)}&path=${encodeURIComponent(path)}`;
         }
 
-        async function deleteFile(path) {
+        async function deleteFile(encodedPath) {
+            const path = decodePathValue(encodedPath);
             if (confirm(`Delete ${path}?`)) {
                 try {
                     const response = await fetch(`/api/files/delete`, {
@@ -1169,6 +1176,16 @@
         }
 
         // Utility functions
+        function decodePathValue(value) {
+            if (typeof value !== 'string') return '';
+            try {
+                return decodeURIComponent(value);
+            } catch (err) {
+                console.warn('Failed to decode path value', value, err);
+                return value;
+            }
+        }
+
         function formatBytes(bytes) {
             if (!bytes) return '0 B';
             const k = 1024;
