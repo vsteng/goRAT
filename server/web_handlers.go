@@ -373,7 +373,7 @@ func (wh *WebHandler) HandleFileBrowse(w http.ResponseWriter, r *http.Request) {
 			return
 		case <-ticker.C:
 			if result, exists := wh.server.GetFileListResult(req.ClientID); exists {
-				w.Header().Set("Content-Type", "application/json")
+				w.Header().Set("Content-Type", "application/json; charset=utf-8")
 				json.NewEncoder(w).Encode(result)
 				wh.server.ClearFileListResult(req.ClientID)
 				return
@@ -432,7 +432,7 @@ func (wh *WebHandler) HandleGetDrives(w http.ResponseWriter, r *http.Request) {
 			return
 		case <-ticker.C:
 			if result, exists := wh.server.GetDriveListResult(req.ClientID); exists {
-				w.Header().Set("Content-Type", "application/json")
+				w.Header().Set("Content-Type", "application/json; charset=utf-8")
 				json.NewEncoder(w).Encode(result)
 				wh.server.ClearDriveListResult(req.ClientID)
 				return

@@ -399,8 +399,19 @@
         }
         
         // Load initial directory based on OS
-        document.getElementById('currentPath').value = currentPath;
-        browsePath(currentPath);
+        window.addEventListener('DOMContentLoaded', () => {
+            // For Windows, wait a bit for drives to load, then browse C:\\
+            if (clientOS.toLowerCase() === 'windows') {
+                setTimeout(() => {
+                    currentPath = 'C:\\\\';
+                    document.getElementById('currentPath').value = currentPath;
+                    browsePath(currentPath);
+                }, 500);
+            } else {
+                document.getElementById('currentPath').value = currentPath;
+                browsePath(currentPath);
+            }
+        });
     </script>
 </body>
 </html>
