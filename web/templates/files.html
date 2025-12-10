@@ -167,20 +167,41 @@
     </div>
     <script>
         const clientId = '{{.ClientID}}';
-        const clientOS = '{{.ClientOS}}';
+        const clientOS = '{{.ClientOS}}'.toLowerCase();
         // Set initial path based on OS: C:\ for Windows, / for Unix-like systems
         let currentPath = clientOS.toLowerCase() === 'windows' ? 'C:\\' : '/';
         let drivesCache = null;
-        
+
+        function normalizeWindowsPath(path) {
+        if (!path) return 'C:\\';
+        path = path.replace(/\//g, '\\');          // Convert all / → \
+        path = path.replace(/\\\\+/g, '\\');       // Collapse multiple slashes
+        if (/^[a-z]:$/i.test(path)) path += '\\';  // Turn C: → C:\
+        return path;
+        }
+
+        function normalizeUnixPath(path) {
+            if (!path) return '/';
+            path = path.replace(/\\/g, '/');           // Convert \ → /
+            path = path.replace(/\/+/g, '/');          // Collapse ///
+            if (!path.startsWith('/')) path = '/' + path;
+            return path;
+        }
+
+        function normalizePath(path) {
+            return clientOS === 'windows'
+                ? normalizeWindowsPath(path)
+                : normalizeUnixPath(path);
+        }
         // Show drives button for Windows clients
-        if (clientOS.toLowerCase() === 'windows') {
+        if (clientOS === 'windows') {
             document.getElementById('drivesBtn').style.display = 'inline-block';
             // Load drives on startup for Windows
             loadDrives();
         }
         
         async function loadDrives() {
-            if (clientOS.toLowerCase() !== 'windows') return;
+            if (clientOS !== 'windows') return;
             
             try {
                 const response = await fetch('/api/files/drives', {
@@ -207,14 +228,9 @@
         function showDrives() {
             const panel = document.getElementById('drivesPanel');
             const isVisible = panel.style.display !== 'none';
+            panel.style.display = isVisible ? 'none' : 'block';
+            if (isVisible) return;
             
-            if (isVisible) {
-                panel.style.display = 'none';
-                return;
-            }
-            
-            // Show panel
-            panel.style.display = 'block';
             
             const drivesList = document.getElementById('drivesList');
             
@@ -246,11 +262,11 @@
         
         async function browsePath(path) {
             if (path) {
-                currentPath = path;
+                currentPath = normalizePath(path);
             } else {
                 const input = prompt('Enter path:', currentPath);
                 if (!input) return;
-                currentPath = input;
+                currentPath = normalizePath(input);
             }
             
             document.getElementById('currentPath').value = currentPath;
@@ -272,7 +288,12 @@
                 }
                 
                 const result = await response.json();
-                displayFiles(result.files || []);
+                
+                const files = (result.files || []).map(f => {
+                    f.path = normalizePath(f.path);
+                    return f;
+                });
+                displayFiles(files);
             } catch (err) {
                 alert('Error: ' + err.message);
                 document.getElementById('fileList').innerHTML = '<tr><td colspan="4" style="text-align:center;padding:40px;color:#c33;">Error loading files</td></tr>';
