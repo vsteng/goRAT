@@ -307,7 +307,28 @@
         
         function handleFileClick(path, isDir) {
             if (isDir) {
-                browsePath(path);
+                // For Windows, join with backslash if needed
+                if (clientOS.toLowerCase() === 'windows') {
+                    // If currentPath ends with backslash, just append
+                    if (currentPath.endsWith('\\')) {
+                        browsePath(currentPath + path.split('\\').pop() + '\\');
+                    } else {
+                        // If root (C:\), append folder
+                        if (/^[A-Z]:\\$/.test(currentPath)) {
+                            browsePath(currentPath + path.split('\\').pop() + '\\');
+                        } else {
+                            // Otherwise, join with backslash
+                            browsePath(currentPath + '\\' + path.split('\\').pop() + '\\');
+                        }
+                    }
+                } else {
+                    // Unix: join with slash
+                    if (currentPath.endsWith('/')) {
+                        browsePath(currentPath + path.split('/').pop() + '/');
+                    } else {
+                        browsePath(currentPath + '/' + path.split('/').pop() + '/');
+                    }
+                }
             } else {
                 if (confirm('Download this file?')) {
                     downloadFile(path);

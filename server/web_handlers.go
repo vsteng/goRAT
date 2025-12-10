@@ -336,6 +336,7 @@ func (wh *WebHandler) HandleFileBrowse(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid request", http.StatusBadRequest)
 		return
 	}
+	log.Printf("[FileBrowse] Received path: '%s' for client '%s'", req.Path, req.ClientID)
 
 	// Get client
 	client, ok := wh.clientMgr.GetClient(req.ClientID)
