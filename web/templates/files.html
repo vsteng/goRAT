@@ -224,10 +224,10 @@
             }
             
             drivesList.innerHTML = drivesCache.map(drive => {
-                // Properly escape the drive path for JavaScript
-                const escapedPath = drive.name.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+                // Use JSON.stringify to properly escape the path for JavaScript
+                const escapedPath = JSON.stringify(drive.name);
                 return `
-                    <div class=\"drive-card\" onclick=\"browseDrive('${escapedPath}')\">
+                    <div class=\"drive-card\" onclick=\"browseDrive(${escapedPath})\">
                         <div class=\"drive-name\">💾 ${escapeHtml(drive.name)}</div>
                         <div class=\"drive-label\">${escapeHtml(drive.label || 'Local Disk')}</div>
                         <div class=\"drive-space\">
@@ -287,18 +287,18 @@
             }
             
             tbody.innerHTML = files.map(file => {
-                // Properly escape paths for JavaScript in onclick handlers
-                const escapedPath = file.path.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+                // Use JSON.stringify to properly escape paths for JavaScript
+                const escapedPath = JSON.stringify(file.path);
                 return `
                     <tr>
                         <td>
                             <span class="file-icon">${file.is_dir ? '📁' : '📄'}</span>
-                            <span class="file-name" onclick="handleFileClick('${escapedPath}', ${file.is_dir})">${escapeHtml(file.name)}</span>
+                            <span class="file-name" onclick="handleFileClick(${escapedPath}, ${file.is_dir})">${escapeHtml(file.name)}</span>
                         </td>
                         <td>${file.is_dir ? '-' : formatSize(file.size)}</td>
                         <td>${formatDate(file.mod_time)}</td>
                         <td>
-                            ${!file.is_dir ? `<button class="action-btn" onclick="downloadFile('${escapedPath}')">Download</button>` : ''}
+                            ${!file.is_dir ? `<button class="action-btn" onclick="downloadFile(${escapedPath})">Download</button>` : ''}
                         </td>
                     </tr>
                 `;
