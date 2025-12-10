@@ -168,8 +168,8 @@
     <script>
         const clientId = '{{.ClientID}}';
         const clientOS = '{{.ClientOS}}';
-        // Set initial path based on OS: C:\\ for Windows, / for Unix-like systems
-        let currentPath = clientOS.toLowerCase() === 'windows' ? 'C:\\\\' : '/';
+        // Set initial path based on OS: C:\ for Windows, / for Unix-like systems
+        let currentPath = clientOS.toLowerCase() === 'windows' ? 'C:\\' : '/';
         let drivesCache = null;
         
         // Show drives button for Windows clients
@@ -307,28 +307,8 @@
         
         function handleFileClick(path, isDir) {
             if (isDir) {
-                // For Windows, join with backslash if needed
-                if (clientOS.toLowerCase() === 'windows') {
-                    // If currentPath ends with backslash, just append
-                    if (currentPath.endsWith('\\')) {
-                        browsePath(currentPath + path.split('\\').pop() + '\\');
-                    } else {
-                        // If root (C:\), append folder
-                        if (/^[A-Z]:\\$/.test(currentPath)) {
-                            browsePath(currentPath + path.split('\\').pop() + '\\');
-                        } else {
-                            // Otherwise, join with backslash
-                            browsePath(currentPath + '\\' + path.split('\\').pop() + '\\');
-                        }
-                    }
-                } else {
-                    // Unix: join with slash
-                    if (currentPath.endsWith('/')) {
-                        browsePath(currentPath + path.split('/').pop() + '/');
-                    } else {
-                        browsePath(currentPath + '/' + path.split('/').pop() + '/');
-                    }
-                }
+                // Use the full path from the server directly
+                browsePath(path);
             } else {
                 if (confirm('Download this file?')) {
                     downloadFile(path);
@@ -391,7 +371,7 @@
         }
         
         function goHome() {
-            currentPath = clientOS.toLowerCase() === 'windows' ? 'C:\\\\' : '/';
+            currentPath = clientOS.toLowerCase() === 'windows' ? 'C:\\' : '/';
             browsePath(currentPath);
         }
         
@@ -421,11 +401,11 @@
         
         // Load initial directory based on OS
         window.addEventListener('DOMContentLoaded', () => {
-            // For Windows, wait a bit for drives to load, then browse C:\\
+            // For Windows, set to C:\
             if (clientOS.toLowerCase() === 'windows') {
+                currentPath = 'C:\\';
+                document.getElementById('currentPath').value = currentPath;
                 setTimeout(() => {
-                    currentPath = 'C:\\\\';
-                    document.getElementById('currentPath').value = currentPath;
                     browsePath(currentPath);
                 }, 500);
             } else {
