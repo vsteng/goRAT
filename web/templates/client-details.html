@@ -631,8 +631,18 @@
                 <div class="toolbar">
                     <input type="text" class="path-input" id="filePath" value="/" placeholder="Enter file path...">
                     <button class="btn btn-primary btn-small" onclick="browseFolder()">Browse</button>
+                    <button class="btn btn-secondary btn-small" id="drivesBtn" style="display: none;" onclick="toggleDrives()">💾 Drives</button>
                     <button class="btn btn-secondary btn-small" onclick="uploadFile()">📤 Upload</button>
                     <button class="btn btn-secondary btn-small" onclick="refreshFiles()">🔄 Refresh</button>
+                </div>
+                <div id="drivesPanel" style="display: none; background: #10121a; border: 1px solid #1f2230; border-radius: 10px; padding: 14px; margin-bottom: 14px;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+                        <h4 style="margin: 0; color: #fff;">Available Drives</h4>
+                        <button class="btn btn-secondary btn-small" onclick="toggleDrives()">Close</button>
+                    </div>
+                    <div id="drivesList" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px;">
+                        <div style="text-align: center; padding: 12px; color: var(--text-light);">Loading drives...</div>
+                    </div>
                 </div>
                 <div class="file-list">
                     <table>
@@ -768,6 +778,7 @@
     <script>
         let clientId = null;
         let currentClient = null;
+        let drivesCache = null;
 
         // Get client ID from URL
         function getClientId() {
@@ -787,6 +798,7 @@
             if (tabName === 'processes') {
                 loadProcesses();
             } else if (tabName === 'files') {
+                ensureFileBrowserDefaults();
                 browseFolder();
             }
         }
@@ -833,12 +845,37 @@
             document.getElementById('publicIp').textContent = currentClient.public_ip || '-';
             document.getElementById('connected').textContent = currentClient.status;
             document.getElementById('lastSync').textContent = currentClient.last_seen ? new Date(currentClient.last_seen).toLocaleString() : '-';
+
+            ensureFileBrowserDefaults();
         }
 
         // File browser functions
         function browseFolder() {
-            const path = document.getElementById('filePath').value || '/';
+            ensureFileBrowserDefaults();
+            const path = document.getElementById('filePath').value || getDefaultPath();
             loadFiles(path);
+        }
+
+        function ensureFileBrowserDefaults() {
+            const isWindows = isWindowsClient();
+            if (isWindows) {
+                document.getElementById('drivesBtn').style.display = 'inline-flex';
+                if (!drivesCache) loadDrives();
+            }
+            const pathInput = document.getElementById('filePath');
+            if (pathInput && !pathInput.value) {
+                pathInput.value = getDefaultPath();
+            }
+        }
+
+        function getDefaultPath() {
+            const os = currentClient && currentClient.os ? currentClient.os.toLowerCase() : '';
+            return os.includes('windows') ? 'C:\\' : '/';
+        }
+
+        function isWindowsClient() {
+            const os = currentClient && currentClient.os ? currentClient.os.toLowerCase() : '';
+            return os.includes('windows');
         }
 
         async function loadFiles(path) {
@@ -862,6 +899,59 @@
                 document.getElementById('fileTableBody').innerHTML = 
                     `<tr><td colspan="4" style="text-align: center; color: red;">Error loading files: ${err.message}</td></tr>`;
             }
+        }
+
+        async function loadDrives() {
+            if (!isWindowsClient()) return;
+
+            try {
+                const response = await fetch('/api/files/drives', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ client_id: clientId })
+                });
+
+                if (!response.ok) throw new Error('Failed to get drives');
+
+                const result = await response.json();
+                drivesCache = result.drives || [];
+            } catch (err) {
+                console.error('Error loading drives:', err);
+                drivesCache = [];
+            }
+        }
+
+        function toggleDrives() {
+            if (!isWindowsClient()) return;
+
+            const panel = document.getElementById('drivesPanel');
+            const list = document.getElementById('drivesList');
+            const isVisible = panel.style.display !== 'none';
+
+            if (!isVisible && (!drivesCache || drivesCache.length === 0)) {
+                list.innerHTML = '<div style="text-align: center; padding: 12px; color: var(--text-light);">No drives found</div>';
+            }
+
+            panel.style.display = isVisible ? 'none' : 'block';
+
+            if (panel.style.display === 'block' && drivesCache && drivesCache.length) {
+                list.innerHTML = drivesCache.map(drive => {
+                    const escapedPath = drive.name.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+                    return `
+                        <div class="file-card" style="background: #151826; border: 1px solid #1f2230; border-radius: 10px; padding: 10px; cursor: pointer;" onclick="browseDrive('${escapedPath}')">
+                            <div style="font-weight: 600; color: #fff;">💾 ${escapeHtml(drive.name)}</div>
+                            <div style="color: var(--text-light); font-size: 12px;">${escapeHtml(drive.label || 'Local Disk')}</div>
+                            <div style="color: var(--text-muted); font-size: 12px; margin-top: 6px;">${drive.type} | ${formatBytes(drive.free_size)} free of ${formatBytes(drive.total_size)}</div>
+                        </div>
+                    `;
+                }).join('');
+            }
+        }
+
+        function browseDrive(path) {
+            const pathInput = document.getElementById('filePath');
+            pathInput.value = path;
+            loadFiles(path);
         }
 
         function renderFileList(files, currentPath) {
