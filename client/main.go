@@ -618,9 +618,9 @@ func (c *Client) readPump(disconnectChan chan bool) {
 		}
 	}()
 
-	c.conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+	c.conn.SetReadDeadline(time.Now().Add(90 * time.Second))
 	c.conn.SetPongHandler(func(string) error {
-		c.conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+		c.conn.SetReadDeadline(time.Now().Add(90 * time.Second))
 		return nil
 	})
 
@@ -668,7 +668,7 @@ func (c *Client) readPump(disconnectChan chan bool) {
 
 // writePump writes messages to the server
 func (c *Client) writePump(disconnectChan chan bool) {
-	ticker := time.NewTicker(54 * time.Second)
+	ticker := time.NewTicker(30 * time.Second)
 	defer func() {
 		ticker.Stop()
 		if c.conn != nil {

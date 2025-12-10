@@ -389,9 +389,9 @@ func (s *Server) readPump(client *Client) {
 		client.Conn.Close()
 	}()
 
-	client.Conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+	client.Conn.SetReadDeadline(time.Now().Add(90 * time.Second))
 	client.Conn.SetPongHandler(func(string) error {
-		client.Conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+		client.Conn.SetReadDeadline(time.Now().Add(90 * time.Second))
 		return nil
 	})
 
@@ -470,7 +470,7 @@ func (s *Server) readPump(client *Client) {
 
 // writePump writes messages to the client
 func (s *Server) writePump(client *Client) {
-	ticker := time.NewTicker(54 * time.Second)
+	ticker := time.NewTicker(30 * time.Second)
 	defer func() {
 		if r := recover(); r != nil {
 			log.Printf("PANIC RECOVERED in writePump for client %s: %v", client.ID, r)

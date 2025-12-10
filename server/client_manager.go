@@ -108,10 +108,15 @@ func (m *ClientManager) Run() {
 
 		case client := <-m.unregister:
 			m.mu.Lock()
-			if _, ok := m.clients[client.ID]; ok {
+			// Only unregister if this is the currently registered client
+			// (not an old connection that was already replaced)
+			if current, ok := m.clients[client.ID]; ok && current == client {
 				m.safeCloseClient(client)
 				delete(m.clients, client.ID)
 				log.Printf("Client unregistered: %s", client.ID)
+			} else if ok {
+				// This is an old connection being cleaned up, ignore
+				log.Printf("Ignoring unregister for old connection: %s", client.ID)
 			}
 			m.mu.Unlock()
 
