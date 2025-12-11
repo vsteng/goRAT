@@ -665,9 +665,7 @@ func (s *Server) handleMessage(client *Client, msg *common.Message) {
 		var pl common.ProcessListPayload
 		if err := msg.ParsePayload(&pl); err == nil {
 			log.Printf("Process list from %s: %d processes", client.ID, len(pl.Processes))
-			s.resultsMu.Lock()
 			s.SetProcessListResult(client.ID, &pl)
-			s.resultsMu.Unlock()
 		} else {
 			log.Printf("Process list from %s", client.ID)
 		}
