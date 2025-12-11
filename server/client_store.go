@@ -92,6 +92,13 @@ func (s *ClientStore) initDB() error {
 	);
 
 	CREATE INDEX IF NOT EXISTS idx_web_users_username ON web_users(username);
+
+	CREATE TABLE IF NOT EXISTS server_settings (
+		key TEXT PRIMARY KEY,
+		value TEXT,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	);
 	`
 
 	_, err := s.db.Exec(schema)
@@ -715,4 +722,65 @@ func (s *ClientStore) AdminExists() (bool, error) {
 	var count int
 	err := s.db.QueryRow("SELECT COUNT(*) FROM web_users WHERE role = ?", "admin").Scan(&count)
 	return count > 0, err
+}
+
+// GetServerSetting retrieves a server setting by key
+func (s *ClientStore) GetServerSetting(key string) (string, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var value string
+	err := s.db.QueryRow("SELECT value FROM server_settings WHERE key = ?", key).Scan(&value)
+	if err == sql.ErrNoRows {
+		return "", nil // Return empty string if setting doesn't exist
+	}
+	return value, err
+}
+
+// SetServerSetting saves or updates a server setting
+func (s *ClientStore) SetServerSetting(key, value string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	query := `
+	INSERT INTO server_settings (key, value, created_at, updated_at)
+	VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+	ON CONFLICT(key) DO UPDATE SET
+		value = excluded.value,
+		updated_at = CURRENT_TIMESTAMP
+	`
+
+	_, err := s.db.Exec(query, key, value)
+	return err
+}
+
+// GetAllServerSettings retrieves all server settings
+func (s *ClientStore) GetAllServerSettings() (map[string]string, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	settings := make(map[string]string)
+	rows, err := s.db.Query("SELECT key, value FROM server_settings")
+	if err != nil {
+		return settings, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var key, value string
+		if err := rows.Scan(&key, &value); err != nil {
+			return settings, err
+		}
+		settings[key] = value
+	}
+	return settings, rows.Err()
+}
+
+// DeleteServerSetting removes a server setting
+func (s *ClientStore) DeleteServerSetting(key string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	_, err := s.db.Exec("DELETE FROM server_settings WHERE key = ?", key)
+	return err
 }

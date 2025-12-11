@@ -220,6 +220,15 @@ func (s *Server) Start() error {
 	router.DELETE("/admin/api/proxy/:id", s.AdminDeleteProxyHandler)
 	router.GET("/admin/api/stats", s.AdminStatsHandler)
 
+	// Settings API endpoints
+	router.GET("/admin/api/settings", s.AdminGetSettingsHandler)
+	router.POST("/admin/api/settings", s.AdminSaveSettingsHandler)
+	
+	// Public settings API endpoints (for dashboard)
+	router.GET("/api/settings", s.ginHandleGetSettings)
+	router.POST("/api/settings", s.ginHandleSaveSettings)
+	router.POST("/api/push-update", s.ginHandlePushUpdate)
+
 	// Web UI routes (migrate from old handler)
 	s.webHandler.RegisterGinRoutes(router)
 

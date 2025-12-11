@@ -1,9 +1,13 @@
 package server
 
 import (
+	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
+	"time"
 
+	"mww2.com/server_manager/common"
 	"github.com/gin-gonic/gin"
 )
 
@@ -169,4 +173,184 @@ func (s *Server) AdminStatsHandler(c *gin.Context) {
 		"totalProxies":  len(proxies),
 		"totalUsers":    len(users),
 	})
+}
+
+// AdminGetSettingsHandler retrieves all server settings
+func (s *Server) AdminGetSettingsHandler(c *gin.Context) {
+	settings, err := s.store.GetAllServerSettings()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to load settings"})
+		return
+	}
+
+	c.JSON(http.StatusOK, settings)
+}
+
+// AdminSaveSettingsHandler saves server settings
+func (s *Server) AdminSaveSettingsHandler(c *gin.Context) {
+	var settings map[string]string
+	if err := c.ShouldBindJSON(&settings); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request format"})
+		return
+	}
+
+	for key, value := range settings {
+		if err := s.store.SetServerSetting(key, value); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save settings"})
+			return
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Settings saved successfully"})
+}
+
+// ginHandleGetSettings retrieves all server settings (public API)
+func (s *Server) ginHandleGetSettings(c *gin.Context) {
+	s.AdminGetSettingsHandler(c)
+}
+
+// ginHandleSaveSettings saves server settings (public API)
+func (s *Server) ginHandleSaveSettings(c *gin.Context) {
+	s.AdminSaveSettingsHandler(c)
+}
+
+// ginHandlePushUpdate sends update commands to clients by platform
+func (s *Server) ginHandlePushUpdate(c *gin.Context) {
+	var req struct {
+		Platform string `json:"platform"`
+		Version  string `json:"version"`
+		Force    bool   `json:"force"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request format"})
+		return
+	}
+
+	if req.Platform == "" || req.Version == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Platform and version are required"})
+		return
+	}
+
+	// Get all connected clients from the manager
+	allClients := s.manager.GetAllClients()
+
+	// Filter clients by platform
+	var matchingClients []*Client
+	if req.Platform == "all" {
+		matchingClients = allClients
+	} else {
+		for _, client := range allClients {
+			// Convert OS and Arch to platform key
+			platform := getPlatformKey(client.Metadata.OS, client.Metadata.Arch)
+			if platform == req.Platform {
+				matchingClients = append(matchingClients, client)
+			}
+		}
+	}
+
+	// Send update command to each matching client
+	totalMatching := len(matchingClients)
+	updatesSent := 0
+	updatesFailed := 0
+	var logs []map[string]interface{}
+
+	for _, client := range matchingClients {
+		// Build update URL
+		updateURL := buildUpdateURL(req.Platform, req.Version, s.store)
+		if updateURL == "" {
+			updatesFailed++
+			logs = append(logs, map[string]interface{}{
+				"timestamp": time.Now().String(),
+				"status":    "failed",
+				"client_id": client.ID,
+				"message":   "Update URL not configured",
+			})
+			continue
+		}
+
+		// Create update command message
+		updatePayload := map[string]interface{}{
+			"command": "update",
+			"url":     updateURL,
+			"version": req.Version,
+			"force":   req.Force,
+		}
+
+		payloadBytes, _ := json.Marshal(updatePayload)
+		msg, err := common.NewMessage(common.MsgTypeUpdateStatus, payloadBytes)
+		if err != nil {
+			updatesFailed++
+			logs = append(logs, map[string]interface{}{
+				"timestamp": time.Now().String(),
+				"status":    "failed",
+				"client_id": client.ID,
+				"message":   "Failed to create message: " + err.Error(),
+			})
+			continue
+		}
+
+		// Send message to client
+		if err := s.manager.SendToClient(client.ID, msg); err != nil {
+			updatesFailed++
+			logs = append(logs, map[string]interface{}{
+				"timestamp": time.Now().String(),
+				"status":    "failed",
+				"client_id": client.ID,
+				"message":   "Failed to send command: " + err.Error(),
+			})
+		} else {
+			updatesSent++
+			logs = append(logs, map[string]interface{}{
+				"timestamp": time.Now().String(),
+				"status":    "success",
+				"client_id": client.ID,
+				"message":   "Update command sent to " + client.Metadata.Hostname,
+			})
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"total_matching": totalMatching,
+		"updates_sent":   updatesSent,
+		"updates_failed": updatesFailed,
+		"log":            logs,
+	})
+}
+
+// getPlatformKey converts OS and Arch to platform key
+func getPlatformKey(os, arch string) string {
+	osMap := map[string]string{
+		"windows": "windows",
+		"linux":   "linux",
+		"darwin":  "darwin",
+	}
+	
+	archMap := map[string]string{
+		"amd64": "amd64",
+		"386":   "386",
+		"arm64": "arm64",
+	}
+	
+	osKey := osMap[os]
+	archKey := archMap[arch]
+	
+	if osKey == "" || archKey == "" {
+		return ""
+	}
+	
+	return osKey + "-" + archKey
+}
+
+// buildUpdateURL constructs the update URL from settings
+func buildUpdateURL(platform, version string, store *ClientStore) string {
+	settingKey := "update_path_" + platform
+	basePath, err := store.GetServerSetting(settingKey)
+	if err != nil || basePath == "" {
+		return ""
+	}
+	
+	// Replace {version} placeholder
+	url := strings.ReplaceAll(basePath, "{version}", version)
+	return url
 }

@@ -1127,6 +1127,70 @@
                         
                         <button class="btn btn-primary" style="margin-top: 20px;" onclick="saveUpdatePaths()">💾 Save Settings</button>
                     </div>
+
+                    <div class="section" style="margin-top: 30px;">
+                        <h3>📢 Push Client Updates</h3>
+                        <p style="color: var(--text-light); margin-top: 10px; margin-bottom: 20px;">Send update commands to clients by platform and version.</p>
+                        
+                        <div style="background: var(--light); padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px;">
+                                <div>
+                                    <label style="display: block; margin-bottom: 8px; font-weight: 600; font-size: 14px;">Select Platform</label>
+                                    <select id="updatePlatform" class="input-field" style="padding: 10px; border: 1px solid var(--border); border-radius: 4px;">
+                                        <option value="">-- Choose Platform --</option>
+                                        <option value="windows-amd64">Windows AMD64</option>
+                                        <option value="windows-386">Windows 386</option>
+                                        <option value="linux-amd64">Linux AMD64</option>
+                                        <option value="linux-386">Linux 386</option>
+                                        <option value="darwin-amd64">macOS AMD64 (Intel)</option>
+                                        <option value="darwin-arm64">macOS ARM64 (Apple Silicon)</option>
+                                        <option value="all">All Platforms</option>
+                                    </select>
+                                </div>
+                                
+                                <div>
+                                    <label style="display: block; margin-bottom: 8px; font-weight: 600; font-size: 14px;">New Version</label>
+                                    <input type="text" id="updateVersion" class="input-field" placeholder="e.g., 2.0.0" style="padding: 10px; border: 1px solid var(--border); border-radius: 4px;" />
+                                </div>
+                                
+                                <div>
+                                    <label style="display: block; margin-bottom: 8px; font-weight: 600; font-size: 14px;">Force Update</label>
+                                    <select id="updateForce" class="input-field" style="padding: 10px; border: 1px solid var(--border); border-radius: 4px;">
+                                        <option value="false">No (optional)</option>
+                                        <option value="true">Yes (mandatory)</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 15px;">
+                                <button class="btn btn-primary" onclick="pushClientsUpdate()" style="width: 100%;">📤 Push Update</button>
+                                <button class="btn btn-secondary" onclick="clearUpdateForm()" style="width: 100%;">Clear</button>
+                            </div>
+                        </div>
+
+                        <div id="updateStats" style="display: none; background: #f0f8ff; padding: 15px; border-radius: 8px; border-left: 4px solid var(--info); margin-bottom: 15px;">
+                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px;">
+                                <div>
+                                    <div style="font-size: 12px; color: var(--text-light); margin-bottom: 5px;">Total Matching</div>
+                                    <div style="font-size: 24px; font-weight: 600; color: var(--info);" id="matchingCount">0</div>
+                                </div>
+                                <div>
+                                    <div style="font-size: 12px; color: var(--text-light); margin-bottom: 5px;">Updates Sent</div>
+                                    <div style="font-size: 24px; font-weight: 600; color: var(--success);" id="updatesSent">0</div>
+                                </div>
+                                <div>
+                                    <div style="font-size: 12px; color: var(--text-light); margin-bottom: 5px;">Failed</div>
+                                    <div style="font-size: 24px; font-weight: 600; color: var(--danger);" id="updatesFailed">0</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="updateLogContainer" style="display: none;">
+                            <h4 style="margin-bottom: 10px; font-size: 14px;">📋 Update Log</h4>
+                            <div id="updateLog" style="background: #f5f5f5; padding: 15px; border-radius: 6px; font-size: 12px; max-height: 300px; overflow-y: auto; font-family: monospace; line-height: 1.5;">
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1854,6 +1918,10 @@
             if (section === 'users') {
                 loadUsers();
             }
+            // If switching to settings tab, load settings
+            if (section === 'settings') {
+                loadUpdatePaths();
+            }
         }
 
         function showStatus(title, message) {
@@ -2101,34 +2169,46 @@
             });
         }
 
-        function loadUpdatePaths() {
-            // Load settings from localStorage
+        async function loadUpdatePaths() {
+            // Load settings from API endpoint
             const platforms = [
-                { id: 'updatePathWindowsAmd64', key: 'windowsAmd64' },
-                { id: 'updatePathWindows386', key: 'windows386' },
-                { id: 'updatePathLinuxAmd64', key: 'linuxAmd64' },
-                { id: 'updatePathLinux386', key: 'linux386' },
-                { id: 'updatePathDarwinAmd64', key: 'darwinAmd64' },
-                { id: 'updatePathDarwinArm64', key: 'darwinArm64' }
+                { id: 'updatePathWindowsAmd64', key: 'windows-amd64' },
+                { id: 'updatePathWindows386', key: 'windows-386' },
+                { id: 'updatePathLinuxAmd64', key: 'linux-amd64' },
+                { id: 'updatePathLinux386', key: 'linux-386' },
+                { id: 'updatePathDarwinAmd64', key: 'darwin-amd64' },
+                { id: 'updatePathDarwinArm64', key: 'darwin-arm64' }
             ];
             
-            const settings = JSON.parse(localStorage.getItem('serverSettings') || '{}');
-            platforms.forEach(platform => {
-                const el = document.getElementById(platform.id);
-                if (el) {
-                    el.value = settings[platform.key] || '';
+            try {
+                const response = await fetch('/api/settings');
+                if (response.status === 401) {
+                    window.location.href = '/login';
+                    return;
                 }
-            });
+                
+                if (response.ok) {
+                    const settings = await response.json() || {};
+                    platforms.forEach(platform => {
+                        const el = document.getElementById(platform.id);
+                        if (el) {
+                            el.value = settings[`update_path_${platform.key}`] || '';
+                        }
+                    });
+                }
+            } catch (err) {
+                console.error('Error loading settings:', err);
+            }
         }
 
-        function saveUpdatePaths() {
+        async function saveUpdatePaths() {
             const platforms = [
-                { id: 'updatePathWindowsAmd64', key: 'windowsAmd64' },
-                { id: 'updatePathWindows386', key: 'windows386' },
-                { id: 'updatePathLinuxAmd64', key: 'linuxAmd64' },
-                { id: 'updatePathLinux386', key: 'linux386' },
-                { id: 'updatePathDarwinAmd64', key: 'darwinAmd64' },
-                { id: 'updatePathDarwinArm64', key: 'darwinArm64' }
+                { id: 'updatePathWindowsAmd64', key: 'windows-amd64' },
+                { id: 'updatePathWindows386', key: 'windows-386' },
+                { id: 'updatePathLinuxAmd64', key: 'linux-amd64' },
+                { id: 'updatePathLinux386', key: 'linux-386' },
+                { id: 'updatePathDarwinAmd64', key: 'darwin-amd64' },
+                { id: 'updatePathDarwinArm64', key: 'darwin-arm64' }
             ];
             
             const settings = {};
@@ -2137,13 +2217,104 @@
                 if (el) {
                     const value = el.value.trim();
                     if (value) {
-                        settings[platform.key] = value;
+                        settings[`update_path_${platform.key}`] = value;
                     }
                 }
             });
             
-            localStorage.setItem('serverSettings', JSON.stringify(settings));
-            showModal('Success', 'Update paths saved successfully!');
+            try {
+                const response = await fetch('/api/settings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(settings)
+                });
+
+                if (response.ok) {
+                    showStatus('Success', 'Update paths saved successfully!');
+                } else if (response.status === 401) {
+                    window.location.href = '/login';
+                } else {
+                    showStatus('Error', 'Failed to save settings');
+                }
+            } catch (err) {
+                console.error('Error saving settings:', err);
+                showStatus('Error', 'Error saving settings');
+            }
+        }
+
+        function clearUpdateForm() {
+            document.getElementById('updatePlatform').value = '';
+            document.getElementById('updateVersion').value = '';
+            document.getElementById('updateForce').value = 'false';
+            document.getElementById('updateStats').style.display = 'none';
+            document.getElementById('updateLogContainer').style.display = 'none';
+        }
+
+        async function pushClientsUpdate() {
+            const platform = document.getElementById('updatePlatform').value.trim();
+            const version = document.getElementById('updateVersion').value.trim();
+            const forceUpdate = document.getElementById('updateForce').value === 'true';
+
+            if (!platform) {
+                showStatus('Error', 'Please select a platform');
+                return;
+            }
+
+            if (!version) {
+                showStatus('Error', 'Please enter a version number');
+                return;
+            }
+
+            // Show update log
+            document.getElementById('updateStats').style.display = 'block';
+            document.getElementById('updateLogContainer').style.display = 'block';
+            document.getElementById('updateLog').innerHTML = '<p style="color: var(--text-light);">Processing...</p>';
+
+            try {
+                const response = await fetch('/api/push-update', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        platform: platform,
+                        version: version,
+                        force: forceUpdate
+                    })
+                });
+
+                if (response.status === 401) {
+                    window.location.href = '/login';
+                    return;
+                }
+
+                const result = await response.json();
+
+                // Update stats
+                document.getElementById('matchingCount').textContent = result.total_matching || 0;
+                document.getElementById('updatesSent').textContent = result.updates_sent || 0;
+                document.getElementById('updatesFailed').textContent = result.updates_failed || 0;
+
+                // Update log
+                const logLines = (result.log || []).map(entry => {
+                    const time = entry.timestamp ? new Date(entry.timestamp).toLocaleTimeString() : '--:--:--';
+                    const status = entry.status ? `[${entry.status.toUpperCase()}]` : '[INFO]';
+                    const message = entry.message || entry.client_id || '';
+                    return `${time} ${status} ${message}`;
+                });
+
+                document.getElementById('updateLog').innerHTML = logLines.length > 0 
+                    ? logLines.map(line => `<div>${escapeHtml(line)}</div>`).join('')
+                    : '<p style="color: var(--text-light);">No log entries</p>';
+
+                if (response.ok) {
+                    showStatus('Success', `Update pushed to ${result.updates_sent || 0} client(s)`);
+                } else {
+                    showStatus('Partial Success', `Pushed to ${result.updates_sent || 0}, failed: ${result.updates_failed || 0}`);
+                }
+            } catch (err) {
+                console.error('Error pushing update:', err);
+                document.getElementById('updateLog').innerHTML = `<p style="color: var(--danger);">Error: ${escapeHtml(err.message)}</p>`;
+                showStatus('Error', 'Failed to push update');
+            }
         }
 
         // Initialize
@@ -2152,13 +2323,6 @@
         
         // Set initial active tab
         showSection('dashboard');
-        
-        // Load settings when page loads
-        window.addEventListener('load', () => {
-            if (document.getElementById('settingsSection').classList.contains('active')) {
-                loadUpdatePaths();
-            }
-        });
     </script>
 </body>
 </html>
