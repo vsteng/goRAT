@@ -48,7 +48,7 @@ func (wh *WebHandler) HandleScreenshotRequest(w http.ResponseWriter, r *http.Req
 			http.Error(w, "Request timeout", http.StatusRequestTimeout)
 			return
 		case <-ticker.C:
-			if result, exists := wh.server.GetScreenshotResult(clientID); exists {
+			if result := wh.server.GetScreenshotResult(clientID); result != nil {
 				w.Header().Set("Content-Type", "application/json")
 				json.NewEncoder(w).Encode(map[string]interface{}{
 					"width":  result.Width,

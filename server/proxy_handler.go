@@ -1496,8 +1496,8 @@ func (s *Server) HandleProcessesAPI(w http.ResponseWriter, r *http.Request) {
 			w.Write([]byte("[]"))
 			return
 		case <-ticker.C:
-			result, exists := s.GetProcessListResult(clientID)
-			if exists && result != nil {
+			result := s.GetProcessListResult(clientID)
+			if result != nil {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusOK)
 
@@ -1561,8 +1561,8 @@ func (s *Server) HandleSystemInfoAPI(w http.ResponseWriter, r *http.Request) {
 			w.Write([]byte("{}"))
 			return
 		case <-ticker.C:
-			result, exists := s.GetSystemInfoResult(clientID)
-			if exists && result != nil {
+			result := s.GetSystemInfoResult(clientID)
+			if result != nil {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusOK)
 
