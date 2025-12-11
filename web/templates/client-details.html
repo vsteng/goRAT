@@ -700,23 +700,23 @@
                     <h4>💻 System Information</h4>
                     <div class="info-row">
                         <span class="info-label">Hostname:</span>
-                        <span class="info-value" id="hostname">-</span>
+                        <span class="info-value" id="info_hostname">-</span>
                     </div>
                     <div class="info-row">
                         <span class="info-label">OS:</span>
-                        <span class="info-value" id="osInfo">-</span>
+                        <span class="info-value" id="info_os">-</span>
                     </div>
                     <div class="info-row">
                         <span class="info-label">Architecture:</span>
-                        <span class="info-value" id="archInfo">-</span>
+                        <span class="info-value" id="info_arch">-</span>
                     </div>
                     <div class="info-row">
                         <span class="info-label">CPU Cores:</span>
-                        <span class="info-value" id="cpuCores">-</span>
+                        <span class="info-value" id="info_cpuCores">-</span>
                     </div>
                     <div class="info-row">
                         <span class="info-label">Uptime:</span>
-                        <span class="info-value" id="uptime">-</span>
+                        <span class="info-value" id="info_uptime">-</span>
                     </div>
                 </div>
 
@@ -724,19 +724,19 @@
                     <h4>💾 Memory</h4>
                     <div class="info-row">
                         <span class="info-label">Total:</span>
-                        <span class="info-value" id="totalMem">-</span>
+                        <span class="info-value" id="info_totalMem">-</span>
                     </div>
                     <div class="info-row">
                         <span class="info-label">Available:</span>
-                        <span class="info-value" id="availMem">-</span>
+                        <span class="info-value" id="info_availMem">-</span>
                     </div>
                     <div class="info-row">
                         <span class="info-label">Used:</span>
-                        <span class="info-value" id="usedMem">-</span>
+                        <span class="info-value" id="info_usedMem">-</span>
                     </div>
                     <div class="info-row">
                         <span class="info-label">Usage:</span>
-                        <span class="info-value" id="memPercent">-</span>
+                        <span class="info-value" id="info_memPercent">-</span>
                     </div>
                 </div>
 
@@ -744,19 +744,19 @@
                     <h4>💿 Disk</h4>
                     <div class="info-row">
                         <span class="info-label">Total:</span>
-                        <span class="info-value" id="diskTotal">-</span>
+                        <span class="info-value" id="info_diskTotal">-</span>
                     </div>
                     <div class="info-row">
                         <span class="info-label">Used:</span>
-                        <span class="info-value" id="diskUsed">-</span>
+                        <span class="info-value" id="info_diskUsed">-</span>
                     </div>
                     <div class="info-row">
                         <span class="info-label">Free:</span>
-                        <span class="info-value" id="diskFree">-</span>
+                        <span class="info-value" id="info_diskFree">-</span>
                     </div>
                     <div class="info-row">
                         <span class="info-label">Usage:</span>
-                        <span class="info-value" id="diskPercent">-</span>
+                        <span class="info-value" id="info_diskPercent">-</span>
                     </div>
                 </div>
             </div>
@@ -1203,28 +1203,28 @@
 
         function renderSystemInfo(info) {
             // System Information section
-            document.getElementById('hostname').textContent = info.hostname || '-';
-            document.getElementById('osInfo').textContent = info.os || '-';
-            document.getElementById('archInfo').textContent = info.arch || '-';
-            document.getElementById('cpuCores').textContent = info.cpu_count || '-';
+            document.getElementById('info_hostname').textContent = info.hostname || '-';
+            document.getElementById('info_os').textContent = info.os || '-';
+            document.getElementById('info_arch').textContent = info.arch || '-';
+            document.getElementById('info_cpuCores').textContent = info.cpu_count || '-';
             
             // Add uptime display
             const uptimeHours = Math.floor((info.uptime || 0) / 3600);
             const uptimeDays = Math.floor(uptimeHours / 24);
             const uptimeDisplay = uptimeDays > 0 ? `${uptimeDays}d ${uptimeHours % 24}h` : `${uptimeHours}h`;
-            document.getElementById('uptime').textContent = uptimeDisplay;
+            document.getElementById('info_uptime').textContent = uptimeDisplay;
             
             // Memory section
-            document.getElementById('totalMem').textContent = formatBytes(info.total_memory || 0);
-            document.getElementById('availMem').textContent = formatBytes(info.avail_memory || 0);
-            document.getElementById('usedMem').textContent = formatBytes(info.used_memory || 0);
-            document.getElementById('memPercent').textContent = `${(info.memory_percent || 0).toFixed(1)}%`;
+            document.getElementById('info_totalMem').textContent = formatBytes(info.total_memory || 0);
+            document.getElementById('info_availMem').textContent = formatBytes(info.avail_memory || 0);
+            document.getElementById('info_usedMem').textContent = formatBytes(info.used_memory || 0);
+            document.getElementById('info_memPercent').textContent = `${(info.memory_percent || 0).toFixed(1)}%`;
             
             // Disk section
-            document.getElementById('diskTotal').textContent = formatBytes(info.disk_total || 0);
-            document.getElementById('diskUsed').textContent = formatBytes(info.disk_used || 0);
-            document.getElementById('diskFree').textContent = formatBytes(info.disk_free || 0);
-            document.getElementById('diskPercent').textContent = `${(info.disk_percent || 0).toFixed(1)}%`;
+            document.getElementById('info_diskTotal').textContent = formatBytes(info.disk_total || 0);
+            document.getElementById('info_diskUsed').textContent = formatBytes(info.disk_used || 0);
+            document.getElementById('info_diskFree').textContent = formatBytes(info.disk_free || 0);
+            document.getElementById('info_diskPercent').textContent = `${(info.disk_percent || 0).toFixed(1)}%`;
         }
 
         function killProcess(pid) {
