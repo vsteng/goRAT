@@ -97,9 +97,11 @@ func (wh *WebHandler) requireAuth(next http.HandlerFunc) http.HandlerFunc {
 func (wh *WebHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	// Check if already logged in
 	if cookie, err := r.Cookie("session_id"); err == nil {
-		if _, exists := wh.sessionMgr.GetSession(cookie.Value); exists {
-			http.Redirect(w, r, "/dashboard", http.StatusSeeOther)
-			return
+		if wh.sessionMgr != nil {
+			if _, exists := wh.sessionMgr.GetSession(cookie.Value); exists {
+				http.Redirect(w, r, "/dashboard", http.StatusSeeOther)
+				return
+			}
 		}
 	}
 
@@ -167,6 +169,11 @@ func (wh *WebHandler) HandleLoginAPI(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create session
+	if wh.sessionMgr == nil {
+		http.Error(w, "Session manager not available", http.StatusInternalServerError)
+		return
+	}
+
 	session, err := wh.sessionMgr.CreateSession(credentials.Username)
 	if err != nil {
 		http.Error(w, "Failed to create session", http.StatusInternalServerError)
@@ -196,7 +203,7 @@ func (wh *WebHandler) HandleLogout(w http.ResponseWriter, r *http.Request) {
 	}
 
 	cookie, err := r.Cookie("session_id")
-	if err == nil {
+	if err == nil && wh.sessionMgr != nil {
 		wh.sessionMgr.DeleteSession(cookie.Value)
 	}
 
@@ -305,7 +312,7 @@ func (wh *WebHandler) HandleClientDetails(w http.ResponseWriter, r *http.Request
 func (wh *WebHandler) HandleClientsAPI(w http.ResponseWriter, r *http.Request) {
 	// Check authentication
 	cookie, err := r.Cookie("session_id")
-	if err != nil {
+	if err != nil || wh.sessionMgr == nil {
 		w.WriteHeader(http.StatusUnauthorized)
 		json.NewEncoder(w).Encode(map[string]string{"error": "Unauthorized"})
 		return
@@ -884,6 +891,12 @@ func (wh *WebHandler) ginRequireAuth(handler gin.HandlerFunc) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		cookie, err := c.Cookie("session_id")
 		if err != nil {
+			c.Redirect(http.StatusSeeOther, "/login")
+			c.Abort()
+			return
+		}
+
+		if wh.sessionMgr == nil {
 			c.Redirect(http.StatusSeeOther, "/login")
 			c.Abort()
 			return
