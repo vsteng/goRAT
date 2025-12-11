@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"gorat/pkg/auth"
+	"gorat/pkg/clients"
 	"gorat/pkg/config"
 	"gorat/pkg/logger"
 	"gorat/pkg/storage"
@@ -14,7 +15,7 @@ type Services struct {
 	Config     *config.ServerConfig
 	Logger     *logger.Logger
 	Storage    storage.Store
-	ClientMgr  *ClientManager
+	ClientMgr  clients.Manager
 	ProxyMgr   *ProxyManager
 	SessionMgr auth.SessionManager
 	TermProxy  *TerminalProxy
@@ -35,8 +36,8 @@ func NewServices(cfg *config.ServerConfig) (*Services, error) {
 	}
 
 	// Initialize client manager
-	clientMgr := NewClientManager()
-	clientMgr.SetStore(store)
+	clientMgr := clients.NewManager()
+	clientMgr.Start()
 
 	// Initialize other services
 	sessionMgr := auth.NewSessionManager(24 * time.Hour)

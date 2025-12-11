@@ -12,6 +12,7 @@ import (
 
 	"gorat/common"
 	"gorat/pkg/auth"
+	"gorat/pkg/clients"
 	"gorat/pkg/storage"
 
 	"github.com/gin-gonic/gin"
@@ -26,7 +27,7 @@ type WebConfig struct {
 // WebHandler handles web UI requests
 type WebHandler struct {
 	sessionMgr auth.SessionManager
-	clientMgr  *ClientManager
+	clientMgr  clients.Manager
 	store      storage.Store
 	config     *WebConfig
 	templates  *template.Template
@@ -34,7 +35,7 @@ type WebHandler struct {
 }
 
 // NewWebHandler creates a new web handler
-func NewWebHandler(sessionMgr auth.SessionManager, clientMgr *ClientManager, store storage.Store, config *WebConfig) (*WebHandler, error) {
+func NewWebHandler(sessionMgr auth.SessionManager, clientMgr clients.Manager, store storage.Store, config *WebConfig) (*WebHandler, error) {
 	// Load templates from disk
 	templatesPath := filepath.Join("web", "templates", "*.html")
 	tmpl, err := template.ParseGlob(templatesPath)
@@ -252,11 +253,10 @@ func (wh *WebHandler) HandleFilesPage(w http.ResponseWriter, r *http.Request) {
 	client, exists := wh.clientMgr.GetClient(clientID)
 	clientOS := "linux" // default to linux/unix
 	if exists && client != nil {
-		client.mu.RLock()
-		if client.Metadata != nil && client.Metadata.OS != "" {
-			clientOS = client.Metadata.OS
+		meta := client.Metadata()
+		if meta != nil && meta.OS != "" {
+			clientOS = meta.OS
 		}
-		client.mu.RUnlock()
 	}
 
 	data := struct {
@@ -317,11 +317,17 @@ func (wh *WebHandler) HandleClientsAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get clients from original handler
-	clients := wh.clientMgr.GetClients()
+	// Get clients from manager
+	allClients := wh.clientMgr.GetAllClients()
+	metadata := make([]*common.ClientMetadata, 0, len(allClients))
+	for _, client := range allClients {
+		if meta := client.Metadata(); meta != nil {
+			metadata = append(metadata, meta)
+		}
+	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(clients)
+	json.NewEncoder(w).Encode(metadata)
 }
 
 // HandleFileBrowse handles file browsing requests
@@ -543,11 +549,11 @@ func (wh *WebHandler) HandleGlobalUpdate(w http.ResponseWriter, r *http.Request)
 	log.Printf("Global update initiated: version=%s, platforms=%d", req.Version, len(req.URLs))
 
 	// Get all online clients
-	clients := wh.clientMgr.GetClients()
+	allClients := wh.clientMgr.GetAllClients()
 	onlineClients := []*common.ClientMetadata{}
-	for _, client := range clients {
-		if client.Status == "online" {
-			onlineClients = append(onlineClients, client)
+	for _, client := range allClients {
+		if meta := client.Metadata(); meta != nil && meta.Status == "online" {
+			onlineClients = append(onlineClients, meta)
 		}
 	}
 

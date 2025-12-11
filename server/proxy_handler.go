@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"gorat/common"
+	"gorat/pkg/clients"
 	"gorat/pkg/storage"
 )
 
@@ -215,7 +216,7 @@ func (cp *ConnectionPool) Stats() map[string]interface{} {
 type ProxyManager struct {
 	connections map[string]*ProxyConnection
 	mu          sync.RWMutex
-	manager     *ClientManager
+	manager     clients.Manager
 	store       storage.Store  // For persistent storage
 	portMap     map[int]string // Maps port to proxy connection ID (like lanproxy)
 	portMapMu   sync.RWMutex
@@ -223,7 +224,7 @@ type ProxyManager struct {
 }
 
 // NewProxyManager creates a new proxy manager
-func NewProxyManager(manager *ClientManager, store storage.Store) *ProxyManager {
+func NewProxyManager(manager clients.Manager, store storage.Store) *ProxyManager {
 	pm := &ProxyManager{
 		connections: make(map[string]*ProxyConnection),
 		manager:     manager,
@@ -320,7 +321,8 @@ func (pm *ProxyManager) createProxyConnectionWithID(id, clientID, remoteHost str
 	}
 
 	// Verify websocket is open
-	if client.Conn == nil || client.Conn.RemoteAddr() == nil {
+	wsConn := client.Conn()
+	if wsConn == nil {
 		return nil, fmt.Errorf("client websocket not connected: %s", clientID)
 	}
 
@@ -447,17 +449,28 @@ func (pm *ProxyManager) acceptConnections(conn *ProxyConnection) {
 }
 
 // sendWebSocketMessage sends a message to websocket (thread-safe write)
-func (pm *ProxyManager) sendWebSocketMessage(client *Client, msg interface{}) error {
-	if client == nil || client.Conn == nil {
+func (pm *ProxyManager) sendWebSocketMessage(client clients.Client, msg interface{}) error {
+	if client == nil {
+		return fmt.Errorf("client is invalid")
+	}
+
+	// Convert msg to common.Message for sending through the client interface
+	// If it's already a common.Message, use it directly
+	var cmsg *common.Message
+	if m, ok := msg.(*common.Message); ok {
+		cmsg = m
+	} else {
+		// For other message types, we need to serialize and deserialize
+		// Or create a message wrapper
+		// For now, return error for unsupported types
+		return fmt.Errorf("unsupported message type for proxy communication")
+	}
+
+	if conn := client.Conn(); conn == nil {
 		return fmt.Errorf("websocket connection is invalid")
 	}
 
-	// Use client's write mutex to ensure thread-safe writes
-	client.writeMu.Lock()
-	err := client.Conn.WriteJSON(msg)
-	client.writeMu.Unlock()
-
-	return err
+	return client.SendMessage(cmsg)
 }
 
 // handleUserConnection handles a user connection by relaying through websocket to the remote server
@@ -1271,19 +1284,19 @@ func (s *Server) handleClientLookup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Prefer returning metadata only to avoid marshaling websocket.Conn and other internal fields.
+	// Return metadata using the interface
 	var meta *common.ClientMetadata
-	if client.Metadata == nil {
+	if clientMeta := client.Metadata(); clientMeta == nil {
 		// Fallback: return minimal metadata if nil
 		meta = &common.ClientMetadata{
-			ID:     client.ID,
+			ID:     client.ID(),
 			Status: "unknown",
 		}
 	} else {
-		meta = client.Metadata
-		// Ensure ID is populated from client struct if missing
+		meta = clientMeta
+		// Ensure ID is populated if missing
 		if meta.ID == "" {
-			meta.ID = client.ID
+			meta.ID = client.ID()
 		}
 	}
 
@@ -1338,7 +1351,7 @@ func (s *Server) handleClientDelete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Disconnect the client if it is currently connected
-	disconnected := s.manager.RemoveClient(clientID)
+	disconnected := s.manager.UnregisterClient(clientID) == nil // Returns nil on success
 
 	// Clear any cached results tied to this client to avoid stale data
 	s.clearCachedClientData(clientID)
@@ -1390,10 +1403,14 @@ func (s *Server) HandleUpdateClientAlias(w http.ResponseWriter, r *http.Request)
 		}
 	}
 
-	// Update in memory
+	// Update in memory using the interface
 	client, exists := s.manager.GetClient(clientID)
-	if exists && client.Metadata != nil {
-		client.Metadata.Alias = alias
+	if exists && client != nil {
+		client.UpdateMetadata(func(m *common.ClientMetadata) {
+			if m != nil {
+				m.Alias = alias
+			}
+		})
 	}
 
 	w.Header().Set("Content-Type", "application/json")

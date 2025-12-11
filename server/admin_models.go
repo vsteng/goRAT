@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"gorat/common"
+	"gorat/pkg/clients"
 	"gorat/pkg/storage"
 
 	"github.com/gin-gonic/gin"
@@ -129,12 +130,14 @@ func (s *Server) AdminDeleteClientHandler(c *gin.Context) {
 	clientID := c.Param("id")
 
 	// Disconnect client if connected
-	s.manager.RemoveClient(clientID)
+	_ = s.manager.UnregisterClient(clientID)
 
 	// Delete from database
-	if err := s.store.DeleteClient(clientID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
+	if s.store != nil {
+		if err := s.store.DeleteClient(clientID); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Client deleted successfully"})
@@ -238,17 +241,20 @@ func (s *Server) ginHandlePushUpdate(c *gin.Context) {
 	allClients := s.manager.GetAllClients()
 
 	// Filter clients by platform
-	var matchingClients []*Client
-	if req.Platform == "all" {
-		matchingClients = allClients
-	} else {
+	var matchingClients []clients.Client
+	if req.Platform != "all" {
 		for _, client := range allClients {
 			// Convert OS and Arch to platform key
-			platform := getPlatformKey(client.Metadata.OS, client.Metadata.Arch)
-			if platform == req.Platform {
-				matchingClients = append(matchingClients, client)
+			meta := client.Metadata()
+			if meta != nil {
+				platform := getPlatformKey(meta.OS, meta.Arch)
+				if platform == req.Platform {
+					matchingClients = append(matchingClients, client)
+				}
 			}
 		}
+	} else {
+		matchingClients = allClients
 	}
 
 	// Send update command to each matching client
@@ -286,28 +292,33 @@ func (s *Server) ginHandlePushUpdate(c *gin.Context) {
 			logs = append(logs, map[string]interface{}{
 				"timestamp": time.Now().String(),
 				"status":    "failed",
-				"client_id": client.ID,
+				"client_id": client.ID(),
 				"message":   "Failed to create message: " + err.Error(),
 			})
 			continue
 		}
 
 		// Send message to client
-		if err := s.manager.SendToClient(client.ID, msg); err != nil {
+		if err := s.manager.SendToClient(client.ID(), msg); err != nil {
 			updatesFailed++
 			logs = append(logs, map[string]interface{}{
 				"timestamp": time.Now().String(),
 				"status":    "failed",
-				"client_id": client.ID,
+				"client_id": client.ID(),
 				"message":   "Failed to send command: " + err.Error(),
 			})
 		} else {
 			updatesSent++
+			meta := client.Metadata()
+			hostname := ""
+			if meta != nil {
+				hostname = meta.Hostname
+			}
 			logs = append(logs, map[string]interface{}{
 				"timestamp": time.Now().String(),
 				"status":    "success",
-				"client_id": client.ID,
-				"message":   "Update command sent to " + client.Metadata.Hostname,
+				"client_id": client.ID(),
+				"message":   "Update command sent to " + hostname,
 			})
 		}
 	}
