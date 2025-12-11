@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"mww2.com/server_manager/common"
@@ -713,8 +714,12 @@ func (wh *WebHandler) HandleUsersAPI(w http.ResponseWriter, r *http.Request) {
 			req.Role = "admin"
 		}
 
+		// Hash password before storing
+		hash := sha256.Sum256([]byte(req.Password))
+		passwordHash := hex.EncodeToString(hash[:])
+
 		// Create user
-		if err := wh.store.CreateWebUser(req.Username, req.Password, req.FullName, req.Role); err != nil {
+		if err := wh.store.CreateWebUser(req.Username, passwordHash, req.FullName, req.Role); err != nil {
 			log.Printf("Error creating user: %v", err)
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusInternalServerError)
@@ -747,11 +752,12 @@ func (wh *WebHandler) HandleUserAPI(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodPut:
-		// Update user (status, role, etc.)
+		// Update user (status, role, password, full_name, etc.)
 		var req struct {
 			Status   string `json:"status"`
 			Role     string `json:"role"`
 			FullName string `json:"full_name"`
+			Password string `json:"password"`
 		}
 
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -779,13 +785,55 @@ func (wh *WebHandler) HandleUserAPI(w http.ResponseWriter, r *http.Request) {
 			user.FullName = req.FullName
 		}
 
-		// Update in database (we need to add an update method)
+		// Build update query dynamically
+		updateFields := []interface{}{}
+		queryParts := []string{}
+
+		if req.Status != "" {
+			queryParts = append(queryParts, "status = ?")
+			updateFields = append(updateFields, req.Status)
+		}
+		if req.Role != "" {
+			queryParts = append(queryParts, "role = ?")
+			updateFields = append(updateFields, req.Role)
+		}
+		if req.FullName != "" {
+			queryParts = append(queryParts, "full_name = ?")
+			updateFields = append(updateFields, req.FullName)
+		}
+
+		// Handle password update with hashing
+		if req.Password != "" {
+			if len(req.Password) < 6 {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusBadRequest)
+				json.NewEncoder(w).Encode(map[string]string{"error": "Password must be at least 6 characters"})
+				return
+			}
+			// Hash the new password
+			hash := sha256.Sum256([]byte(req.Password))
+			passwordHash := hex.EncodeToString(hash[:])
+			queryParts = append(queryParts, "password_hash = ?")
+			updateFields = append(updateFields, passwordHash)
+		}
+
+		// If nothing to update, return error
+		if len(queryParts) == 0 {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": "No fields to update"})
+			return
+		}
+
+		// Add username to the update fields
+		updateFields = append(updateFields, username)
+
+		// Build final query
+		updateQuery := "UPDATE web_users SET " + strings.Join(queryParts, ", ") + " WHERE username = ?"
+
+		// Update in database
 		wh.store.mu.Lock()
-		_, err = wh.store.db.Exec(`
-			UPDATE web_users 
-			SET status = ?, role = ?, full_name = ?
-			WHERE username = ?
-		`, user.Status, user.Role, user.FullName, username)
+		_, err = wh.store.db.Exec(updateQuery, updateFields...)
 		wh.store.mu.Unlock()
 
 		if err != nil {

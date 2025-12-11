@@ -998,6 +998,37 @@
                             </div>
                         </div>
 
+                        <!-- Edit User Form (hidden by default) -->
+                        <div id="editUserForm" style="display: none; background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+                            <h4 style="margin-bottom: 15px;">Edit User</h4>
+                            <div style="display: grid; gap: 15px;">
+                                <div>
+                                    <label style="display: block; margin-bottom: 5px; font-weight: 500;">Username (Read-only)</label>
+                                    <input type="text" id="editUsername" class="input-field" placeholder="Username" readonly style="background: #e9ecef; cursor: not-allowed;" />
+                                </div>
+                                <div>
+                                    <label style="display: block; margin-bottom: 5px; font-weight: 500;">Full Name</label>
+                                    <input type="text" id="editFullName" class="input-field" placeholder="Enter full name" />
+                                </div>
+                                <div>
+                                    <label style="display: block; margin-bottom: 5px; font-weight: 500;">New Password (leave empty to keep current)</label>
+                                    <input type="password" id="editPassword" class="input-field" placeholder="Leave empty to keep current password" />
+                                </div>
+                                <div>
+                                    <label style="display: block; margin-bottom: 5px; font-weight: 500;">Role</label>
+                                    <select id="editRole" class="input-field">
+                                        <option value="admin">Admin</option>
+                                        <option value="operator">Operator</option>
+                                        <option value="viewer">Viewer</option>
+                                    </select>
+                                </div>
+                                <div style="display: flex; gap: 10px;">
+                                    <button class="btn btn-primary" onclick="saveUserEdit()">Save Changes</button>
+                                    <button class="btn btn-secondary" onclick="hideEditUserForm()">Cancel</button>
+                                </div>
+                            </div>
+                        </div>
+
                         <!-- Users Table -->
                         <div class="table-responsive">
                             <table class="data-table">
@@ -1818,7 +1849,7 @@
         function renderUsersTable(users) {
             const tbody = document.getElementById('usersTableBody');
             if (users.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 40px; color: var(--text-light);">No users found</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 40px; color: var(--text-light);">No users found</td></tr>';
                 return;
             }
             tbody.innerHTML = users.map(user => `
@@ -1830,6 +1861,10 @@
                     <td>${formatDate(user.created_at)}</td>
                     <td>${user.last_login ? formatDate(user.last_login) : 'Never'}</td>
                     <td>
+                        <button class="btn btn-sm" style="padding: 5px 10px; font-size: 12px; margin-right: 5px; background: var(--primary);" 
+                                onclick="showEditUserForm('${escapeHtml(user.username)}', '${escapeHtml(user.full_name || '')}', '${user.role}')">
+                            ✏️ Edit
+                        </button>
                         <button class="btn btn-sm" style="padding: 5px 10px; font-size: 12px; margin-right: 5px; background: var(--warning);" 
                                 onclick="toggleUserStatus('${escapeHtml(user.username)}', '${user.status}')">
                             ${user.status === 'active' ? '🔒 Disable' : '🔓 Enable'}
@@ -1853,6 +1888,20 @@
 
         function hideAddUserForm() {
             document.getElementById('addUserForm').style.display = 'none';
+        }
+
+        function showEditUserForm(username, fullName, role) {
+            document.getElementById('editUserForm').style.display = 'block';
+            document.getElementById('editUsername').value = username;
+            document.getElementById('editFullName').value = fullName;
+            document.getElementById('editPassword').value = '';
+            document.getElementById('editRole').value = role;
+            // Scroll to the edit form
+            document.getElementById('editUserForm').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function hideEditUserForm() {
+            document.getElementById('editUserForm').style.display = 'none';
         }
 
         async function createUser() {
@@ -1904,6 +1953,53 @@
                 const result = await response.json();
                 if (response.ok) {
                     showStatus('Success', `User ${newStatus === 'active' ? 'enabled' : 'disabled'} successfully`);
+                    loadUsers();
+                } else {
+                    showStatus('Error', result.error || 'Failed to update user');
+                }
+            } catch (err) {
+                console.error('Error updating user:', err);
+                showStatus('Error', 'Failed to update user');
+            }
+        }
+
+        async function saveUserEdit() {
+            const username = document.getElementById('editUsername').value.trim();
+            const fullName = document.getElementById('editFullName').value.trim();
+            const password = document.getElementById('editPassword').value;
+            const role = document.getElementById('editRole').value;
+
+            if (!username) {
+                showStatus('Error', 'Username is required');
+                return;
+            }
+
+            if (password && password.length < 6) {
+                showStatus('Error', 'Password must be at least 6 characters');
+                return;
+            }
+
+            try {
+                const updateData = {
+                    full_name: fullName,
+                    role: role
+                };
+
+                // Only include password if it's provided
+                if (password) {
+                    updateData.password = password;
+                }
+
+                const response = await fetch(`/api/users/${encodeURIComponent(username)}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(updateData)
+                });
+
+                const result = await response.json();
+                if (response.ok) {
+                    showStatus('Success', 'User updated successfully');
+                    hideEditUserForm();
                     loadUsers();
                 } else {
                     showStatus('Error', result.error || 'Failed to update user');
