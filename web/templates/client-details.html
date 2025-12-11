@@ -812,7 +812,9 @@
             }
 
             try {
-                const response = await fetch(`/api/client?id=${encodeURIComponent(clientId)}`);
+                const response = await fetch(`/api/client?id=${encodeURIComponent(clientId)}`, {
+                    credentials: 'include'
+                });
                 if (!response.ok) throw new Error('Failed to load client');
                 
                 const raw = await response.json();
@@ -882,6 +884,7 @@
             try {
                 const response = await fetch(`/api/files/browse`, {
                     method: 'POST',
+                    credentials: 'include',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         client_id: clientId,
@@ -907,6 +910,7 @@
             try {
                 const response = await fetch('/api/files/drives', {
                     method: 'POST',
+                    credentials: 'include',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ client_id: clientId })
                 });
@@ -998,6 +1002,7 @@
                 try {
                     const response = await fetch(`/api/files/delete`, {
                         method: 'POST',
+                        credentials: 'include',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                             client_id: clientId,
@@ -1037,6 +1042,7 @@
             try {
                 const response = await fetch(`/api/command`, {
                     method: 'POST',
+                    credentials: 'include',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         client_id: clientId,
@@ -1069,7 +1075,9 @@
             container.innerHTML = '<div style="text-align: center; padding: 40px; color: var(--text-light);">Loading processes...</div>';
             
             try {
-                const response = await fetch(`/api/processes?client_id=${encodeURIComponent(clientId)}`);
+                const response = await fetch(`/api/processes?client_id=${encodeURIComponent(clientId)}`, {
+                    credentials: 'include'
+                });
                 if (!response.ok) {
                     const err = await response.text();
                     throw new Error(err || 'Failed to load processes');

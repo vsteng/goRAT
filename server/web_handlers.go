@@ -894,9 +894,9 @@ func (wh *WebHandler) RegisterGinRoutes(router *gin.Engine) {
 	router.GET("/client-details", wh.ginRequireAuth(wh.ginHandleClientDetails))
 	router.GET("/terminal", wh.ginRequireAuth(wh.ginHandleTerminalPage))
 	router.GET("/files", wh.ginRequireAuth(wh.ginHandleFilesPage))
-	router.GET("/api/files/browse", wh.ginRequireAuth(wh.ginHandleFileBrowse))
-	router.GET("/api/files/drives", wh.ginRequireAuth(wh.ginHandleGetDrives))
-	router.GET("/api/files/download", wh.ginRequireAuth(wh.ginHandleFileDownload))
+	router.POST("/api/files/browse", wh.ginRequireAuth(wh.ginHandleFileBrowse))
+	router.POST("/api/files/drives", wh.ginRequireAuth(wh.ginHandleGetDrives))
+	router.POST("/api/files/download", wh.ginRequireAuth(wh.ginHandleFileDownload))
 	router.GET("/api/screenshot", wh.ginRequireAuth(wh.ginHandleScreenshotRequest))
 	router.POST("/api/update/global", wh.ginRequireAuth(wh.ginHandleGlobalUpdate))
 }
