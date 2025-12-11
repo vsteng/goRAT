@@ -6,7 +6,7 @@ package client
 import (
 	"time"
 
-	"mww2.com/server_manager/common"
+	"gorat/common"
 )
 
 // ScreenshotCapture handles screenshot functionality (stub implementation)

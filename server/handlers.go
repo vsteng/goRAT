@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"mww2.com/server_manager/common"
+	"gorat/common"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -223,7 +223,7 @@ func (s *Server) Start() error {
 	// Settings API endpoints
 	router.GET("/admin/api/settings", s.AdminGetSettingsHandler)
 	router.POST("/admin/api/settings", s.AdminSaveSettingsHandler)
-	
+
 	// Public settings API endpoints (for dashboard)
 	router.GET("/api/settings", s.ginHandleGetSettings)
 	router.POST("/api/settings", s.ginHandleSaveSettings)

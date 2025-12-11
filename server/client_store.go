@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"mww2.com/server_manager/common"
+	"gorat/common"
 
 	_ "github.com/mattn/go-sqlite3"
 )

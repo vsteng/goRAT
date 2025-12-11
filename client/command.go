@@ -9,7 +9,7 @@ import (
 	"runtime"
 	"time"
 
-	"mww2.com/server_manager/common"
+	"gorat/common"
 
 	"golang.org/x/text/encoding/simplifiedchinese"
 	"golang.org/x/text/transform"

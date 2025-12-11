@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"mww2.com/server_manager/common"
 	"github.com/gin-gonic/gin"
+	"gorat/common"
 )
 
 // AdminClientHandler handles client list and management
@@ -325,20 +325,20 @@ func getPlatformKey(os, arch string) string {
 		"linux":   "linux",
 		"darwin":  "darwin",
 	}
-	
+
 	archMap := map[string]string{
 		"amd64": "amd64",
 		"386":   "386",
 		"arm64": "arm64",
 	}
-	
+
 	osKey := osMap[os]
 	archKey := archMap[arch]
-	
+
 	if osKey == "" || archKey == "" {
 		return ""
 	}
-	
+
 	return osKey + "-" + archKey
 }
 
@@ -349,7 +349,7 @@ func buildUpdateURL(platform, version string, store *ClientStore) string {
 	if err != nil || basePath == "" {
 		return ""
 	}
-	
+
 	// Replace {version} placeholder
 	url := strings.ReplaceAll(basePath, "{version}", version)
 	return url

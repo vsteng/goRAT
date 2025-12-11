@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/kbinani/screenshot"
-	"mww2.com/server_manager/common"
+	"gorat/common"
 )
 
 // ScreenshotCapture handles screenshot functionality

@@ -14,7 +14,7 @@ import (
 
 	"golang.org/x/text/encoding/simplifiedchinese"
 	"golang.org/x/text/transform"
-	"mww2.com/server_manager/common"
+	"gorat/common"
 )
 
 // TerminalSession represents an active terminal session

@@ -14,7 +14,7 @@ import (
 	"time"
 	"unsafe"
 
-	"mww2.com/server_manager/common"
+	"gorat/common"
 )
 
 var (

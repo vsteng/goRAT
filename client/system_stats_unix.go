@@ -13,7 +13,7 @@ import (
 	"github.com/shirou/gopsutil/v3/host"
 	"github.com/shirou/gopsutil/v3/mem"
 	"github.com/shirou/gopsutil/v3/process"
-	"mww2.com/server_manager/common"
+	"gorat/common"
 )
 
 // getSafeSystemStats returns system stats safely (Unix/Linux/Mac)

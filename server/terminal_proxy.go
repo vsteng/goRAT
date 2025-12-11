@@ -7,7 +7,7 @@ import (
 	"sync"
 
 	"github.com/gorilla/websocket"
-	"mww2.com/server_manager/common"
+	"gorat/common"
 )
 
 // TerminalProxy manages terminal WebSocket connections between web UI and clients

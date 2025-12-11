@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"runtime"
 
-	"mww2.com/server_manager/common"
+	"gorat/common"
 )
 
 // FileBrowser handles file browsing operations

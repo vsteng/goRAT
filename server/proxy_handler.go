@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"mww2.com/server_manager/common"
+	"gorat/common"
 )
 
 // ProxyConnection represents a proxy tunnel connection

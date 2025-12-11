@@ -1,7 +1,7 @@
 package main
 
 import (
-	"mww2.com/server_manager/client"
+	"gorat/client"
 )
 
 func main() {

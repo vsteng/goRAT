@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"mww2.com/server_manager/common"
+	"gorat/common"
 )
 
 // HandleScreenshotRequest handles screenshot requests from web UI

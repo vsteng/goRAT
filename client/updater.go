@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"runtime"
 
-	"mww2.com/server_manager/common"
+	"gorat/common"
 )
 
 // Updater handles client self-update

@@ -3,7 +3,7 @@
 
 package client
 
-import "mww2.com/server_manager/common"
+import "gorat/common"
 
 // getDrivesWindows is a stub for non-Windows systems
 func getDrivesWindows() []common.DriveInfo {

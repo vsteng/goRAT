@@ -1,6 +1,6 @@
-module mww2.com/server_manager
+module gorat
 
-go 1.25.4
+go 1.23.0
 
 require (
 	github.com/gin-gonic/gin v1.11.0

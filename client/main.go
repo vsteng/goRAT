@@ -16,7 +16,7 @@ import (
 	"sync"
 	"time"
 
-	"mww2.com/server_manager/common"
+	"gorat/common"
 
 	"github.com/gorilla/websocket"
 )

@@ -3,7 +3,7 @@ package server
 import (
 	"log"
 
-	"mww2.com/server_manager/common"
+	"gorat/common"
 )
 
 // Authenticator handles client authentication
