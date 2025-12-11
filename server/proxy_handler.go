@@ -1497,3 +1497,62 @@ func (s *Server) HandleProcessesAPI(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 }
+
+// HandleSystemInfoAPI serves system information for a client
+func (s *Server) HandleSystemInfoAPI(w http.ResponseWriter, r *http.Request) {
+	clientID := r.URL.Query().Get("client_id")
+
+	if clientID == "" {
+		http.Error(w, "Missing client_id", http.StatusBadRequest)
+		return
+	}
+
+	client, exists := s.manager.GetClient(clientID)
+	if !exists {
+		http.Error(w, "Client not found", http.StatusNotFound)
+		return
+	}
+	_ = client
+
+	s.ClearSystemInfoResult(clientID)
+
+	// Send system info request to client
+	msg, err := common.NewMessage(common.MsgTypeGetSystemInfo, nil)
+	if err != nil {
+		http.Error(w, "Failed to create message", http.StatusInternalServerError)
+		return
+	}
+
+	if err := s.manager.SendToClient(clientID, msg); err != nil {
+		http.Error(w, "Failed to send request", http.StatusInternalServerError)
+		return
+	}
+
+	// Wait for response with timeout (max 30 seconds to allow time for client response)
+	timeout := time.After(30 * time.Second)
+	ticker := time.NewTicker(10 * time.Millisecond) // Poll every 10ms for faster detection
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-timeout:
+			log.Printf("System info request timeout for client %s", clientID)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte("{}"))
+			return
+		case <-ticker.C:
+			result, exists := s.GetSystemInfoResult(clientID)
+			if exists && result != nil {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusOK)
+
+				if err := json.NewEncoder(w).Encode(result); err != nil {
+					log.Printf("Error encoding system info: %v", err)
+				}
+				s.ClearSystemInfoResult(clientID)
+				return
+			}
+		}
+	}
+}

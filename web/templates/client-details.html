@@ -800,6 +800,8 @@
             } else if (tabName === 'files') {
                 ensureFileBrowserDefaults();
                 browseFolder();
+            } else if (tabName === 'info') {
+                loadSystemInfo();
             }
         }
 
@@ -1114,6 +1116,61 @@
 
         function refreshProcesses() {
             loadProcesses();
+        }
+
+        async function loadSystemInfo() {
+            try {
+                const response = await fetch(`/api/system-info?client_id=${encodeURIComponent(clientId)}`, {
+                    credentials: 'include'
+                });
+                if (!response.ok) {
+                    const err = await response.text();
+                    throw new Error(err || 'Failed to load system info');
+                }
+                
+                const info = await response.json();
+                renderSystemInfo(info);
+            } catch (err) {
+                console.error('Error loading system info:', err);
+                showModal('Error', `Failed to load system info: ${err.message}`);
+            }
+        }
+
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        function renderSystemInfo(info) {
+            // Update hardware section
+            document.getElementById('cpuCores').textContent = info.CPUCount || '-';
+            document.getElementById('totalMem').textContent = formatBytes(info.TotalMemory || 0);
+            
+            // Update with actual system values
+            const osArch = `${info.OS || '-'} (${info.Arch || '-'})`;
+            document.getElementById('cpuModel').textContent = osArch;
+            
+            // Add uptime display
+            const uptimeHours = Math.floor((info.Uptime || 0) / 3600);
+            const uptimeDays = Math.floor(uptimeHours / 24);
+            const uptimeDisplay = uptimeDays > 0 ? `${uptimeDays}d ${uptimeHours % 24}h` : `${uptimeHours}h`;
+            
+            // Update installation section
+            document.getElementById('version').textContent = info.Hostname || '-';
+            document.getElementById('build').textContent = `Memory: ${((info.MemoryPercent || 0).toFixed(1))}%`;
+            document.getElementById('installed').textContent = uptimeDisplay;
+            
+            // Update security section with memory/disk info
+            const usedMem = formatBytes(info.UsedMemory || 0);
+            const availMem = formatBytes(info.AvailMemory || 0);
+            document.getElementById('firewall').textContent = `Used: ${usedMem} / ${availMem}`;
+            
+            const diskInfo = `${formatBytes(info.DiskUsed || 0)} / ${formatBytes(info.DiskTotal || 0)} (${(info.DiskPercent || 0).toFixed(1)}%)`;
+            document.getElementById('antivirus').textContent = diskInfo;
+            document.getElementById('encryption').textContent = `✓ System Info Loaded`;
         }
 
         function killProcess(pid) {

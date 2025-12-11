@@ -50,6 +50,10 @@ const (
 	MsgTypeListProcesses MessageType = "list_processes"
 	MsgTypeProcessList   MessageType = "process_list"
 
+	// System info messages
+	MsgTypeGetSystemInfo MessageType = "get_system_info"
+	MsgTypeSystemInfo    MessageType = "system_info"
+
 	// Heartbeat and status
 	MsgTypeHeartbeat MessageType = "heartbeat"
 	MsgTypePing      MessageType = "ping"
@@ -249,6 +253,25 @@ type Process struct {
 type ProcessListPayload struct {
 	Processes []Process `json:"processes"`
 	Error     string    `json:"error,omitempty"`
+}
+
+// SystemInfoPayload contains system information
+type SystemInfoPayload struct {
+	Hostname      string  `json:"hostname"`
+	OS            string  `json:"os"`
+	Arch          string  `json:"arch"`
+	CPUCount      int     `json:"cpu_count"`
+	TotalMemory   uint64  `json:"total_memory"`   // bytes
+	AvailMemory   uint64  `json:"avail_memory"`   // bytes
+	UsedMemory    uint64  `json:"used_memory"`    // bytes
+	MemoryPercent float64 `json:"memory_percent"` // 0-100
+	Uptime        uint64  `json:"uptime"`         // seconds
+	LoadAvg       string  `json:"load_avg"`       // OS-specific format
+	DiskTotal     uint64  `json:"disk_total"`     // bytes
+	DiskUsed      uint64  `json:"disk_used"`      // bytes
+	DiskFree      uint64  `json:"disk_free"`      // bytes
+	DiskPercent   float64 `json:"disk_percent"`   // 0-100
+	Error         string  `json:"error,omitempty"`
 }
 
 // ClientMetadata stores client information
