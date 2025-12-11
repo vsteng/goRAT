@@ -697,50 +697,66 @@
         <div class="tab-content" id="info">
             <div class="info-grid">
                 <div class="info-card">
-                    <h4>💻 Hardware</h4>
+                    <h4>💻 System Information</h4>
+                    <div class="info-row">
+                        <span class="info-label">Hostname:</span>
+                        <span class="info-value" id="hostname">-</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">OS:</span>
+                        <span class="info-value" id="osInfo">-</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Architecture:</span>
+                        <span class="info-value" id="archInfo">-</span>
+                    </div>
                     <div class="info-row">
                         <span class="info-label">CPU Cores:</span>
                         <span class="info-value" id="cpuCores">-</span>
                     </div>
                     <div class="info-row">
-                        <span class="info-label">Total Memory:</span>
+                        <span class="info-label">Uptime:</span>
+                        <span class="info-value" id="uptime">-</span>
+                    </div>
+                </div>
+
+                <div class="info-card">
+                    <h4>💾 Memory</h4>
+                    <div class="info-row">
+                        <span class="info-label">Total:</span>
                         <span class="info-value" id="totalMem">-</span>
                     </div>
                     <div class="info-row">
-                        <span class="info-label">CPU Model:</span>
-                        <span class="info-value" id="cpuModel">-</span>
+                        <span class="info-label">Available:</span>
+                        <span class="info-value" id="availMem">-</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Used:</span>
+                        <span class="info-value" id="usedMem">-</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Usage:</span>
+                        <span class="info-value" id="memPercent">-</span>
                     </div>
                 </div>
 
                 <div class="info-card">
-                    <h4>📦 Installation</h4>
+                    <h4>💿 Disk</h4>
                     <div class="info-row">
-                        <span class="info-label">Version:</span>
-                        <span class="info-value" id="version">-</span>
+                        <span class="info-label">Total:</span>
+                        <span class="info-value" id="diskTotal">-</span>
                     </div>
                     <div class="info-row">
-                        <span class="info-label">Build:</span>
-                        <span class="info-value" id="build">-</span>
+                        <span class="info-label">Used:</span>
+                        <span class="info-value" id="diskUsed">-</span>
                     </div>
                     <div class="info-row">
-                        <span class="info-label">Installed:</span>
-                        <span class="info-value" id="installed">-</span>
-                    </div>
-                </div>
-
-                <div class="info-card">
-                    <h4>🔒 Security</h4>
-                    <div class="info-row">
-                        <span class="info-label">Firewall:</span>
-                        <span class="info-value" id="firewall">-</span>
+                        <span class="info-label">Free:</span>
+                        <span class="info-value" id="diskFree">-</span>
                     </div>
                     <div class="info-row">
-                        <span class="info-label">Antivirus:</span>
-                        <span class="info-value" id="antivirus">-</span>
-                    </div>
-                    <div class="info-row">
-                        <span class="info-label">Encryption:</span>
-                        <span class="info-value" id="encryption">-</span>
+                        <span class="info-label">Usage:</span>
+                        <span class="info-value" id="diskPercent">-</span>
                     </div>
                 </div>
             </div>
@@ -1145,32 +1161,29 @@
         }
 
         function renderSystemInfo(info) {
-            // Update hardware section
+            // System Information section
+            document.getElementById('hostname').textContent = info.hostname || '-';
+            document.getElementById('osInfo').textContent = info.os || '-';
+            document.getElementById('archInfo').textContent = info.arch || '-';
             document.getElementById('cpuCores').textContent = info.cpu_count || '-';
-            document.getElementById('totalMem').textContent = formatBytes(info.total_memory || 0);
-            
-            // Update with actual system values
-            const osArch = `${info.os || '-'} (${info.arch || '-'})`;
-            document.getElementById('cpuModel').textContent = osArch;
             
             // Add uptime display
             const uptimeHours = Math.floor((info.uptime || 0) / 3600);
             const uptimeDays = Math.floor(uptimeHours / 24);
             const uptimeDisplay = uptimeDays > 0 ? `${uptimeDays}d ${uptimeHours % 24}h` : `${uptimeHours}h`;
+            document.getElementById('uptime').textContent = uptimeDisplay;
             
-            // Update installation section
-            document.getElementById('version').textContent = info.hostname || '-';
-            document.getElementById('build').textContent = `Memory: ${((info.memory_percent || 0).toFixed(1))}%`;
-            document.getElementById('installed').textContent = uptimeDisplay;
+            // Memory section
+            document.getElementById('totalMem').textContent = formatBytes(info.total_memory || 0);
+            document.getElementById('availMem').textContent = formatBytes(info.avail_memory || 0);
+            document.getElementById('usedMem').textContent = formatBytes(info.used_memory || 0);
+            document.getElementById('memPercent').textContent = `${(info.memory_percent || 0).toFixed(1)}%`;
             
-            // Update security section with memory/disk info
-            const usedMem = formatBytes(info.used_memory || 0);
-            const availMem = formatBytes(info.avail_memory || 0);
-            document.getElementById('firewall').textContent = `Used: ${usedMem} / ${availMem}`;
-            
-            const diskInfo = `${formatBytes(info.disk_used || 0)} / ${formatBytes(info.disk_total || 0)} (${(info.disk_percent || 0).toFixed(1)}%)`;
-            document.getElementById('antivirus').textContent = diskInfo;
-            document.getElementById('encryption').textContent = `✓ System Info Loaded`;
+            // Disk section
+            document.getElementById('diskTotal').textContent = formatBytes(info.disk_total || 0);
+            document.getElementById('diskUsed').textContent = formatBytes(info.disk_used || 0);
+            document.getElementById('diskFree').textContent = formatBytes(info.disk_free || 0);
+            document.getElementById('diskPercent').textContent = `${(info.disk_percent || 0).toFixed(1)}%`;
         }
 
         function killProcess(pid) {
