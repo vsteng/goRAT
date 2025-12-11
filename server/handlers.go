@@ -857,11 +857,6 @@ func (s *Server) GetProcessListResult(clientID string) (*common.ProcessListPaylo
 	s.resultsMu.RLock()
 	defer s.resultsMu.RUnlock()
 	result, exists := s.processListResults[clientID]
-	if exists {
-		log.Printf("[GetProcessListResult] Found %d processes for client %s", len(result.Processes), clientID)
-	} else {
-		log.Printf("[GetProcessListResult] No result found for client %s (map has %d entries)", clientID, len(s.processListResults))
-	}
 	return result, exists
 }
 
@@ -869,7 +864,6 @@ func (s *Server) GetProcessListResult(clientID string) (*common.ProcessListPaylo
 func (s *Server) SetProcessListResult(clientID string, payload *common.ProcessListPayload) {
 	s.resultsMu.Lock()
 	defer s.resultsMu.Unlock()
-	log.Printf("[SetProcessListResult] Storing %d processes for client %s", len(payload.Processes), clientID)
 	s.processListResults[clientID] = payload
 }
 
@@ -877,7 +871,6 @@ func (s *Server) SetProcessListResult(clientID string, payload *common.ProcessLi
 func (s *Server) ClearProcessListResult(clientID string) {
 	s.resultsMu.Lock()
 	defer s.resultsMu.Unlock()
-	log.Printf("[ClearProcessListResult] Clearing result for client %s", clientID)
 	delete(s.processListResults, clientID)
 }
 
