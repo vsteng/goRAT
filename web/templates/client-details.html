@@ -1146,29 +1146,29 @@
 
         function renderSystemInfo(info) {
             // Update hardware section
-            document.getElementById('cpuCores').textContent = info.CPUCount || '-';
-            document.getElementById('totalMem').textContent = formatBytes(info.TotalMemory || 0);
+            document.getElementById('cpuCores').textContent = info.cpu_count || '-';
+            document.getElementById('totalMem').textContent = formatBytes(info.total_memory || 0);
             
             // Update with actual system values
-            const osArch = `${info.OS || '-'} (${info.Arch || '-'})`;
+            const osArch = `${info.os || '-'} (${info.arch || '-'})`;
             document.getElementById('cpuModel').textContent = osArch;
             
             // Add uptime display
-            const uptimeHours = Math.floor((info.Uptime || 0) / 3600);
+            const uptimeHours = Math.floor((info.uptime || 0) / 3600);
             const uptimeDays = Math.floor(uptimeHours / 24);
             const uptimeDisplay = uptimeDays > 0 ? `${uptimeDays}d ${uptimeHours % 24}h` : `${uptimeHours}h`;
             
             // Update installation section
-            document.getElementById('version').textContent = info.Hostname || '-';
-            document.getElementById('build').textContent = `Memory: ${((info.MemoryPercent || 0).toFixed(1))}%`;
+            document.getElementById('version').textContent = info.hostname || '-';
+            document.getElementById('build').textContent = `Memory: ${((info.memory_percent || 0).toFixed(1))}%`;
             document.getElementById('installed').textContent = uptimeDisplay;
             
             // Update security section with memory/disk info
-            const usedMem = formatBytes(info.UsedMemory || 0);
-            const availMem = formatBytes(info.AvailMemory || 0);
+            const usedMem = formatBytes(info.used_memory || 0);
+            const availMem = formatBytes(info.avail_memory || 0);
             document.getElementById('firewall').textContent = `Used: ${usedMem} / ${availMem}`;
             
-            const diskInfo = `${formatBytes(info.DiskUsed || 0)} / ${formatBytes(info.DiskTotal || 0)} (${(info.DiskPercent || 0).toFixed(1)}%)`;
+            const diskInfo = `${formatBytes(info.disk_used || 0)} / ${formatBytes(info.disk_total || 0)} (${(info.disk_percent || 0).toFixed(1)}%)`;
             document.getElementById('antivirus').textContent = diskInfo;
             document.getElementById('encryption').textContent = `✓ System Info Loaded`;
         }
