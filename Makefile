@@ -15,7 +15,7 @@ build: server client monitor
 server:
 	@echo "Building server..."
 	@mkdir -p bin
-	@go build -o $(SERVER_BIN) cmd/server/main.go
+	@CGO_ENABLED=1 go build -o $(SERVER_BIN) cmd/server/main.go
 
 # Build client (release version by default)
 client:
@@ -61,11 +61,15 @@ build-all: build-linux build-windows build-darwin
 
 build-linux:
 	@echo "Building for Linux..."
+	@echo "  Note: Ensure you have the following packages installed:"
+	@echo "    Ubuntu/Debian: sudo apt-get install build-essential libsqlite3-dev"
+	@echo "    Alpine: apk add build-base sqlite-dev"
+	@echo "    CentOS/RHEL: sudo yum groupinstall 'Development Tools' && sudo yum install sqlite-devel"
 	@mkdir -p bin/linux
-	@GOOS=linux GOARCH=amd64 go build -o bin/linux/server cmd/server/main.go
-	@GOOS=linux GOARCH=amd64 go build -o bin/linux/client-release cmd/client/main.go
-	@GOOS=linux GOARCH=amd64 go build -tags debug -o bin/linux/client-debug cmd/client/main.go
-	@GOOS=linux GOARCH=amd64 go build -o bin/linux/client_monitor ./client_monitor
+	@CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -o bin/linux/server cmd/server/main.go
+	@CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -o bin/linux/client-release cmd/client/main.go
+	@CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -tags debug -o bin/linux/client-debug cmd/client/main.go
+	@CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -o bin/linux/client_monitor ./client_monitor
 
 build-windows:
 	@echo "Building for Windows..."

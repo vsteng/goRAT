@@ -112,7 +112,6 @@ client/auth/
 # ---------------------------
 *.sh
 *.bat
-build.sh
 build.bat
 run.sh
 run.bat
