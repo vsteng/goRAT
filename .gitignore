@@ -101,7 +101,7 @@ config.json
 *.key
 *.pfx
 *.cert
-*.db
+clients.db
 
 # Client auth tokens
 client/auth/
