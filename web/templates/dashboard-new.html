@@ -627,6 +627,40 @@
             border-color: var(--primary);
         }
 
+        .settings-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .settings-item {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .settings-item label {
+            font-weight: 500;
+            margin-bottom: 8px;
+            font-size: 14px;
+            color: var(--text);
+        }
+
+        .settings-item input {
+            padding: 10px 12px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            font-size: 14px;
+            font-family: inherit;
+            transition: border-color 0.3s;
+        }
+
+        .settings-item input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
         .proxy-form button {
             background: var(--primary);
             color: white;
@@ -1056,8 +1090,42 @@
                 <!-- SETTINGS TAB -->
                 <div class="content-section" id="settingsSection">
                     <div class="section">
-                        <h3>⚙️ Settings</h3>
-                        <p style="color: var(--text-light); margin-top: 10px;">Settings panel coming soon.</p>
+                        <h3>⚙️ Client Update Paths</h3>
+                        <p style="color: var(--text-light); margin-top: 10px; margin-bottom: 20px;">Configure platform-specific update paths. Use {version} as a placeholder for the client version.</p>
+                        
+                        <div class="settings-grid">
+                            <div class="settings-item">
+                                <label for="updatePathWindowsAmd64">Windows AMD64 (64-bit)</label>
+                                <input type="url" id="updatePathWindowsAmd64" placeholder="https://example.com/clients/windows/amd64/" />
+                            </div>
+                            
+                            <div class="settings-item">
+                                <label for="updatePathWindows386">Windows 386 (32-bit)</label>
+                                <input type="url" id="updatePathWindows386" placeholder="https://example.com/clients/windows/386/" />
+                            </div>
+                            
+                            <div class="settings-item">
+                                <label for="updatePathLinuxAmd64">Linux AMD64 (64-bit)</label>
+                                <input type="url" id="updatePathLinuxAmd64" placeholder="https://example.com/clients/linux/amd64/" />
+                            </div>
+                            
+                            <div class="settings-item">
+                                <label for="updatePathLinux386">Linux 386 (32-bit)</label>
+                                <input type="url" id="updatePathLinux386" placeholder="https://example.com/clients/linux/386/" />
+                            </div>
+                            
+                            <div class="settings-item">
+                                <label for="updatePathDarwinAmd64">macOS AMD64 (Intel)</label>
+                                <input type="url" id="updatePathDarwinAmd64" placeholder="https://example.com/clients/darwin/amd64/" />
+                            </div>
+                            
+                            <div class="settings-item">
+                                <label for="updatePathDarwinArm64">macOS ARM64 (Apple Silicon)</label>
+                                <input type="url" id="updatePathDarwinArm64" placeholder="https://example.com/clients/darwin/arm64/" />
+                            </div>
+                        </div>
+                        
+                        <button class="btn btn-primary" style="margin-top: 20px;" onclick="saveUpdatePaths()">💾 Save Settings</button>
                     </div>
                 </div>
             </div>
@@ -2033,12 +2101,64 @@
             });
         }
 
+        function loadUpdatePaths() {
+            // Load settings from localStorage
+            const platforms = [
+                { id: 'updatePathWindowsAmd64', key: 'windowsAmd64' },
+                { id: 'updatePathWindows386', key: 'windows386' },
+                { id: 'updatePathLinuxAmd64', key: 'linuxAmd64' },
+                { id: 'updatePathLinux386', key: 'linux386' },
+                { id: 'updatePathDarwinAmd64', key: 'darwinAmd64' },
+                { id: 'updatePathDarwinArm64', key: 'darwinArm64' }
+            ];
+            
+            const settings = JSON.parse(localStorage.getItem('serverSettings') || '{}');
+            platforms.forEach(platform => {
+                const el = document.getElementById(platform.id);
+                if (el) {
+                    el.value = settings[platform.key] || '';
+                }
+            });
+        }
+
+        function saveUpdatePaths() {
+            const platforms = [
+                { id: 'updatePathWindowsAmd64', key: 'windowsAmd64' },
+                { id: 'updatePathWindows386', key: 'windows386' },
+                { id: 'updatePathLinuxAmd64', key: 'linuxAmd64' },
+                { id: 'updatePathLinux386', key: 'linux386' },
+                { id: 'updatePathDarwinAmd64', key: 'darwinAmd64' },
+                { id: 'updatePathDarwinArm64', key: 'darwinArm64' }
+            ];
+            
+            const settings = {};
+            platforms.forEach(platform => {
+                const el = document.getElementById(platform.id);
+                if (el) {
+                    const value = el.value.trim();
+                    if (value) {
+                        settings[platform.key] = value;
+                    }
+                }
+            });
+            
+            localStorage.setItem('serverSettings', JSON.stringify(settings));
+            showModal('Success', 'Update paths saved successfully!');
+        }
+
         // Initialize
         loadClients();
         setInterval(loadClients, 10000);
         
         // Set initial active tab
         showSection('dashboard');
+        
+        // Load settings when page loads
+        window.addEventListener('load', () => {
+            if (document.getElementById('settingsSection').classList.contains('active')) {
+                loadUpdatePaths();
+            }
+        });
     </script>
 </body>
 </html>

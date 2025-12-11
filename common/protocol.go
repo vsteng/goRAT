@@ -285,6 +285,7 @@ type ClientMetadata struct {
 	IP            string    `json:"ip"`        // Local/private IP
 	PublicIP      string    `json:"public_ip"` // Public IP (from proxy)
 	Status        string    `json:"status"`
+	Version       string    `json:"version"` // Client version (e.g., "1.0.0")
 	ConnectedAt   time.Time `json:"connected_at"`
 	LastSeen      time.Time `json:"last_seen"`
 	LastHeartbeat time.Time `json:"last_heartbeat"`

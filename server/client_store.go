@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"net"
+	"strings"
 	"sync"
 	"time"
 
@@ -50,6 +51,7 @@ func (s *ClientStore) initDB() error {
 		public_ip TEXT,
 		alias TEXT,
 		status TEXT,
+		client_version TEXT DEFAULT '1.0.0',
 		last_seen DATETIME,
 		first_seen DATETIME,
 		metadata TEXT,
@@ -95,6 +97,18 @@ func (s *ClientStore) initDB() error {
 	_, err := s.db.Exec(schema)
 	if err != nil {
 		return err
+	}
+
+	// Migration: Add client_version column if it doesn't exist
+	migrationSQL := `
+	ALTER TABLE clients ADD COLUMN client_version TEXT DEFAULT '1.0.0';
+	`
+
+	// Try to run migration, ignore if column already exists
+	_, err = s.db.Exec(migrationSQL)
+	if err != nil && !strings.Contains(err.Error(), "duplicate column") {
+		// Log but don't fail if migration fails (column might already exist)
+		log.Printf("[WARN] client_version migration failed: %v (this is OK if column already exists)", err)
 	}
 
 	// Run migrations for existing databases
@@ -155,8 +169,8 @@ func (s *ClientStore) SaveClient(metadata *common.ClientMetadata) error {
 
 	// Try with alias column first, fall back to without if it doesn't exist
 	query := `
-	INSERT INTO clients (id, hostname, os, arch, ip, public_ip, alias, status, last_seen, first_seen, metadata, updated_at)
-	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+	INSERT INTO clients (id, hostname, os, arch, ip, public_ip, alias, status, client_version, last_seen, first_seen, metadata, updated_at)
+	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
 	ON CONFLICT(id) DO UPDATE SET
 		hostname = excluded.hostname,
 		os = excluded.os,
@@ -165,6 +179,7 @@ func (s *ClientStore) SaveClient(metadata *common.ClientMetadata) error {
 		public_ip = excluded.public_ip,
 		alias = excluded.alias,
 		status = excluded.status,
+		client_version = excluded.client_version,
 		last_seen = excluded.last_seen,
 		metadata = excluded.metadata,
 		updated_at = CURRENT_TIMESTAMP
@@ -179,6 +194,7 @@ func (s *ClientStore) SaveClient(metadata *common.ClientMetadata) error {
 		metadata.PublicIP,
 		metadata.Alias,
 		metadata.Status,
+		metadata.Version,
 		metadata.LastSeen,
 		metadata.LastSeen, // first_seen only set on insert
 		metadataJSON,
