@@ -3,6 +3,7 @@ package server
 import (
 	"time"
 
+	"gorat/pkg/api"
 	"gorat/pkg/auth"
 	"gorat/pkg/clients"
 	"gorat/pkg/config"
@@ -12,14 +13,16 @@ import (
 
 // Services holds all major application services for dependency injection
 type Services struct {
-	Config     *config.ServerConfig
-	Logger     *logger.Logger
-	Storage    storage.Store
-	ClientMgr  clients.Manager
-	ProxyMgr   *ProxyManager
-	SessionMgr auth.SessionManager
-	TermProxy  *TerminalProxy
-	Auth       auth.Authenticator
+	Config       *config.ServerConfig
+	Logger       *logger.Logger
+	Storage      storage.Store
+	ClientMgr    clients.Manager
+	ProxyMgr     *ProxyManager
+	SessionMgr   auth.SessionManager
+	TermProxy    *TerminalProxy
+	Auth         auth.Authenticator
+	APIHandler   *api.Handler
+	AdminHandler *api.AdminHandler
 }
 
 // NewServices creates and initializes all services
@@ -45,16 +48,27 @@ func NewServices(cfg *config.ServerConfig) (*Services, error) {
 	proxyMgr := NewProxyManager(clientMgr, store)
 	authenticator := auth.NewAuthenticator("")
 
+	// Initialize API handlers
+	apiHandler, err := api.NewHandler(sessionMgr, clientMgr, store, cfg.WebUI.Username, cfg.WebUI.Password)
+	if err != nil {
+		log.ErrorWithErr("failed to initialize API handler", err)
+		return nil, err
+	}
+
+	adminHandler := api.NewAdminHandler(clientMgr, store)
+
 	log.InfoWith("services initialized successfully")
 
 	return &Services{
-		Config:     cfg,
-		Logger:     log,
-		Storage:    store,
-		ClientMgr:  clientMgr,
-		ProxyMgr:   proxyMgr,
-		SessionMgr: sessionMgr,
-		TermProxy:  termProxy,
-		Auth:       authenticator,
+		Config:       cfg,
+		Logger:       log,
+		Storage:      store,
+		ClientMgr:    clientMgr,
+		ProxyMgr:     proxyMgr,
+		SessionMgr:   sessionMgr,
+		TermProxy:    termProxy,
+		Auth:         authenticator,
+		APIHandler:   apiHandler,
+		AdminHandler: adminHandler,
 	}, nil
 }

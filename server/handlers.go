@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"sync"
@@ -143,6 +144,46 @@ func NewServerWithRecovery(config *Config) (*Server, error) {
 	}()
 
 	return NewServer(config), nil
+}
+
+// NewServerWithServices creates a new server using Services (dependency injection)
+func NewServerWithServices(services *Services) (*Server, error) {
+	if services == nil {
+		return nil, fmt.Errorf("services cannot be nil")
+	}
+
+	manager := services.ClientMgr
+	store := services.Storage
+
+	server := &Server{
+		manager: manager,
+		store:   store,
+		config: &Config{
+			Address:     services.Config.Address,
+			UseTLS:      services.Config.TLS.Enabled,
+			CertFile:    services.Config.TLS.CertFile,
+			KeyFile:     services.Config.TLS.KeyFile,
+			WebUsername: services.Config.WebUI.Username,
+			WebPassword: services.Config.WebUI.Password,
+		},
+		authenticator:      NewAuthenticator(""),
+		webHandler:         nil, // Will use APIHandler instead
+		terminalProxy:      services.TermProxy,
+		proxyManager:       services.ProxyMgr,
+		dispatcher:         messaging.NewDispatcher(),
+		commandResults:     make(map[string]*common.CommandResultPayload),
+		fileListResults:    make(map[string]*common.FileListPayload),
+		driveListResults:   make(map[string]*common.DriveListPayload),
+		fileDataResults:    make(map[string]*common.FileDataPayload),
+		screenshotResults:  make(map[string]*common.ScreenshotDataPayload),
+		processListResults: make(map[string]*common.ProcessListPayload),
+		systemInfoResults:  make(map[string]*common.SystemInfoPayload),
+	}
+
+	// Initialize message dispatcher
+	server.initializeDispatcher()
+
+	return server, nil
 }
 
 // Shutdown gracefully shuts down the server

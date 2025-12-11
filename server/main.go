@@ -124,23 +124,14 @@ func Main() {
 	log.InfoWith("configuration loaded", "address", cfg.Address, "tls", cfg.TLS.Enabled)
 
 	// Initialize services (dependency injection container)
-	// Future: Pass services to Server instead of creating multiple instances
-	_, err = NewServices(cfg)
+	services, err := NewServices(cfg)
 	if err != nil {
 		log.ErrorWithErr("failed to initialize services", err)
 		return
 	}
 
-	// Create server instance (legacy approach for now)
-	srv, err := NewServerWithRecovery(&Config{
-		Address:     cfg.Address,
-		CertFile:    cfg.TLS.CertFile,
-		KeyFile:     cfg.TLS.KeyFile,
-		AuthToken:   "",
-		UseTLS:      cfg.TLS.Enabled,
-		WebUsername: cfg.WebUI.Username,
-		WebPassword: cfg.WebUI.Password,
-	})
+	// Create server instance using services
+	srv, err := NewServerWithServices(services)
 	if err != nil {
 		log.ErrorWithErr("failed to create server", err)
 		return
