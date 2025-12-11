@@ -889,6 +889,13 @@ func (wh *WebHandler) RegisterGinRoutes(router *gin.Engine) {
 // ginRequireAuth is Gin middleware for authentication
 func (wh *WebHandler) ginRequireAuth(handler gin.HandlerFunc) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// Safety check for WebHandler receiver
+		if wh == nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "handler not initialized"})
+			c.Abort()
+			return
+		}
+
 		cookie, err := c.Cookie("session_id")
 		if err != nil {
 			c.Redirect(http.StatusSeeOther, "/login")
@@ -918,65 +925,129 @@ func (wh *WebHandler) ginRequireAuth(handler gin.HandlerFunc) gin.HandlerFunc {
 
 // Gin wrapper handlers
 func (wh *WebHandler) ginHandleLogin(c *gin.Context) {
+	if wh == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "handler not initialized"})
+		return
+	}
 	wh.HandleLogin(c.Writer, c.Request)
 }
 
 func (wh *WebHandler) ginHandleLoginAPI(c *gin.Context) {
+	if wh == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "handler not initialized"})
+		return
+	}
 	wh.HandleLoginAPI(c.Writer, c.Request)
 }
 
 func (wh *WebHandler) ginHandleLogout(c *gin.Context) {
+	if wh == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "handler not initialized"})
+		return
+	}
 	wh.HandleLogout(c.Writer, c.Request)
 }
 
 func (wh *WebHandler) ginHandleUsersAPI(c *gin.Context) {
+	if wh == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "handler not initialized"})
+		return
+	}
 	wh.HandleUsersAPI(c.Writer, c.Request)
 }
 
 func (wh *WebHandler) ginHandleUserAPI(c *gin.Context) {
+	if wh == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "handler not initialized"})
+		return
+	}
 	wh.HandleUserAPI(c.Writer, c.Request)
 }
 
 func (wh *WebHandler) ginHandleDashboard(c *gin.Context) {
+	if wh == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "handler not initialized"})
+		return
+	}
 	wh.HandleDashboard(c.Writer, c.Request)
 }
 
 func (wh *WebHandler) ginHandleDashboardNew(c *gin.Context) {
+	if wh == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "handler not initialized"})
+		return
+	}
 	wh.HandleDashboardNew(c.Writer, c.Request)
 }
 
 func (wh *WebHandler) ginHandleClientDetails(c *gin.Context) {
+	if wh == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "handler not initialized"})
+		return
+	}
 	wh.HandleClientDetails(c.Writer, c.Request)
 }
 
 func (wh *WebHandler) ginHandleTerminalPage(c *gin.Context) {
+	if wh == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "handler not initialized"})
+		return
+	}
 	wh.HandleTerminalPage(c.Writer, c.Request)
 }
 
 func (wh *WebHandler) ginHandleFilesPage(c *gin.Context) {
+	if wh == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "handler not initialized"})
+		return
+	}
 	wh.HandleFilesPage(c.Writer, c.Request)
 }
 
 func (wh *WebHandler) ginHandleFileBrowse(c *gin.Context) {
+	if wh == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "handler not initialized"})
+		return
+	}
 	wh.HandleFileBrowse(c.Writer, c.Request)
 }
 
 func (wh *WebHandler) ginHandleGetDrives(c *gin.Context) {
+	if wh == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "handler not initialized"})
+		return
+	}
 	wh.HandleGetDrives(c.Writer, c.Request)
 }
 
 func (wh *WebHandler) ginHandleFileDownload(c *gin.Context) {
+	if wh == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "handler not initialized"})
+		return
+	}
 	wh.HandleFileDownload(c.Writer, c.Request)
 }
 
 func (wh *WebHandler) ginHandleScreenshotRequest(c *gin.Context) {
+	if wh == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "handler not initialized"})
+		return
+	}
 	wh.HandleScreenshotRequest(c.Writer, c.Request)
 }
 
 func (wh *WebHandler) ginHandleGlobalUpdate(c *gin.Context) {
+	if wh == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "handler not initialized"})
+		return
+	}
 	wh.HandleGlobalUpdate(c.Writer, c.Request)
 }
 
 func (wh *WebHandler) ginHandleClientsAPI(c *gin.Context) {
+	if wh == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "handler not initialized"})
+		return
+	}
 	wh.HandleClientsAPI(c.Writer, c.Request)
 }
