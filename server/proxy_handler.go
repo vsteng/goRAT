@@ -1466,20 +1466,34 @@ func (s *Server) HandleProcessesAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Wait for response with timeout
-	timeout := time.After(30 * time.Second)
-	ticker := time.NewTicker(100 * time.Millisecond)
+	// Wait for response with timeout (max 10 seconds to avoid Cloudflare timeout)
+	timeout := time.After(10 * time.Second)
+	ticker := time.NewTicker(50 * time.Millisecond)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-timeout:
-			http.Error(w, "Request timeout", http.StatusRequestTimeout)
+			log.Printf("Process request timeout for client %s", clientID)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte("[]"))
 			return
 		case <-ticker.C:
-			if result, exists := s.GetProcessListResult(clientID); exists {
+			result, exists := s.GetProcessListResult(clientID)
+			if exists && result != nil {
 				w.Header().Set("Content-Type", "application/json")
-				json.NewEncoder(w).Encode(result.Processes)
+				w.WriteHeader(http.StatusOK)
+
+				// Ensure Processes is not nil
+				processes := result.Processes
+				if processes == nil {
+					processes = []common.Process{}
+				}
+
+				if err := json.NewEncoder(w).Encode(processes); err != nil {
+					log.Printf("Error encoding processes: %v", err)
+				}
 				s.ClearProcessListResult(clientID)
 				return
 			}
