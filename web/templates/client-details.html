@@ -861,12 +861,53 @@
             document.getElementById('hostname').textContent = currentClient.hostname || '-';
             document.getElementById('osInfo').textContent = `${currentClient.os || '-'} ${currentClient.arch || ''}`;
             document.getElementById('arch').textContent = currentClient.arch || '-';
+            document.getElementById('cpuCount').textContent = currentClient.cpu_count || '-';
             document.getElementById('localIp').textContent = currentClient.ip || '-';
             document.getElementById('publicIp').textContent = currentClient.public_ip || '-';
             document.getElementById('connected').textContent = currentClient.status;
             document.getElementById('lastSync').textContent = currentClient.last_seen ? new Date(currentClient.last_seen).toLocaleString() : '-';
 
             ensureFileBrowserDefaults();
+            
+            // Load system info for overview stats
+            loadSystemInfoForOverview();
+        }
+
+        async function loadSystemInfoForOverview() {
+            try {
+                const response = await fetch(`/api/system-info?client_id=${encodeURIComponent(clientId)}`, {
+                    credentials: 'include'
+                });
+                if (!response.ok) {
+                    console.warn('Failed to load system info');
+                    return;
+                }
+                
+                const info = await response.json();
+                updateOverviewStats(info);
+            } catch (err) {
+                console.error('Error loading system info:', err);
+            }
+        }
+
+        function updateOverviewStats(info) {
+            // Update CPU Usage (if available from process stats, otherwise show core count)
+            document.getElementById('cpuCount').textContent = info.cpu_count || '-';
+            
+            // Update Memory Usage
+            document.getElementById('memUsage').textContent = `${(info.memory_percent || 0).toFixed(1)}%`;
+            document.getElementById('memDetail').textContent = `${formatBytes(info.used_memory || 0)} / ${formatBytes(info.total_memory || 0)}`;
+            
+            // Update Disk Usage
+            document.getElementById('diskUsage').textContent = `${(info.disk_percent || 0).toFixed(1)}%`;
+            document.getElementById('diskDetail').textContent = `${formatBytes(info.disk_used || 0)} / ${formatBytes(info.disk_total || 0)}`;
+            
+            // Update Uptime
+            const uptimeHours = Math.floor((info.uptime || 0) / 3600);
+            const uptimeDays = Math.floor(uptimeHours / 24);
+            const uptimeDisplay = uptimeDays > 0 ? `${uptimeDays}d ${uptimeHours % 24}h` : `${uptimeHours}h`;
+            document.getElementById('uptime').textContent = uptimeDisplay;
+            document.getElementById('uptimeDetail').textContent = new Date(Date.now() - (info.uptime || 0) * 1000).toLocaleDateString();
         }
 
         // File browser functions
