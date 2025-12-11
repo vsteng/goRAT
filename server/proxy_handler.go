@@ -1464,9 +1464,12 @@ func (s *Server) HandleProcessesAPI(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.manager.SendToClient(clientID, msg); err != nil {
+		log.Printf("[ProcessesAPI] Failed to send request to client %s: %v", clientID, err)
 		http.Error(w, "Failed to send request", http.StatusInternalServerError)
 		return
 	}
+
+	log.Printf("[ProcessesAPI] Message sent to client %s, waiting for response...", clientID)
 
 	// Wait for response with timeout (max 30 seconds to allow time for client response)
 	timeout := time.After(30 * time.Second)
