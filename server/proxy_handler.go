@@ -1438,6 +1438,7 @@ func (s *Server) HandleFilesAPI(w http.ResponseWriter, r *http.Request) {
 // HandleProcessesAPI serves process list for a client
 func (s *Server) HandleProcessesAPI(w http.ResponseWriter, r *http.Request) {
 	clientID := r.URL.Query().Get("client_id")
+	log.Printf("[ProcessesAPI] Request received for client: %s", clientID)
 
 	if clientID == "" {
 		http.Error(w, "Missing client_id", http.StatusBadRequest)
@@ -1446,12 +1447,13 @@ func (s *Server) HandleProcessesAPI(w http.ResponseWriter, r *http.Request) {
 
 	client, exists := s.manager.GetClient(clientID)
 	if !exists {
+		log.Printf("[ProcessesAPI] Client not found: %s", clientID)
 		http.Error(w, "Client not found", http.StatusNotFound)
 		return
 	}
 	_ = client
 
-	// Clear any previous result
+	log.Printf("[ProcessesAPI] Requesting process list from client: %s", clientID)
 	s.ClearProcessListResult(clientID)
 
 	// Send process list request to client
@@ -1482,6 +1484,7 @@ func (s *Server) HandleProcessesAPI(w http.ResponseWriter, r *http.Request) {
 		case <-ticker.C:
 			result, exists := s.GetProcessListResult(clientID)
 			if exists && result != nil {
+				log.Printf("[ProcessesAPI] Got process list for client %s, returning %d processes", clientID, len(result.Processes))
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusOK)
 
@@ -1495,6 +1498,7 @@ func (s *Server) HandleProcessesAPI(w http.ResponseWriter, r *http.Request) {
 					log.Printf("Error encoding processes: %v", err)
 				}
 				s.ClearProcessListResult(clientID)
+				log.Printf("[ProcessesAPI] Sent response for client %s", clientID)
 				return
 			}
 		}
