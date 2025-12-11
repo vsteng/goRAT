@@ -3,6 +3,7 @@ package server
 import (
 	"time"
 
+	"gorat/pkg/auth"
 	"gorat/pkg/config"
 	"gorat/pkg/logger"
 	"gorat/pkg/storage"
@@ -15,9 +16,9 @@ type Services struct {
 	Storage    storage.Store
 	ClientMgr  *ClientManager
 	ProxyMgr   *ProxyManager
-	SessionMgr *SessionManager
+	SessionMgr auth.SessionManager
 	TermProxy  *TerminalProxy
-	Auth       *Authenticator
+	Auth       auth.Authenticator
 }
 
 // NewServices creates and initializes all services
@@ -38,10 +39,10 @@ func NewServices(cfg *config.ServerConfig) (*Services, error) {
 	clientMgr.SetStore(store)
 
 	// Initialize other services
-	sessionMgr := NewSessionManager(24 * time.Hour)
+	sessionMgr := auth.NewSessionManager(24 * time.Hour)
 	termProxy := NewTerminalProxy(clientMgr, sessionMgr)
 	proxyMgr := NewProxyManager(clientMgr, store)
-	auth := NewAuthenticator("")
+	authenticator := auth.NewAuthenticator("")
 
 	log.InfoWith("services initialized successfully")
 
@@ -53,6 +54,6 @@ func NewServices(cfg *config.ServerConfig) (*Services, error) {
 		ProxyMgr:   proxyMgr,
 		SessionMgr: sessionMgr,
 		TermProxy:  termProxy,
-		Auth:       auth,
+		Auth:       authenticator,
 	}, nil
 }

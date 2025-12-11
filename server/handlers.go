@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"gorat/common"
+	"gorat/pkg/auth"
 	"gorat/pkg/storage"
 
 	"github.com/gin-gonic/gin"
@@ -62,7 +63,7 @@ type Config struct {
 // NewServer creates a new server instance
 func NewServer(config *Config) *Server {
 	manager := NewClientManager()
-	sessionMgr := NewSessionManager(24 * time.Hour)
+	sessionMgr := auth.NewSessionManager(24 * time.Hour)
 	terminalProxy := NewTerminalProxy(manager, sessionMgr)
 
 	// Initialize client store

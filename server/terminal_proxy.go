@@ -6,8 +6,10 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/gorilla/websocket"
 	"gorat/common"
+	"gorat/pkg/auth"
+
+	"github.com/gorilla/websocket"
 )
 
 // TerminalProxy manages terminal WebSocket connections between web UI and clients
@@ -15,7 +17,7 @@ type TerminalProxy struct {
 	clientMgr  *ClientManager
 	sessions   map[string]*TerminalProxySession
 	mu         sync.RWMutex
-	sessionMgr *SessionManager
+	sessionMgr auth.SessionManager
 }
 
 // TerminalProxySession represents a terminal proxy session
@@ -27,7 +29,7 @@ type TerminalProxySession struct {
 }
 
 // NewTerminalProxy creates a new terminal proxy
-func NewTerminalProxy(clientMgr *ClientManager, sessionMgr *SessionManager) *TerminalProxy {
+func NewTerminalProxy(clientMgr *ClientManager, sessionMgr auth.SessionManager) *TerminalProxy {
 	return &TerminalProxy{
 		clientMgr:  clientMgr,
 		sessions:   make(map[string]*TerminalProxySession),

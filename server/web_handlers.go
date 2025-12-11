@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"gorat/common"
+	"gorat/pkg/auth"
 	"gorat/pkg/storage"
 
 	"github.com/gin-gonic/gin"
@@ -24,7 +25,7 @@ type WebConfig struct {
 
 // WebHandler handles web UI requests
 type WebHandler struct {
-	sessionMgr *SessionManager
+	sessionMgr auth.SessionManager
 	clientMgr  *ClientManager
 	store      storage.Store
 	config     *WebConfig
@@ -33,7 +34,7 @@ type WebHandler struct {
 }
 
 // NewWebHandler creates a new web handler
-func NewWebHandler(sessionMgr *SessionManager, clientMgr *ClientManager, store storage.Store, config *WebConfig) (*WebHandler, error) {
+func NewWebHandler(sessionMgr auth.SessionManager, clientMgr *ClientManager, store storage.Store, config *WebConfig) (*WebHandler, error) {
 	// Load templates from disk
 	templatesPath := filepath.Join("web", "templates", "*.html")
 	tmpl, err := template.ParseGlob(templatesPath)
