@@ -202,7 +202,7 @@ func (s *Server) Start() error {
 	router.GET("/api/proxy/stats", s.ginHandleProxyStats)
 
 	// Client management endpoints
-	router.GET("/api/client", s.ginHandleClientGetQuery)  // Support both /api/client?id=... and /api/client/:id
+	router.GET("/api/client", s.ginHandleClientGetQuery) // Support both /api/client?id=... and /api/client/:id
 	router.GET("/api/client/:id", s.ginHandleClientGet)
 	router.POST("/api/client/alias", s.ginHandleUpdateClientAlias)
 	router.GET("/api/files", s.ginHandleFilesAPI)
@@ -312,15 +312,30 @@ func (s *Server) ginHandleClientGetQuery(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Client ID required"})
 		return
 	}
-	
+
 	// Get the client from the manager
 	client, exists := s.manager.GetClient(clientID)
 	if !exists {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Client not found"})
 		return
 	}
-	
-	c.JSON(http.StatusOK, client)
+
+	// Return metadata only to avoid marshaling websocket.Conn and other internal fields
+	var meta *common.ClientMetadata
+	if client.Metadata == nil {
+		meta = &common.ClientMetadata{
+			ID:     client.ID,
+			Status: "unknown",
+		}
+	} else {
+		meta = client.Metadata
+		// Ensure ID is populated from client struct if missing
+		if meta.ID == "" {
+			meta.ID = client.ID
+		}
+	}
+
+	c.JSON(http.StatusOK, meta)
 }
 
 func (s *Server) ginHandleUpdateClientAlias(c *gin.Context) {
