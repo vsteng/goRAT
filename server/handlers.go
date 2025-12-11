@@ -202,6 +202,7 @@ func (s *Server) Start() error {
 	router.GET("/api/proxy/stats", s.ginHandleProxyStats)
 
 	// Client management endpoints
+	router.GET("/api/client", s.ginHandleClientGetQuery)  // Support both /api/client?id=... and /api/client/:id
 	router.GET("/api/client/:id", s.ginHandleClientGet)
 	router.POST("/api/client/alias", s.ginHandleUpdateClientAlias)
 	router.GET("/api/files", s.ginHandleFilesAPI)
@@ -302,6 +303,24 @@ func (s *Server) ginHandleProxyStats(c *gin.Context) {
 
 func (s *Server) ginHandleClientGet(c *gin.Context) {
 	s.HandleClientGet(c.Writer, c.Request)
+}
+
+func (s *Server) ginHandleClientGetQuery(c *gin.Context) {
+	// Support query parameter ?id= for backward compatibility
+	clientID := c.Query("id")
+	if clientID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Client ID required"})
+		return
+	}
+	
+	// Get the client from the manager
+	client, exists := s.manager.GetClient(clientID)
+	if !exists {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Client not found"})
+		return
+	}
+	
+	c.JSON(http.StatusOK, client)
 }
 
 func (s *Server) ginHandleUpdateClientAlias(c *gin.Context) {
