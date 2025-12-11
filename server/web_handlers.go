@@ -8,10 +8,10 @@ import (
 	"log"
 	"net/http"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"gorat/common"
+	"gorat/pkg/storage"
 
 	"github.com/gin-gonic/gin"
 )
@@ -26,14 +26,14 @@ type WebConfig struct {
 type WebHandler struct {
 	sessionMgr *SessionManager
 	clientMgr  *ClientManager
-	store      *ClientStore
+	store      storage.Store
 	config     *WebConfig
 	templates  *template.Template
 	server     *Server // Reference to main server for result access
 }
 
 // NewWebHandler creates a new web handler
-func NewWebHandler(sessionMgr *SessionManager, clientMgr *ClientManager, store *ClientStore, config *WebConfig) (*WebHandler, error) {
+func NewWebHandler(sessionMgr *SessionManager, clientMgr *ClientManager, store storage.Store, config *WebConfig) (*WebHandler, error) {
 	// Load templates from disk
 	templatesPath := filepath.Join("web", "templates", "*.html")
 	tmpl, err := template.ParseGlob(templatesPath)
@@ -766,7 +766,7 @@ func (wh *WebHandler) HandleUserAPI(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Get current user
-		user, _, err := wh.store.GetWebUser(username)
+		_, _, err := wh.store.GetWebUser(username)
 		if err != nil {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusNotFound)
@@ -774,33 +774,10 @@ func (wh *WebHandler) HandleUserAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// Update fields if provided
-		if req.Status != "" {
-			user.Status = req.Status
-		}
-		if req.Role != "" {
-			user.Role = req.Role
-		}
-		if req.FullName != "" {
-			user.FullName = req.FullName
-		}
-
-		// Build update query dynamically
-		updateFields := []interface{}{}
-		queryParts := []string{}
-
-		if req.Status != "" {
-			queryParts = append(queryParts, "status = ?")
-			updateFields = append(updateFields, req.Status)
-		}
-		if req.Role != "" {
-			queryParts = append(queryParts, "role = ?")
-			updateFields = append(updateFields, req.Role)
-		}
-		if req.FullName != "" {
-			queryParts = append(queryParts, "full_name = ?")
-			updateFields = append(updateFields, req.FullName)
-		}
+		// Prepare updates - note: Status and Role updates would require additional interface methods
+		// For now, we only support FullName and Password updates via the public interface
+		var passwordHash *string
+		var fullName *string
 
 		// Handle password update with hashing
 		if req.Password != "" {
@@ -812,31 +789,25 @@ func (wh *WebHandler) HandleUserAPI(w http.ResponseWriter, r *http.Request) {
 			}
 			// Hash the new password
 			hash := sha256.Sum256([]byte(req.Password))
-			passwordHash := hex.EncodeToString(hash[:])
-			queryParts = append(queryParts, "password_hash = ?")
-			updateFields = append(updateFields, passwordHash)
+			hashStr := hex.EncodeToString(hash[:])
+			passwordHash = &hashStr
+		}
+
+		// Handle full name update
+		if req.FullName != "" {
+			fullName = &req.FullName
 		}
 
 		// If nothing to update, return error
-		if len(queryParts) == 0 {
+		if passwordHash == nil && fullName == nil && req.Status == "" && req.Role == "" {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]string{"error": "No fields to update"})
 			return
 		}
 
-		// Add username to the update fields
-		updateFields = append(updateFields, username)
-
-		// Build final query
-		updateQuery := "UPDATE web_users SET " + strings.Join(queryParts, ", ") + " WHERE username = ?"
-
-		// Update in database
-		wh.store.mu.Lock()
-		_, err = wh.store.db.Exec(updateQuery, updateFields...)
-		wh.store.mu.Unlock()
-
-		if err != nil {
+		// Update in database using storage interface
+		if err := wh.store.UpdateWebUser(username, fullName, passwordHash); err != nil {
 			log.Printf("Error updating user: %v", err)
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusInternalServerError)

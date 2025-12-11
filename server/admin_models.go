@@ -7,8 +7,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"gorat/common"
+	"gorat/pkg/storage"
+
+	"github.com/gin-gonic/gin"
 )
 
 // AdminClientHandler handles client list and management
@@ -343,7 +345,7 @@ func getPlatformKey(os, arch string) string {
 }
 
 // buildUpdateURL constructs the update URL from settings
-func buildUpdateURL(platform, version string, store *ClientStore) string {
+func buildUpdateURL(platform, version string, store storage.Store) string {
 	settingKey := "update_path_" + platform
 	basePath, err := store.GetServerSetting(settingKey)
 	if err != nil || basePath == "" {

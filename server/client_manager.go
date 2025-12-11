@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"gorat/common"
+	"gorat/pkg/storage"
 
 	"github.com/gorilla/websocket"
 )
@@ -27,7 +28,7 @@ type ClientManager struct {
 	register   chan *Client
 	unregister chan *Client
 	broadcast  chan *common.Message
-	store      *ClientStore // Reference to persistent storage
+	store      storage.Store // Reference to persistent storage
 	mu         sync.RWMutex
 	running    bool
 	runningMu  sync.Mutex
@@ -44,7 +45,7 @@ func NewClientManager() *ClientManager {
 }
 
 // SetStore sets the client store reference
-func (m *ClientManager) SetStore(store *ClientStore) {
+func (m *ClientManager) SetStore(store storage.Store) {
 	m.store = store
 }
 

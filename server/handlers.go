@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"gorat/common"
+	"gorat/pkg/storage"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -27,7 +28,7 @@ var upgrader = websocket.Upgrader{
 // Server represents the main server
 type Server struct {
 	manager            *ClientManager
-	store              *ClientStore
+	store              storage.Store
 	config             *Config
 	authenticator      *Authenticator
 	webHandler         *WebHandler
@@ -65,7 +66,7 @@ func NewServer(config *Config) *Server {
 	terminalProxy := NewTerminalProxy(manager, sessionMgr)
 
 	// Initialize client store
-	store, err := NewClientStore("clients.db")
+	store, err := storage.NewSQLiteStore("clients.db")
 	if err != nil {
 		log.Printf("ERROR: Failed to create client store: %v", err)
 		log.Println("Server will continue without persistent storage")

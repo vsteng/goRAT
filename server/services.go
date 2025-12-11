@@ -5,13 +5,14 @@ import (
 
 	"gorat/pkg/config"
 	"gorat/pkg/logger"
+	"gorat/pkg/storage"
 )
 
 // Services holds all major application services for dependency injection
 type Services struct {
 	Config     *config.ServerConfig
 	Logger     *logger.Logger
-	Storage    *ClientStore
+	Storage    storage.Store
 	ClientMgr  *ClientManager
 	ProxyMgr   *ProxyManager
 	SessionMgr *SessionManager
@@ -26,7 +27,7 @@ func NewServices(cfg *config.ServerConfig) (*Services, error) {
 	log.InfoWith("initializing services", "config", cfg.String())
 
 	// Initialize storage layer
-	store, err := NewClientStore(cfg.Database.Path)
+	store, err := storage.NewSQLiteStore(cfg.Database.Path)
 	if err != nil {
 		log.ErrorWithErr("failed to initialize storage", err)
 		return nil, err

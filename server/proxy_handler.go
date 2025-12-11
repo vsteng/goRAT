@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"gorat/common"
+	"gorat/pkg/storage"
 )
 
 // ProxyConnection represents a proxy tunnel connection
@@ -215,14 +216,14 @@ type ProxyManager struct {
 	connections map[string]*ProxyConnection
 	mu          sync.RWMutex
 	manager     *ClientManager
-	store       *ClientStore   // For persistent storage
+	store       storage.Store  // For persistent storage
 	portMap     map[int]string // Maps port to proxy connection ID (like lanproxy)
 	portMapMu   sync.RWMutex
 	stopMonitor chan struct{} // Signal to stop idle monitoring
 }
 
 // NewProxyManager creates a new proxy manager
-func NewProxyManager(manager *ClientManager, store *ClientStore) *ProxyManager {
+func NewProxyManager(manager *ClientManager, store storage.Store) *ProxyManager {
 	pm := &ProxyManager{
 		connections: make(map[string]*ProxyConnection),
 		manager:     manager,
@@ -235,6 +236,24 @@ func NewProxyManager(manager *ClientManager, store *ClientStore) *ProxyManager {
 	go pm.monitorIdleConnections()
 
 	return pm
+}
+
+// toStorageProxy converts a ProxyConnection to storage.ProxyConnection for persistence
+func (conn *ProxyConnection) toStorageProxy() *storage.ProxyConnection {
+	return &storage.ProxyConnection{
+		ID:          conn.ID,
+		ClientID:    conn.ClientID,
+		LocalPort:   conn.LocalPort,
+		RemoteHost:  conn.RemoteHost,
+		RemotePort:  conn.RemotePort,
+		Protocol:    conn.Protocol,
+		BytesIn:     conn.BytesIn,
+		BytesOut:    conn.BytesOut,
+		CreatedAt:   conn.CreatedAt,
+		LastActive:  conn.LastActive,
+		UserCount:   conn.UserCount,
+		MaxIdleTime: conn.MaxIdleTime,
+	}
 }
 
 // FindAvailablePort finds an available port starting from the suggested port
@@ -357,7 +376,7 @@ func (pm *ProxyManager) createProxyConnectionWithID(id, clientID, remoteHost str
 
 	// Persist to database if store is available
 	if pm.store != nil {
-		if err := pm.store.SaveProxy(conn); err != nil {
+		if err := pm.store.SaveProxy(conn.toStorageProxy()); err != nil {
 			log.Printf("WARNING: Failed to save proxy to database: %v", err)
 		}
 	}
@@ -715,7 +734,7 @@ func (pm *ProxyManager) UpdateProxyConnection(id, remoteHost string, remotePort,
 
 	// Persist changes to database
 	if pm.store != nil {
-		if err := pm.store.UpdateProxy(conn); err != nil {
+		if err := pm.store.UpdateProxy(conn.toStorageProxy()); err != nil {
 			log.Printf("ERROR: Failed to update proxy in database: %v", err)
 			return fmt.Errorf("failed to update database: %v", err)
 		}
