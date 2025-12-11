@@ -1468,9 +1468,9 @@ func (s *Server) HandleProcessesAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Wait for response with timeout (max 10 seconds to avoid Cloudflare timeout)
-	timeout := time.After(10 * time.Second)
-	ticker := time.NewTicker(50 * time.Millisecond)
+	// Wait for response with timeout (max 30 seconds to allow time for client response)
+	timeout := time.After(30 * time.Second)
+	ticker := time.NewTicker(10 * time.Millisecond) // Poll every 10ms for faster detection
 	defer ticker.Stop()
 
 	for {
