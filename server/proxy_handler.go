@@ -486,7 +486,7 @@ func (pm *ProxyManager) handleUserConnection(proxyConn *ProxyConnection, userCon
 
 		// Notify client of disconnect (best effort, async)
 		client, ok := pm.manager.GetClient(proxyConn.ClientID)
-		if ok && client.Conn != nil {
+		if ok && client.Conn() != nil {
 			msg := map[string]interface{}{
 				"type":     "proxy_disconnect",
 				"proxy_id": proxyConn.ID,
@@ -505,7 +505,7 @@ func (pm *ProxyManager) handleUserConnection(proxyConn *ProxyConnection, userCon
 		return
 	}
 
-	if client.Conn == nil {
+	if client.Conn() == nil {
 		log.Printf("Client websocket not connected: %s", proxyConn.ClientID)
 		return
 	}

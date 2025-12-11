@@ -112,7 +112,9 @@ func NewServer(config *Config) *Server {
 	server.initializeDispatcher()
 
 	// Set server reference in web handler
-	webHandler.server = server
+	if webHandler != nil {
+		webHandler.server = server
+	}
 
 	return server
 }
@@ -812,7 +814,7 @@ func (s *Server) handleMessage(client clients.Client, msg *common.Message) {
 	case common.MsgTypeUpdateStatus:
 		var us common.UpdateStatusPayload
 		if err := msg.ParsePayload(&us); err == nil {
-			log.Printf("Update status from %s: %s - %s", client.ID, us.Status, us.Message)
+			log.Printf("Update status from %s: %s - %s", client.ID(), us.Status, us.Message)
 		}
 
 	case common.MsgTypeTerminalOutput:
@@ -1162,7 +1164,7 @@ func (s *Server) loadSavedProxies() {
 			continue
 		}
 
-		if client.Conn == nil {
+		if client.Conn() == nil {
 			log.Printf("  ⚠️  Skipping proxy %s (client %s WebSocket not ready)", proxy.ID, proxy.ClientID)
 			failCount++
 			continue
