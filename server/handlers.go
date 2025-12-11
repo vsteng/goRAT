@@ -12,6 +12,7 @@ import (
 
 	"mww2.com/server_manager/common"
 
+	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 )
 
@@ -178,33 +179,45 @@ func (s *Server) Start() error {
 	// Load previously saved proxies from database
 	go s.loadSavedProxies()
 
-	mux := http.NewServeMux()
+	// Create Gin router
+	router := gin.Default()
+
+	// Add CORS middleware
+	router.Use(CORSMiddleware())
 
 	// WebSocket endpoint for clients
-	mux.HandleFunc("/ws", s.handleWebSocket)
+	router.GET("/ws", s.ginHandleWebSocket)
 
 	// API endpoints
-	mux.HandleFunc("/api/clients", s.webHandler.HandleClientsAPI)
-	mux.HandleFunc("/api/command", s.handleSendCommand)
-	mux.HandleFunc("/api/terminal", s.terminalProxy.HandleTerminalWebSocket)
+	router.GET("/api/clients", s.ginHandleClientsAPI)
+	router.POST("/api/command", s.ginHandleSendCommand)
+	router.GET("/api/terminal", s.ginHandleTerminalWebSocket)
 
 	// Proxy API endpoints
-	mux.HandleFunc("/api/proxy/create", s.HandleProxyCreate)
-	mux.HandleFunc("/api/proxy/list", s.HandleProxyList)
-	mux.HandleFunc("/api/proxy/close", s.HandleProxyClose)
-	mux.HandleFunc("/api/proxy/suggest", s.HandleProxySuggestPorts)
-	mux.HandleFunc("/api/proxy/edit", s.HandleProxyEdit)
-	mux.HandleFunc("/api/proxy/stats", s.HandleProxyStats)
+	router.POST("/api/proxy/create", s.ginHandleProxyCreate)
+	router.GET("/api/proxy/list", s.ginHandleProxyList)
+	router.POST("/api/proxy/close", s.ginHandleProxyClose)
+	router.GET("/api/proxy/suggest", s.ginHandleProxySuggestPorts)
+	router.POST("/api/proxy/edit", s.ginHandleProxyEdit)
+	router.GET("/api/proxy/stats", s.ginHandleProxyStats)
 
 	// Client management endpoints
-	mux.HandleFunc("/api/client", s.HandleClientGet)
-	mux.HandleFunc("/api/client/alias", s.HandleUpdateClientAlias)
-	mux.HandleFunc("/api/files", s.HandleFilesAPI)
-	mux.HandleFunc("/api/processes", s.HandleProcessesAPI)
-	mux.HandleFunc("/api/proxy-file", s.ProxyFileServer)
+	router.GET("/api/client/:id", s.ginHandleClientGet)
+	router.POST("/api/client/alias", s.ginHandleUpdateClientAlias)
+	router.GET("/api/files", s.ginHandleFilesAPI)
+	router.GET("/api/processes", s.ginHandleProcessesAPI)
+	router.GET("/api/proxy-file", s.ginProxyFileServer)
 
-	// Web UI routes
-	s.webHandler.RegisterWebRoutes(mux)
+	// Admin API endpoints (new)
+	router.GET("/admin/api/clients", s.AdminClientHandler)
+	router.GET("/admin/api/proxies", s.AdminProxyHandler)
+	router.GET("/admin/api/users", s.AdminUserHandler)
+	router.DELETE("/admin/api/client/:id", s.AdminDeleteClientHandler)
+	router.DELETE("/admin/api/proxy/:id", s.AdminDeleteProxyHandler)
+	router.GET("/admin/api/stats", s.AdminStatsHandler)
+
+	// Web UI routes (migrate from old handler)
+	s.webHandler.RegisterGinRoutes(router)
 
 	log.Printf("Server starting on %s", s.config.Address)
 
@@ -220,7 +233,7 @@ func (s *Server) Start() error {
 
 		server := &http.Server{
 			Addr:      s.config.Address,
-			Handler:   mux,
+			Handler:   router,
 			TLSConfig: tlsConfig,
 		}
 
@@ -235,7 +248,7 @@ func (s *Server) Start() error {
 	// Create HTTP server
 	server := &http.Server{
 		Addr:    s.config.Address,
-		Handler: mux,
+		Handler: router,
 	}
 
 	s.serverMu.Lock()
@@ -244,6 +257,67 @@ func (s *Server) Start() error {
 
 	log.Printf("Using HTTP (TLS should be handled by reverse proxy)")
 	return server.ListenAndServe()
+}
+
+// Gin adapter handlers - these wrap the existing http handlers
+func (s *Server) ginHandleWebSocket(c *gin.Context) {
+	s.handleWebSocket(c.Writer, c.Request)
+}
+
+func (s *Server) ginHandleClientsAPI(c *gin.Context) {
+	s.webHandler.HandleClientsAPI(c.Writer, c.Request)
+}
+
+func (s *Server) ginHandleSendCommand(c *gin.Context) {
+	s.handleSendCommand(c.Writer, c.Request)
+}
+
+func (s *Server) ginHandleTerminalWebSocket(c *gin.Context) {
+	s.terminalProxy.HandleTerminalWebSocket(c.Writer, c.Request)
+}
+
+func (s *Server) ginHandleProxyCreate(c *gin.Context) {
+	s.HandleProxyCreate(c.Writer, c.Request)
+}
+
+func (s *Server) ginHandleProxyList(c *gin.Context) {
+	s.HandleProxyList(c.Writer, c.Request)
+}
+
+func (s *Server) ginHandleProxyClose(c *gin.Context) {
+	s.HandleProxyClose(c.Writer, c.Request)
+}
+
+func (s *Server) ginHandleProxySuggestPorts(c *gin.Context) {
+	s.HandleProxySuggestPorts(c.Writer, c.Request)
+}
+
+func (s *Server) ginHandleProxyEdit(c *gin.Context) {
+	s.HandleProxyEdit(c.Writer, c.Request)
+}
+
+func (s *Server) ginHandleProxyStats(c *gin.Context) {
+	s.HandleProxyStats(c.Writer, c.Request)
+}
+
+func (s *Server) ginHandleClientGet(c *gin.Context) {
+	s.HandleClientGet(c.Writer, c.Request)
+}
+
+func (s *Server) ginHandleUpdateClientAlias(c *gin.Context) {
+	s.HandleUpdateClientAlias(c.Writer, c.Request)
+}
+
+func (s *Server) ginHandleFilesAPI(c *gin.Context) {
+	s.HandleFilesAPI(c.Writer, c.Request)
+}
+
+func (s *Server) ginHandleProcessesAPI(c *gin.Context) {
+	s.HandleProcessesAPI(c.Writer, c.Request)
+}
+
+func (s *Server) ginProxyFileServer(c *gin.Context) {
+	s.ProxyFileServer(c.Writer, c.Request)
 }
 
 // getClientIP extracts the real client IP from request headers

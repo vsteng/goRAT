@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"mww2.com/server_manager/common"
+
+	"github.com/gin-gonic/gin"
 )
 
 // WebConfig holds web UI configuration
@@ -813,4 +815,129 @@ func (wh *WebHandler) HandleUserAPI(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
+}
+
+// RegisterGinRoutes registers web handler routes with Gin router
+func (wh *WebHandler) RegisterGinRoutes(router *gin.Engine) {
+	// Load HTML templates
+	router.LoadHTMLGlob("web/templates/*.html")
+
+	// Static files
+	router.Static("/static", "./web/static")
+	router.Static("/assets", "./web/assets")
+
+	// Public routes
+	router.GET("/login", wh.ginHandleLogin)
+	router.POST("/api/login", wh.ginHandleLoginAPI)
+	router.POST("/api/logout", wh.ginHandleLogout)
+
+	// User management API routes
+	router.GET("/api/users", wh.ginRequireAuth(wh.ginHandleUsersAPI))
+	router.POST("/api/users", wh.ginRequireAuth(wh.ginHandleUsersAPI))
+	router.PUT("/api/users/:id", wh.ginRequireAuth(wh.ginHandleUserAPI))
+	router.DELETE("/api/users/:id", wh.ginRequireAuth(wh.ginHandleUserAPI))
+
+	// Protected routes
+	router.GET("/", func(c *gin.Context) {
+		c.Redirect(http.StatusSeeOther, "/dashboard-new")
+	})
+	router.GET("/dashboard", wh.ginRequireAuth(wh.ginHandleDashboard))
+	router.GET("/dashboard-new", wh.ginRequireAuth(wh.ginHandleDashboardNew))
+	router.GET("/client-details", wh.ginRequireAuth(wh.ginHandleClientDetails))
+	router.GET("/terminal", wh.ginRequireAuth(wh.ginHandleTerminalPage))
+	router.GET("/files", wh.ginRequireAuth(wh.ginHandleFilesPage))
+	router.GET("/api/files/browse", wh.ginRequireAuth(wh.ginHandleFileBrowse))
+	router.GET("/api/files/drives", wh.ginRequireAuth(wh.ginHandleGetDrives))
+	router.GET("/api/files/download", wh.ginRequireAuth(wh.ginHandleFileDownload))
+	router.GET("/api/screenshot", wh.ginRequireAuth(wh.ginHandleScreenshotRequest))
+	router.POST("/api/update/global", wh.ginRequireAuth(wh.ginHandleGlobalUpdate))
+}
+
+// ginRequireAuth is Gin middleware for authentication
+func (wh *WebHandler) ginRequireAuth(handler gin.HandlerFunc) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		cookie, err := c.Cookie("session_id")
+		if err != nil {
+			c.Redirect(http.StatusSeeOther, "/login")
+			c.Abort()
+			return
+		}
+
+		session, exists := wh.sessionMgr.GetSession(cookie)
+		if !exists {
+			c.Redirect(http.StatusSeeOther, "/login")
+			c.Abort()
+			return
+		}
+
+		// Refresh session
+		wh.sessionMgr.RefreshSession(session.ID)
+
+		handler(c)
+	}
+}
+
+// Gin wrapper handlers
+func (wh *WebHandler) ginHandleLogin(c *gin.Context) {
+	wh.HandleLogin(c.Writer, c.Request)
+}
+
+func (wh *WebHandler) ginHandleLoginAPI(c *gin.Context) {
+	wh.HandleLoginAPI(c.Writer, c.Request)
+}
+
+func (wh *WebHandler) ginHandleLogout(c *gin.Context) {
+	wh.HandleLogout(c.Writer, c.Request)
+}
+
+func (wh *WebHandler) ginHandleUsersAPI(c *gin.Context) {
+	wh.HandleUsersAPI(c.Writer, c.Request)
+}
+
+func (wh *WebHandler) ginHandleUserAPI(c *gin.Context) {
+	wh.HandleUserAPI(c.Writer, c.Request)
+}
+
+func (wh *WebHandler) ginHandleDashboard(c *gin.Context) {
+	wh.HandleDashboard(c.Writer, c.Request)
+}
+
+func (wh *WebHandler) ginHandleDashboardNew(c *gin.Context) {
+	wh.HandleDashboardNew(c.Writer, c.Request)
+}
+
+func (wh *WebHandler) ginHandleClientDetails(c *gin.Context) {
+	wh.HandleClientDetails(c.Writer, c.Request)
+}
+
+func (wh *WebHandler) ginHandleTerminalPage(c *gin.Context) {
+	wh.HandleTerminalPage(c.Writer, c.Request)
+}
+
+func (wh *WebHandler) ginHandleFilesPage(c *gin.Context) {
+	wh.HandleFilesPage(c.Writer, c.Request)
+}
+
+func (wh *WebHandler) ginHandleFileBrowse(c *gin.Context) {
+	wh.HandleFileBrowse(c.Writer, c.Request)
+}
+
+func (wh *WebHandler) ginHandleGetDrives(c *gin.Context) {
+	wh.HandleGetDrives(c.Writer, c.Request)
+}
+
+func (wh *WebHandler) ginHandleFileDownload(c *gin.Context) {
+	wh.HandleFileDownload(c.Writer, c.Request)
+}
+
+func (wh *WebHandler) ginHandleScreenshotRequest(c *gin.Context) {
+	wh.HandleScreenshotRequest(c.Writer, c.Request)
+}
+
+func (wh *WebHandler) ginHandleGlobalUpdate(c *gin.Context) {
+	wh.HandleGlobalUpdate(c.Writer, c.Request)
+}
+
+func (wh *WebHandler) ginHandleClientsAPI(c *gin.Context) {
+	wh.HandleClientsAPI(c.Writer, c.Request)
 }
