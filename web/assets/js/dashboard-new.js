@@ -772,6 +772,10 @@ function showSection(section) {
     if (section === 'clients') {
         loadClients();
     }
+    // If switching to proxy tab, load all proxies
+    if (section === 'proxy') {
+        loadAllProxies();
+    }
     // If switching to users tab, load users
     if (section === 'users') {
         loadUsers();
@@ -1176,6 +1180,151 @@ async function pushClientsUpdate() {
         document.getElementById('updateLog').innerHTML = `<p style="color: var(--danger);">Error: ${escapeHtml(err.message)}</p>`;
         showStatus('Error', 'Failed to push update');
     }
+}
+
+// Proxy Management (All Proxies View)
+async function loadAllProxies() {
+    try {
+        const response = await fetch('/api/proxy/list');
+        if (response.status === 401) {
+            window.location.href = '/login';
+            return;
+        }
+        if (response.ok) {
+            const proxies = await response.json() || [];
+            renderAllProxies(proxies);
+        } else {
+            renderAllProxies([]);
+        }
+    } catch (err) {
+        console.error('Error loading proxies:', err);
+        renderAllProxies([]);
+    }
+}
+
+function renderAllProxies(proxies) {
+    const container = document.getElementById('allProxiesList');
+    if (!container) return;
+
+    if (!proxies || proxies.length === 0) {
+        container.innerHTML = `
+            <div style="text-align: center; padding: 40px; color: var(--text-light);">
+                <p style="font-size: 18px; margin-bottom: 10px;">🌐</p>
+                <p>No active proxy connections</p>
+                <p style="font-size: 13px; margin-top: 8px;">Go to the Clients tab to create proxies</p>
+            </div>
+        `;
+        return;
+    }
+
+    // Group proxies by client
+    const proxyByClient = {};
+    proxies.forEach(proxy => {
+        if (!proxyByClient[proxy.ClientID]) {
+            proxyByClient[proxy.ClientID] = [];
+        }
+        proxyByClient[proxy.ClientID].push(proxy);
+    });
+
+    container.innerHTML = Object.keys(proxyByClient).map(clientId => {
+        const clientProxies = proxyByClient[clientId];
+        const bytesInTotal = clientProxies.reduce((sum, p) => sum + (p.BytesIn || 0), 0);
+        const bytesOutTotal = clientProxies.reduce((sum, p) => sum + (p.BytesOut || 0), 0);
+        
+        return `
+            <div style="background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 20px; margin-bottom: 16px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                    <h4 style="margin: 0; font-size: 15px;">
+                        🖥️ Client: <span style="font-family: monospace; font-size: 13px;">${escapeHtml(clientId.substring(0, 16))}...</span>
+                    </h4>
+                    <span style="background: var(--info); color: white; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 500;">
+                        ${clientProxies.length} ${clientProxies.length === 1 ? 'proxy' : 'proxies'}
+                    </span>
+                </div>
+                
+                <div style="display: grid; gap: 12px;">
+                    ${clientProxies.map(proxy => {
+                        const statusColor = (proxy.UserCount || 0) > 0 ? 'var(--success)' : 'var(--text-light)';
+                        const bytesIn = formatBytes(proxy.BytesIn || 0);
+                        const bytesOut = formatBytes(proxy.BytesOut || 0);
+                        const lastActive = proxy.LastActive ? new Date(proxy.LastActive).toLocaleString() : 'Never';
+                        
+                        return `
+                            <div style="background: white; border: 1px solid var(--border); border-radius: 6px; padding: 16px;">
+                                <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 12px;">
+                                    <div style="flex: 1;">
+                                        <div style="font-weight: 600; font-size: 14px; margin-bottom: 6px; color: var(--primary);">
+                                            :<span style="color: var(--success); font-weight: 700;">${proxy.LocalPort}</span> → ${escapeHtml(proxy.RemoteHost)}:${proxy.RemotePort}
+                                        </div>
+                                        <div style="display: flex; gap: 16px; font-size: 12px; color: var(--text-light);">
+                                            <span>📡 ${escapeHtml(proxy.Protocol?.toUpperCase() || 'TCP')}</span>
+                                            <span style="color: ${statusColor};">
+                                                ${(proxy.UserCount || 0) > 0 ? `🟢 ${proxy.UserCount} active` : '⚪ Idle'}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <button onclick="deleteProxyFromAll('${escapeHtml(proxy.ID)}')" 
+                                            style="padding: 6px 12px; background: var(--danger); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">
+                                        🗑️ Close
+                                    </button>
+                                </div>
+                                
+                                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; padding-top: 12px; border-top: 1px solid var(--border); font-size: 12px;">
+                                    <div>
+                                        <div style="color: var(--text-light); margin-bottom: 4px;">⬇️ Received</div>
+                                        <div style="font-weight: 600;">${bytesIn}</div>
+                                    </div>
+                                    <div>
+                                        <div style="color: var(--text-light); margin-bottom: 4px;">⬆️ Sent</div>
+                                        <div style="font-weight: 600;">${bytesOut}</div>
+                                    </div>
+                                    <div>
+                                        <div style="color: var(--text-light); margin-bottom: 4px;">⏱️ Last Active</div>
+                                        <div style="font-weight: 600; font-size: 11px;">${lastActive.split(',')[1] || lastActive}</div>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+                
+                <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); display: flex; gap: 24px; font-size: 13px; color: var(--text-light);">
+                    <span>📊 Total In: <strong style="color: var(--text);">${formatBytes(bytesInTotal)}</strong></span>
+                    <span>📊 Total Out: <strong style="color: var(--text);">${formatBytes(bytesOutTotal)}</strong></span>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+async function deleteProxyFromAll(proxyId) {
+    if (!confirm('Close this proxy connection?')) return;
+    
+    try {
+        const response = await fetch(`/api/proxy/close?id=${encodeURIComponent(proxyId)}`, {
+            method: 'POST'
+        });
+
+        if (response.ok) {
+            showStatus('Success', 'Proxy connection closed!');
+            setTimeout(loadAllProxies, 500);
+        } else if (response.status === 401) {
+            window.location.href = '/login';
+        } else {
+            showStatus('Error', 'Failed to close proxy');
+        }
+    } catch (err) {
+        console.error('Error:', err);
+        showStatus('Error', 'Error closing proxy connection');
+    }
+}
+
+function formatBytes(bytes) {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
 }
 
 // Initialize

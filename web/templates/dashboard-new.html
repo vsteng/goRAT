@@ -171,8 +171,16 @@
                 <!-- PROXY TAB -->
                 <div class="content-section" id="proxySection">
                     <div class="section">
-                        <h3>🌐 Proxy Management</h3>
-                        <p style="color: var(--text-light); margin-top: 10px;">Select a client from the Clients tab to manage proxies.</p>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                            <h3>🌐 Proxy Management</h3>
+                            <button class="btn btn-secondary" onclick="loadAllProxies()">🔄 Refresh</button>
+                        </div>
+                        
+                        <div id="allProxiesList" style="margin-top: 20px;">
+                            <div style="text-align: center; padding: 40px; color: var(--text-light);">
+                                Loading proxies...
+                            </div>
+                        </div>
                     </div>
                 </div>
 
