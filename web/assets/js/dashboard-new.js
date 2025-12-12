@@ -7,6 +7,43 @@ let searchQuery = '';
 let clientsLoadTimeout = null;
 // Cache suggested ports per client to avoid re-fetching when not adding
 const suggestedPortCache = {};
+let healthState = null;
+
+async function fetchJSON(url, options = {}) {
+    try {
+        const response = await fetch(url, options);
+        if (response.status === 401) {
+            window.location.href = '/login';
+            return { ok: false, status: 401 };
+        }
+        const data = await response.json().catch(() => null);
+        return { ok: response.ok, status: response.status, data };
+    } catch (err) {
+        console.error('Request failed', err);
+        return { ok: false, status: 0, error: err };
+    }
+}
+
+function setStatusDot(dotId, state) {
+    const dot = document.getElementById(dotId);
+    if (!dot) return;
+    dot.classList.remove('healthy', 'degraded', 'down');
+    if (state) dot.classList.add(state);
+}
+
+function setText(id, value) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = value;
+}
+
+function formatDuration(seconds) {
+    if (typeof seconds !== 'number' || seconds < 0) return '--';
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    if (hours >= 48) return `${Math.round(hours / 24)}d`;
+    if (hours >= 1) return `${hours}h ${minutes}m`;
+    return `${minutes}m`;
+}
 
 async function loadClients() {
     // Debounce multiple rapid calls
@@ -22,6 +59,7 @@ async function loadClients() {
             currentPage = 1;
             renderClientList();
             updateStats();
+            updateClientPill();
         } catch (err) {
             console.error('Error loading clients:', err);
         }
@@ -502,34 +540,76 @@ async function addProxy() {
     }
 }
 
+function updateClientPill() {
+    const total = clients.length;
+    const online = clients.filter(c => c.status === 'online').length;
+    setText('clientsSummary', total === 0 ? 'No clients' : `${online}/${total} online`);
+    setStatusDot('clientsDot', online > 0 ? 'healthy' : 'down');
+}
+
 function updateStats() {
     const total = clients.length;
     const online = clients.filter(c => c.status === 'online').length;
     const offline = total - online;
 
-    document.getElementById('totalClients').textContent = total;
-    document.getElementById('onlineClients').textContent = online;
-    document.getElementById('offlineClients').textContent = offline;
-    document.getElementById('activeProxies').textContent = '0'; // TODO: fetch actual proxy count
+    setText('totalClients', total);
+    setText('onlineClients', online);
+    setText('offlineClients', offline);
+    setText('activeProxies', '0'); // TODO: fetch actual proxy count
 
-    // Update system overview
-    const now = new Date();
-    const serverStart = new Date(now.getTime() - Math.random() * 86400000); // Mock uptime
-    const uptimeHours = Math.floor((now - serverStart) / 3600000);
-    document.getElementById('serverUptime').textContent = uptimeHours + 'h';
-    document.getElementById('totalConnections').textContent = total;
+    // Update system overview using health data if present
+    if (healthState && typeof healthState.uptime_seconds === 'number') {
+        setText('serverUptime', formatDuration(healthState.uptime_seconds));
+        setText('totalConnections', healthState.active_clients ?? total);
+    } else {
+        setText('serverUptime', '--');
+        setText('totalConnections', total);
+    }
     
     if (clients.length > 0) {
         const latest = clients.reduce((a, b) => 
             new Date(a.last_seen) > new Date(b.last_seen) ? a : b
         );
         const lastSeenDate = new Date(latest.last_seen);
-        const minutesAgo = Math.floor((now - lastSeenDate) / 60000);
-        document.getElementById('lastActivity').textContent = 
-            minutesAgo < 1 ? 'Now' : minutesAgo + 'm ago';
+        const minutesAgo = Math.floor((Date.now() - lastSeenDate.getTime()) / 60000);
+        setText('lastActivity', minutesAgo < 1 ? 'Now' : minutesAgo + 'm ago');
     } else {
-        document.getElementById('lastActivity').textContent = '--';
+        setText('lastActivity', '--');
     }
+}
+
+async function refreshHealth() {
+    const result = await fetchJSON('/api/health');
+    if (!result.ok || !result.data) {
+        setStatusDot('healthDot', 'down');
+        setStatusDot('uptimeDot', 'down');
+        setText('healthLabel', 'Unavailable');
+        setText('uptimeLabel', '--');
+        return;
+    }
+
+    healthState = result.data;
+    const status = (healthState.status || 'unknown').toLowerCase();
+    const dotState = status === 'healthy' ? 'healthy' : status === 'degraded' ? 'degraded' : 'down';
+
+    setStatusDot('healthDot', dotState);
+    setText('healthLabel', status === 'healthy' ? 'Healthy' : status === 'degraded' ? 'Degraded' : 'Check server');
+
+    if (typeof healthState.uptime_seconds === 'number') {
+        setStatusDot('uptimeDot', 'healthy');
+        setText('uptimeLabel', formatDuration(healthState.uptime_seconds));
+    } else {
+        setStatusDot('uptimeDot', 'degraded');
+        setText('uptimeLabel', '--');
+    }
+
+    // Active clients can inform connection load
+    if (typeof healthState.active_clients === 'number') {
+        setText('totalConnections', healthState.active_clients);
+    }
+
+    updateStats();
+    updateClientPill();
 }
 
 function openClientPanel() {
@@ -1101,6 +1181,8 @@ async function pushClientsUpdate() {
 // Initialize
 loadClients();
 setInterval(loadClients, 10000);
+refreshHealth();
+setInterval(refreshHealth, 12000);
 
 // Set initial active tab
 showSection('dashboard');

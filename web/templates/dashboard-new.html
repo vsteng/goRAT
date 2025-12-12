@@ -42,6 +42,29 @@
                 <div>
                     <h2 id="pageTitle">Dashboard</h2>
                 </div>
+                <div class="status-cluster" aria-live="polite">
+                    <div class="status-pill">
+                        <span class="status-dot healthy" id="healthDot"></span>
+                        <div>
+                            <div class="pill-label">Health</div>
+                            <strong id="healthLabel">--</strong>
+                        </div>
+                    </div>
+                    <div class="status-pill">
+                        <span class="status-dot" id="clientsDot"></span>
+                        <div>
+                            <div class="pill-label">Clients</div>
+                            <strong id="clientsSummary">0 online</strong>
+                        </div>
+                    </div>
+                    <div class="status-pill">
+                        <span class="status-dot" id="uptimeDot"></span>
+                        <div>
+                            <div class="pill-label">Uptime</div>
+                            <strong id="uptimeLabel">--</strong>
+                        </div>
+                    </div>
+                </div>
                 <div class="top-bar-actions">
                     <button class="btn btn-secondary" onclick="loadClients()">🔄 Refresh</button>
                     <button class="btn btn-primary" onclick="openClientDetailsModal()">➕ Add Client</button>

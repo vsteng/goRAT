@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+
 * {
     margin: 0;
     padding: 0;
@@ -5,24 +7,38 @@
 }
 
 :root {
-    --primary: #667eea;
-    --primary-dark: #5568d3;
-    --primary-light: #7b93f1;
-    --secondary: #764ba2;
-    --success: #28a745;
-    --danger: #e74c3c;
-    --warning: #ffc107;
-    --info: #17a2b8;
-    --light: #f8f9fa;
-    --dark: #2c3e50;
-    --border: #e1e1e1;
-    --text: #333;
-    --text-light: #888;
+    /* Core palette */
+    --primary: #0f172a;
+    --primary-dark: #0b1220;
+    --primary-light: #1f2937;
+    --secondary: #14b8a6;
+    --success: #22c55e;
+    --danger: #ef4444;
+    --warning: #f59e0b;
+    --info: #0ea5e9;
+    --light: #f8fafc;
+    --dark: #0b1220;
+    --border: #e2e8f0;
+    --text: #111827;
+    --text-light: #6b7280;
+
+    /* Tokens */
+    --surface: #ffffff;
+    --card: #0f172a;
+    --shadow: 0 10px 30px rgba(15, 23, 42, 0.18);
+    --radius: 12px;
+    --radius-sm: 8px;
+    --spacing: 16px;
+    --spacing-lg: 24px;
+    --font-heading: 'Space Grotesk', 'IBM Plex Sans', system-ui, sans-serif;
+    --font-body: 'IBM Plex Sans', system-ui, sans-serif;
 }
 
 body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-    background: #f5f7fa;
+    font-family: var(--font-body);
+    background: radial-gradient(circle at 20% 20%, rgba(14, 165, 233, 0.06), transparent 35%),
+                radial-gradient(circle at 80% 0%, rgba(20, 184, 166, 0.08), transparent 30%),
+                #eef2f7;
     color: var(--text);
     line-height: 1.6;
 }
@@ -153,23 +169,71 @@ body {
 
 /* ========== TOP BAR ========== */
 .top-bar {
-    background: white;
+    background: var(--surface);
     padding: 20px 30px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
     display: flex;
     justify-content: space-between;
     align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
 }
 
 .top-bar h2 {
     font-size: 24px;
     color: var(--text);
+    font-family: var(--font-heading);
 }
 
 .top-bar-actions {
     display: flex;
     gap: 10px;
 }
+
+.status-cluster {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: var(--primary-light);
+    color: #e5e7eb;
+    border-radius: var(--radius-sm);
+    box-shadow: 0 6px 16px rgba(15, 23, 42, 0.2);
+    font-size: 12px;
+    letter-spacing: 0.01em;
+}
+
+.status-pill strong {
+    color: #ffffff;
+    font-weight: 600;
+    font-family: var(--font-heading);
+}
+
+.pill-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #cbd5e1;
+}
+
+.status-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--info);
+    box-shadow: 0 0 0 6px rgba(14, 165, 233, 0.18);
+}
+
+.status-dot.healthy { background: var(--success); box-shadow: 0 0 0 6px rgba(34, 197, 94, 0.18); }
+.status-dot.degraded { background: var(--warning); box-shadow: 0 0 0 6px rgba(245, 158, 11, 0.18); }
+.status-dot.down { background: var(--danger); box-shadow: 0 0 0 6px rgba(239, 68, 68, 0.18); }
 
 .btn {
     padding: 10px 20px;
