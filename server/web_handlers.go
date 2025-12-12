@@ -371,13 +371,33 @@ func (wh *WebHandler) HandleClientsAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get clients from manager
-	allClients := wh.clientMgr.GetAllClients()
-	metadata := make([]*protocol.ClientMetadata, 0, len(allClients))
-	for _, client := range allClients {
-		if meta := client.Metadata(); meta != nil {
-			metadata = append(metadata, meta)
+	// Merge persisted clients (including offline) with live clients (online)
+	clientsMap := make(map[string]*protocol.ClientMetadata)
+
+	// Persisted clients from storage capture offline records
+	if wh.store != nil {
+		if persisted, err := wh.store.GetAllClients(); err == nil {
+			for _, c := range persisted {
+				copy := *c
+				clientsMap[c.ID] = &copy
+			}
+		} else {
+			log.Printf("Error loading persisted clients: %v", err)
 		}
+	}
+
+	// Live clients override with freshest status/fields
+	for _, client := range wh.clientMgr.GetAllClients() {
+		if meta := client.Metadata(); meta != nil {
+			copy := *meta
+			clientsMap[meta.ID] = &copy
+		}
+	}
+
+	// Flatten to slice
+	metadata := make([]*protocol.ClientMetadata, 0, len(clientsMap))
+	for _, m := range clientsMap {
+		metadata = append(metadata, m)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -472,23 +492,36 @@ func (wh *WebHandler) HandleClientSearchAPI(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// Case-insensitive contains
+	// Case-insensitive contains across persisted + live clients
 	qLower := strings.ToLower(q)
-	all := wh.clientMgr.GetAllClients()
+	candidates := make(map[string]*protocol.ClientMetadata)
+
+	if wh.store != nil {
+		if persisted, err := wh.store.GetAllClients(); err == nil {
+			for _, c := range persisted {
+				copy := *c
+				candidates[c.ID] = &copy
+			}
+		}
+	}
+	for _, c := range wh.clientMgr.GetAllClients() {
+		if meta := c.Metadata(); meta != nil {
+			copy := *meta
+			candidates[meta.ID] = &copy
+		}
+	}
+
 	res := make([]*protocol.ClientMetadata, 0)
-	for _, c := range all {
-		meta := c.Metadata()
+	for _, meta := range candidates {
 		if meta == nil {
 			continue
 		}
-		// Check fields for match
 		if strings.Contains(strings.ToLower(meta.ID), qLower) ||
 			strings.Contains(strings.ToLower(meta.Hostname), qLower) ||
 			strings.Contains(strings.ToLower(meta.Alias), qLower) ||
 			strings.Contains(strings.ToLower(meta.OS), qLower) ||
 			strings.Contains(strings.ToLower(meta.IP), qLower) ||
 			strings.Contains(strings.ToLower(meta.PublicIP), qLower) {
-			// Return minimal metadata to reduce payload
 			res = append(res, &protocol.ClientMetadata{
 				ID:       meta.ID,
 				Hostname: meta.Hostname,
