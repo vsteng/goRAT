@@ -665,15 +665,20 @@
         <!-- TERMINAL TAB -->
         <div class="tab-content" id="terminal">
             <div class="terminal">
+                <div class="terminal-controls" style="background: var(--terminal-bg); padding: 10px; border-bottom: 1px solid #3e3e42; display: flex; gap: 10px;">
+                    <button onclick="clearTerminal()" style="background: #0e639c; color: white; border: none; padding: 5px 12px; border-radius: 3px; cursor: pointer; font-size: 12px;">Clear</button>
+                    <button onclick="connectTerminal()" style="background: #28a745; color: white; border: none; padding: 5px 12px; border-radius: 3px; cursor: pointer; font-size: 12px;">Connect</button>
+                    <button onclick="disconnectTerminal()" style="background: #dc3545; color: white; border: none; padding: 5px 12px; border-radius: 3px; cursor: pointer; font-size: 12px;">Disconnect</button>
+                    <span id="terminalStatus" style="color: #888; font-size: 12px; align-self: center; margin-left: auto;">Not connected</span>
+                </div>
                 <div class="terminal-output" id="terminalOutput">
                     <div class="terminal-line">Welcome to Client Terminal</div>
-                    <div class="terminal-line">Type 'help' for available commands</div>
+                    <div class="terminal-line">Click 'Connect' to start terminal session</div>
                     <div class="terminal-line"></div>
                 </div>
                 <div class="terminal-input-area">
                     <span class="prompt">$</span>
-                    <input type="text" class="terminal-input" id="terminalInput" placeholder="Enter command..." 
-                           onkeypress="if(event.key==='Enter') executeTerminalCommand()">
+                    <input type="text" class="terminal-input" id="terminalInput" placeholder="Enter command...">
                 </div>
             </div>
         </div>
@@ -818,6 +823,16 @@
                 browseFolder();
             } else if (tabName === 'info') {
                 loadSystemInfo();
+            } else if (tabName === 'terminal') {
+                // Auto-connect to terminal when tab is activated
+                if (!terminalConnected) {
+                    setTimeout(connectTerminal, 100);
+                }
+                // Focus the terminal input
+                setTimeout(() => {
+                    const terminalInput = document.getElementById('terminalInput');
+                    if (terminalInput) terminalInput.focus();
+                }, 200);
             }
         }
 
@@ -1089,43 +1104,125 @@
         }
 
         // Terminal functions
-        async function executeTerminalCommand() {
+        let terminalWs = null;
+        let terminalConnected = false;
+        let commandHistory = [];
+        let historyIndex = -1;
+
+        function connectTerminal() {
+            if (terminalWs && terminalWs.readyState === WebSocket.OPEN) {
+                return; // Already connected
+            }
+
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/api/terminal?client=${encodeURIComponent(clientId)}`;
+            
+            updateTerminalStatus('Connecting...', '#ffc107');
+            terminalWs = new WebSocket(wsUrl);
+            
+            terminalWs.onopen = () => {
+                terminalConnected = true;
+                updateTerminalStatus('Connected', '#28a745');
+                addTerminalOutput('Connected to terminal session', 'success');
+            };
+            
+            terminalWs.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                
+                if (data.type === 'output') {
+                    addTerminalOutput(data.data);
+                } else if (data.type === 'error') {
+                    addTerminalOutput(data.data, 'error');
+                } else if (data.type === 'exit') {
+                    addTerminalOutput(`Process exited with code ${data.code}`, 'info');
+                }
+            };
+            
+            terminalWs.onerror = (error) => {
+                addTerminalOutput('WebSocket error occurred', 'error');
+                console.error('WebSocket error:', error);
+                terminalConnected = false;
+                updateTerminalStatus('Error', '#dc3545');
+            };
+            
+            terminalWs.onclose = () => {
+                terminalConnected = false;
+                updateTerminalStatus('Disconnected', '#dc3545');
+                addTerminalOutput('Disconnected from terminal session', 'error');
+                setTimeout(() => {
+                    if (document.getElementById('terminal').style.display !== 'none') {
+                        addTerminalOutput('Attempting to reconnect...', 'info');
+                        connectTerminal();
+                    }
+                }, 3000);
+            };
+        }
+
+        function updateTerminalStatus(text, color) {
+            const statusEl = document.getElementById('terminalStatus');
+            if (statusEl) {
+                statusEl.textContent = text;
+                statusEl.style.color = color;
+            }
+        }
+
+        function addTerminalOutput(text, className = '') {
+            const output = document.getElementById('terminalOutput');
+            const line = document.createElement('div');
+            line.className = `terminal-line ${className}`;
+            
+            if (className === 'success') {
+                line.style.color = '#4ade80';
+            } else if (className === 'error') {
+                line.style.color = '#f87171';
+            } else if (className === 'info') {
+                line.style.color = '#75beff';
+            }
+            
+            line.textContent = text;
+            output.appendChild(line);
+            output.scrollTop = output.scrollHeight;
+        }
+
+        function executeTerminalCommand() {
             const input = document.getElementById('terminalInput');
             const command = input.value.trim();
             
             if (!command) return;
 
-            const output = document.getElementById('terminalOutput');
-            output.innerHTML += `<div class="terminal-line" style="color: #0a0;">$ ${escapeHtml(command)}</div>`;
-            
-            try {
-                const response = await fetch(`/api/command`, {
-                    method: 'POST',
-                    credentials: 'include',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        client_id: clientId,
-                        command: {
-                            command: command,
-                            timeout: 30
-                        }
-                    })
-                });
-                
-                if (response.ok) {
-                    const result = await response.json();
-                    const resultText = result.output || result.result || 'Command executed';
-                    output.innerHTML += `<div class="terminal-line">${escapeHtml(resultText)}</div>`;
-                } else {
-                    const err = await response.json().catch(() => ({}));
-                    output.innerHTML += `<div class="terminal-line" style="color: #f00;">Error: ${escapeHtml(err.error || 'Command failed')}</div>`;
-                }
-            } catch (err) {
-                output.innerHTML += `<div class="terminal-line" style="color: #f00;">Error: ${escapeHtml(err.message)}</div>`;
+            if (!terminalWs || terminalWs.readyState !== WebSocket.OPEN) {
+                addTerminalOutput('Not connected to server', 'error');
+                return;
             }
             
-            output.scrollTop = output.scrollHeight;
+            addTerminalOutput(`$ ${command}`, 'info');
+            terminalWs.send(JSON.stringify({
+                type: 'input',
+                data: command + '\n'
+            }));
+            
+            commandHistory.unshift(command);
+            if (commandHistory.length > 100) {
+                commandHistory.pop();
+            }
+            historyIndex = -1;
             input.value = '';
+        }
+
+        function clearTerminal() {
+            const output = document.getElementById('terminalOutput');
+            output.innerHTML = '';
+            addTerminalOutput('Terminal cleared', 'info');
+        }
+
+        function disconnectTerminal() {
+            if (terminalWs) {
+                terminalWs.close();
+                terminalWs = null;
+                terminalConnected = false;
+                updateTerminalStatus('Disconnected', '#dc3545');
+                addTerminalOutput('Terminal disconnected by user', 'info');
+            }
         }
 
         // Process management
@@ -1337,6 +1434,31 @@
                     updateClientDisplay();
                 }
             }, 5000);
+
+            // Set up terminal keyboard navigation
+            const terminalInput = document.getElementById('terminalInput');
+            if (terminalInput) {
+                terminalInput.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') {
+                        executeTerminalCommand();
+                    } else if (e.key === 'ArrowUp') {
+                        e.preventDefault();
+                        if (historyIndex < commandHistory.length - 1) {
+                            historyIndex++;
+                            terminalInput.value = commandHistory[historyIndex];
+                        }
+                    } else if (e.key === 'ArrowDown') {
+                        e.preventDefault();
+                        if (historyIndex > 0) {
+                            historyIndex--;
+                            terminalInput.value = commandHistory[historyIndex];
+                        } else {
+                            historyIndex = -1;
+                            terminalInput.value = '';
+                        }
+                    }
+                });
+            }
         });
     </script>
 </body>
