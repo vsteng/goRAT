@@ -71,16 +71,16 @@ In client_manager.go Run() method:
 	}
 */
 
-// ClientStore logging example
+// Storage logging example
 /*
-In client_store.go SaveClient() method:
+In pkg/storage/sqlite.go SaveClient() method:
 	log := logger.Get()
-	log.InfoWith("saving_client", "client_id", client.ID, "hostname", client.Metadata.Hostname)
-	if err := s.db.Exec(...); err != nil {
-		log.ErrorWithErr("failed_to_save_client", err, "client_id", client.ID)
+	log.InfoWith("saving_client", "client_id", metadata.ID, "hostname", metadata.Hostname)
+	if _, err := s.db.Exec(...); err != nil {
+		log.ErrorWithErr("failed_to_save_client", err, "client_id", metadata.ID)
 		return err
 	}
-	log.DebugWith("client_saved", "client_id", client.ID)
+	log.DebugWith("client_saved", "client_id", metadata.ID)
 */
 
 // WebSocket handler logging example

@@ -7,7 +7,7 @@
 server/
   handlers.go          (1068 lines - mixed concerns)
   client_manager.go    (290 lines)
-  client_store.go      (787 lines)
+  client_store.go      (removed; storage moved to pkg/storage)
   web_handlers.go      (business logic mixed with HTTP)
   proxy_handler.go     (tunneling logic)
   terminal_proxy.go    (terminal sessions)
@@ -183,7 +183,7 @@ func TestAPIHandler(t *testing.T) {
 
 ### Storage Package Migration
 ```
-OLD: server/client_store.go (787 lines)
+OLD: server/client_store.go (787 lines) — removed, replaced by pkg/storage/sqlite.go
 NEW: pkg/storage/store.go (logic only)
 NEW: pkg/storage/models.go (data structures)
 NEW: pkg/storage/migrations.go (schema)
@@ -361,7 +361,7 @@ func NewServices(cfg *config.ServerConfig) (*Services, error) {
 - [ ] Create `pkg/storage/store.go` with interface
 - [ ] Create `pkg/storage/models.go`
 - [ ] Create `pkg/storage/migrations.go`
-- [ ] Move logic from `server/client_store.go`
+- [x] Move logic from `server/client_store.go`
 - [ ] Add tests
 
 ### Phase 3: Auth Package

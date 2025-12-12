@@ -12,7 +12,7 @@ This document outlines a phased approach to reorganizing the goRAT codebase from
 
 **File Size Problems:**
 - `handlers.go` - 1,068 lines (mixed concerns)
-- `client_store.go` - 787 lines (storage only)
+- `client_store.go` (removed) - storage logic now lives in `pkg/storage`
 - `proxy_handler.go` - 1,000+ lines (tunneling)
 - `web_handlers.go` - 800+ lines (REST + business logic)
 
@@ -114,7 +114,7 @@ Shared infrastructure.
 **Estimated effort:** 2-4 hours
 
 ### Phase 2: Storage Extraction (NEXT)
-Migrate `server/client_store.go` to `pkg/storage/`
+Migrate (done): `server/client_store.go` -> `pkg/storage/`
 
 **Tasks:**
 1. Create storage interface

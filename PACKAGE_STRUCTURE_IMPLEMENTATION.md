@@ -81,7 +81,7 @@ type Store interface {
 ```
 
 ### Step 2: Implement SQLite Backend
-Create `pkg/storage/sqlite.go` by copying and adapting logic from `server/client_store.go`:
+Create `pkg/storage/sqlite.go` by adapting the legacy `server/client_store.go` logic (the legacy file has now been removed):
 
 ```go
 package storage
@@ -111,11 +111,11 @@ func NewSQLiteStore(dbPath string) (*SQLiteStore, error) {
 }
 
 func (s *SQLiteStore) initDB() error {
-    // Copy schema from server/client_store.go
+    // Copy schema previously in server/client_store.go
 }
 
 func (s *SQLiteStore) SaveClient(client *common.ClientMetadata) error {
-    // Copy implementation from server/client_store.go
+    // Copy implementation previously in server/client_store.go
 }
 
 // ... implement all interface methods ...

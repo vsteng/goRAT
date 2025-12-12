@@ -3,12 +3,16 @@ package server
 import (
 	"log"
 
+	"gorat/pkg/auth"
+	"gorat/pkg/clients"
+	"gorat/pkg/storage"
+
 	ggin "github.com/gin-gonic/gin"
 )
 
 // SetupGinRouter initializes the Gin router with your existing handlers
 // This maintains all your WebSocket and API functionality while adding a modern framework
-func SetupGinRouter(config *Config, manager *ClientManager, store *ClientStore, sessionMgr *SessionManager, terminalProxy *TerminalProxy) (*ggin.Engine, error) {
+func SetupGinRouter(config *Config, manager clients.Manager, store storage.Store, sessionMgr auth.SessionManager, terminalProxy *TerminalProxy) (*ggin.Engine, error) {
 	// Create Gin engine
 	router := ggin.Default()
 

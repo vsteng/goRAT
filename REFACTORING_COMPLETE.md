@@ -115,7 +115,7 @@ Config → Services (DI Container) → Server
 #### 1. Archive Old Files
 Old refactored files (kept in git history):
 - `server/client_manager.go` → Replaced by `pkg/clients/manager.go`
-- `server/client_store.go` → Replaced by `pkg/storage/sqlite.go`
+- `server/client_store.go` → Replaced by `pkg/storage/sqlite.go` (legacy file removed)
 - `server/web_handlers.go` → Replaced by `pkg/api/handlers.go`
 
 #### 2. Documentation Updates
@@ -152,7 +152,7 @@ server/
 ├── main.go
 ├── handlers.go (large, mixed concerns)
 ├── client_manager.go (business logic)
-├── client_store.go (data access)
+├── client_store.go (removed; data access now in pkg/storage)
 ├── web_handlers.go (HTTP handlers)
 └── ... (25+ files)
 ```
