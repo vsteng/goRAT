@@ -1,8 +1,6 @@
 package api
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"html/template"
 	"log"
@@ -55,13 +53,15 @@ func NewHandler(sessionMgr auth.SessionManager, clientMgr clients.Manager, store
 		if err != nil {
 			log.Printf("WARNING: Failed to check if admin user exists: %v", err)
 		} else if !adminExists {
-			// Create default admin user with hashed password
-			hash := sha256.Sum256([]byte(password))
-			passwordHash := hex.EncodeToString(hash[:])
-			if err := store.CreateWebUser(username, passwordHash, "Administrator", "admin"); err != nil {
+			// Create default admin user with bcrypt hashed password
+			passwordHasher := auth.NewPasswordHasher()
+			passwordHash, err := passwordHasher.Hash(password)
+			if err != nil {
+				log.Printf("ERROR: Failed to hash admin password: %v", err)
+			} else if err := store.CreateWebUser(username, passwordHash, "Administrator", "admin"); err != nil {
 				log.Printf("WARNING: Failed to create default web user: %v", err)
 			} else {
-				log.Printf("✅ Created default web user: %s (role: admin)", username)
+				log.Printf("✅ Created default web user: %s (role: admin) with bcrypt hash", username)
 			}
 		}
 	}

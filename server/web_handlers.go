@@ -1,8 +1,6 @@
 package server
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"html/template"
@@ -69,12 +67,28 @@ func NewWebHandler(sessionMgr auth.SessionManager, clientMgr clients.Manager, st
 
 	// Check if user initialization already happened (for debugging)
 	if store != nil && config.Username != "" {
+		log.Printf("🔐 Initializing admin user - store: %v, config.Username: %s", store != nil, config.Username)
 		adminExists, err := store.AdminExists()
 		if err != nil {
 			log.Printf("WARNING: Failed to check if admin user exists: %v", err)
 		} else {
 			log.Printf("DEBUG: Admin exists check in web handler: %v", adminExists)
+
+			// Create admin user if it doesn't exist
+			if !adminExists {
+				log.Printf("🔐 Creating default admin user with username: %s", config.Username)
+				passwordHash, err := handler.passwordHasher.Hash(config.Password)
+				if err != nil {
+					log.Printf("ERROR: Failed to hash admin password: %v", err)
+				} else if err := store.CreateWebUser(config.Username, passwordHash, "Administrator", "admin"); err != nil {
+					log.Printf("ERROR: Failed to create admin user: %v", err)
+				} else {
+					log.Printf("✅ Admin user created successfully with bcrypt hash")
+				}
+			}
 		}
+	} else {
+		log.Printf("DEBUG: Skipping admin user initialization - store: %v, config.Username: %s", store != nil, config.Username)
 	}
 
 	return handler, nil
@@ -210,7 +224,17 @@ func (wh *WebHandler) HandleLoginAPI(w http.ResponseWriter, r *http.Request) {
 		_ = wh.store.UpdateWebUserLastLogin(credentials.Username)
 	} else {
 		// Fallback to config credentials if store is not available
-		if credentials.Username != wh.config.Username || credentials.Password != wh.config.Password {
+		// Hash provided password to compare with config password
+		if credentials.Username != wh.config.Username {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnauthorized)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Invalid username or password"})
+			log.Printf("⚠️ LOGIN FAILED: Invalid config credentials - Username: %s, IP: %s", credentials.Username, clientIP)
+			return
+		}
+
+		// For config credentials, do simple string comparison
+		if credentials.Password != wh.config.Password {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusUnauthorized)
 			json.NewEncoder(w).Encode(map[string]string{"error": "Invalid username or password"})
@@ -1008,9 +1032,15 @@ func (wh *WebHandler) HandleUsersAPI(w http.ResponseWriter, r *http.Request) {
 			req.Role = "admin"
 		}
 
-		// Hash password before storing
-		hash := sha256.Sum256([]byte(req.Password))
-		passwordHash := hex.EncodeToString(hash[:])
+		// Hash password with bcrypt before storing
+		passwordHash, err := wh.passwordHasher.Hash(req.Password)
+		if err != nil {
+			log.Printf("Error hashing password: %v", err)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Failed to create user"})
+			return
+		}
 
 		// Create user
 		if err := wh.store.CreateWebUser(req.Username, passwordHash, req.FullName, req.Role); err != nil {
@@ -1097,10 +1127,16 @@ func (wh *WebHandler) HandleUserAPI(w http.ResponseWriter, r *http.Request) {
 				json.NewEncoder(w).Encode(map[string]string{"error": "Password must be at least 6 characters"})
 				return
 			}
-			// Hash the new password
-			hash := sha256.Sum256([]byte(req.Password))
-			hashStr := hex.EncodeToString(hash[:])
-			passwordHash = &hashStr
+			// Hash the new password with bcrypt
+			hash, err := wh.passwordHasher.Hash(req.Password)
+			if err != nil {
+				log.Printf("Error hashing password: %v", err)
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusInternalServerError)
+				json.NewEncoder(w).Encode(map[string]string{"error": "Failed to update user"})
+				return
+			}
+			passwordHash = &hash
 		}
 
 		// Handle full name update
