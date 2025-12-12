@@ -1350,8 +1350,12 @@
 
         // Actions
         async function executeAction(action) {
+            if (action === 'screenshot') {
+                await handleScreenshot();
+                return;
+            }
+
             const actions = {
-                'screenshot': { endpoint: '/api/screenshot', message: 'Taking screenshot...' },
                 'refresh': { endpoint: '/api/refresh', message: 'Refreshing client...' },
             };
 
@@ -1389,6 +1393,121 @@
             } catch (err) {
                 showStatus('Error', err.message);
             }
+        }
+
+        // Handle screenshot action
+        async function handleScreenshot() {
+            try {
+                showStatus('Screenshot', 'Taking screenshot...');
+                
+                const response = await fetch(`/api/screenshot?client_id=${encodeURIComponent(clientId)}`, {
+                    method: 'GET',
+                    credentials: 'include'
+                });
+
+                if (!response.ok) {
+                    showStatus('Error', `Screenshot failed: ${response.statusText}`);
+                    return;
+                }
+
+                const data = await response.json();
+                
+                if (data.error) {
+                    showStatus('Error', `Screenshot error: ${data.error}`);
+                    return;
+                }
+
+                // Display screenshot
+                if (data.data && data.width && data.height) {
+                    showScreenshotModal(data);
+                    showStatus('Success', 'Screenshot taken');
+                } else {
+                    showStatus('Error', 'Invalid screenshot data received');
+                }
+            } catch (err) {
+                showStatus('Error', `Screenshot failed: ${err.message}`);
+            }
+        }
+
+        // Show screenshot in modal
+        function showScreenshotModal(screenshotData) {
+            const modal = document.createElement('div');
+            modal.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: rgba(0,0,0,0.9);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 10000;
+                cursor: pointer;
+            `;
+
+            const content = document.createElement('div');
+            content.style.cssText = `
+                background: white;
+                border-radius: 8px;
+                padding: 20px;
+                max-width: 90vw;
+                max-height: 90vh;
+                overflow: auto;
+                box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            `;
+
+            const closeBtn = document.createElement('button');
+            closeBtn.textContent = '✕ Close';
+            closeBtn.style.cssText = `
+                position: absolute;
+                top: 10px;
+                right: 10px;
+                background: #dc3545;
+                color: white;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 4px;
+                cursor: pointer;
+                font-weight: 600;
+            `;
+            closeBtn.onclick = () => modal.remove();
+
+            const title = document.createElement('h3');
+            title.textContent = `Screenshot (${screenshotData.width}x${screenshotData.height})`;
+            title.style.marginBottom = '15px';
+
+            const imgContainer = document.createElement('div');
+            imgContainer.style.textAlign = 'center';
+
+            const img = document.createElement('img');
+            
+            // Convert base64 to image data
+            if (typeof screenshotData.data === 'string') {
+                img.src = `data:image/${screenshotData.format || 'png'};base64,${screenshotData.data}`;
+            } else if (Array.isArray(screenshotData.data)) {
+                // Convert byte array to base64
+                const binary = String.fromCharCode.apply(null, screenshotData.data);
+                const base64 = btoa(binary);
+                img.src = `data:image/${screenshotData.format || 'png'};base64,${base64}`;
+            }
+            
+            img.style.cssText = `
+                max-width: 100%;
+                max-height: 70vh;
+                border-radius: 4px;
+            `;
+
+            imgContainer.appendChild(img);
+            content.appendChild(title);
+            content.appendChild(imgContainer);
+            content.appendChild(closeBtn);
+            modal.appendChild(content);
+            modal.onclick = (e) => {
+                if (e.target === modal) modal.remove();
+            };
+
+            document.body.appendChild(modal);
         }
 
         // Utility functions
