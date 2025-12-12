@@ -1327,7 +1327,179 @@ function formatBytes(bytes) {
     return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
 }
 
+// Setup event listeners for all interactive elements (replaces inline onclick/oninput handlers)
+function setupEventListeners() {
+    // Logout button
+    const logoutBtn = document.querySelector('.logout-btn');
+    if (logoutBtn) logoutBtn.addEventListener('click', logout);
+
+    // Refresh buttons
+    const topBarRefresh = document.querySelector('.top-bar-actions button[onclick*="loadClients"]');
+    if (topBarRefresh) {
+        const newBtn = topBarRefresh.cloneNode(true);
+        newBtn.onclick = null;
+        newBtn.addEventListener('click', loadClients);
+        topBarRefresh.parentNode.replaceChild(newBtn, topBarRefresh);
+    }
+
+    // Add client button
+    const addClientBtn = document.querySelector('.top-bar-actions button[onclick*="openClientDetailsModal"]');
+    if (addClientBtn) {
+        const newBtn = addClientBtn.cloneNode(true);
+        newBtn.onclick = null;
+        newBtn.addEventListener('click', openClientDetailsModal);
+        addClientBtn.parentNode.replaceChild(newBtn, addClientBtn);
+    }
+
+    // Stat cards that are clickable
+    const statCards = document.querySelectorAll('.stat-card[onclick*="showSection"]');
+    statCards.forEach(card => {
+        const newCard = card.cloneNode(true);
+        newCard.onclick = null;
+        newCard.style.cursor = 'pointer';
+        newCard.addEventListener('click', () => showSection('clients'));
+        card.parentNode.replaceChild(newCard, card);
+    });
+
+    // Client search input
+    const clientSearch = document.getElementById('clientSearchInput');
+    if (clientSearch) {
+        clientSearch.oninput = null;
+        clientSearch.addEventListener('input', (e) => updateSearch(e.target.value));
+    }
+
+    // Filter tabs for clients
+    const filterTabs = document.querySelectorAll('.filter-tab');
+    filterTabs.forEach(tab => {
+        const newTab = tab.cloneNode(true);
+        newTab.onclick = null;
+        const filter = newTab.textContent.toLowerCase().trim();
+        const filterValue = filter === 'all' ? 'all' : (filter === 'online' ? 'online' : 'offline');
+        newTab.addEventListener('click', () => filterClients(filterValue));
+        tab.parentNode.replaceChild(newTab, tab);
+    });
+
+    // User management buttons
+    const addUserBtn = document.querySelector('button[onclick*="showAddUserForm"]');
+    if (addUserBtn) {
+        const newBtn = addUserBtn.cloneNode(true);
+        newBtn.onclick = null;
+        newBtn.addEventListener('click', showAddUserForm);
+        addUserBtn.parentNode.replaceChild(newBtn, addUserBtn);
+    }
+
+    const createUserBtn = document.querySelector('button[onclick="createUser()"]');
+    if (createUserBtn) {
+        const newBtn = createUserBtn.cloneNode(true);
+        newBtn.onclick = null;
+        newBtn.addEventListener('click', createUser);
+        createUserBtn.parentNode.replaceChild(newBtn, createUserBtn);
+    }
+
+    const cancelAddUserBtn = document.querySelector('button[onclick="hideAddUserForm()"]');
+    if (cancelAddUserBtn) {
+        const newBtn = cancelAddUserBtn.cloneNode(true);
+        newBtn.onclick = null;
+        newBtn.addEventListener('click', hideAddUserForm);
+        cancelAddUserBtn.parentNode.replaceChild(newBtn, cancelAddUserBtn);
+    }
+
+    const saveUserEditBtn = document.querySelector('button[onclick="saveUserEdit()"]');
+    if (saveUserEditBtn) {
+        const newBtn = saveUserEditBtn.cloneNode(true);
+        newBtn.onclick = null;
+        newBtn.addEventListener('click', saveUserEdit);
+        saveUserEditBtn.parentNode.replaceChild(newBtn, saveUserEditBtn);
+    }
+
+    const cancelEditUserBtn = document.querySelectorAll('button[onclick="hideEditUserForm()"]');
+    cancelEditUserBtn.forEach(btn => {
+        if (btn.textContent.includes('Cancel')) {
+            const newBtn = btn.cloneNode(true);
+            newBtn.onclick = null;
+            newBtn.addEventListener('click', hideEditUserForm);
+            btn.parentNode.replaceChild(newBtn, btn);
+        }
+    });
+
+    // Proxy refresh button
+    const proxyRefreshBtn = document.querySelector('.clients-middle button[onclick*="loadAllProxies"]');
+    if (proxyRefreshBtn) {
+        const newBtn = proxyRefreshBtn.cloneNode(true);
+        newBtn.onclick = null;
+        newBtn.addEventListener('click', loadAllProxies);
+        proxyRefreshBtn.parentNode.replaceChild(newBtn, proxyRefreshBtn);
+    }
+
+    // Settings buttons
+    const saveSettingsBtn = document.querySelector('button[onclick="saveUpdatePaths()"]');
+    if (saveSettingsBtn) {
+        const newBtn = saveSettingsBtn.cloneNode(true);
+        newBtn.onclick = null;
+        newBtn.addEventListener('click', saveUpdatePaths);
+        saveSettingsBtn.parentNode.replaceChild(newBtn, saveSettingsBtn);
+    }
+
+    const pushUpdateBtn = document.querySelector('button[onclick="pushClientsUpdate()"]');
+    if (pushUpdateBtn) {
+        const newBtn = pushUpdateBtn.cloneNode(true);
+        newBtn.onclick = null;
+        newBtn.addEventListener('click', pushClientsUpdate);
+        pushUpdateBtn.parentNode.replaceChild(newBtn, pushUpdateBtn);
+    }
+
+    const clearUpdateBtn = document.querySelector('button[onclick="clearUpdateForm()"]');
+    if (clearUpdateBtn) {
+        const newBtn = clearUpdateBtn.cloneNode(true);
+        newBtn.onclick = null;
+        newBtn.addEventListener('click', clearUpdateForm);
+        clearUpdateBtn.parentNode.replaceChild(newBtn, clearUpdateBtn);
+    }
+
+    // Modal buttons
+    const closeModalBtns = document.querySelectorAll('button[onclick="closeModal()"]');
+    closeModalBtns.forEach(btn => {
+        const newBtn = btn.cloneNode(true);
+        newBtn.onclick = null;
+        newBtn.addEventListener('click', closeModal);
+        btn.parentNode.replaceChild(newBtn, btn);
+    });
+
+    const confirmActionBtn = document.querySelector('button[onclick="confirmAction()"]');
+    if (confirmActionBtn) {
+        const newBtn = confirmActionBtn.cloneNode(true);
+        newBtn.onclick = null;
+        newBtn.addEventListener('click', confirmAction);
+        confirmActionBtn.parentNode.replaceChild(newBtn, confirmActionBtn);
+    }
+
+    // Sidebar navigation links
+    const sidebarLinks = document.querySelectorAll('.sidebar-menu a');
+    sidebarLinks.forEach(link => {
+        const newLink = link.cloneNode(true);
+        newLink.onclick = null;
+        const href = newLink.getAttribute('href');
+        if (href === '#') {
+            newLink.addEventListener('click', (e) => {
+                e.preventDefault();
+                const onclick = link.getAttribute('onclick');
+                if (onclick && onclick.includes('showSection')) {
+                    const match = onclick.match(/'([^']+)'/);
+                    if (match) showSection(match[1]);
+                }
+            });
+        }
+        link.parentNode.replaceChild(newLink, link);
+    });
+}
+
 // Initialize
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', setupEventListeners);
+} else {
+    setupEventListeners();
+}
+
 loadClients();
 setInterval(loadClients, 10000);
 refreshHealth();

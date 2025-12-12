@@ -1197,9 +1197,8 @@ func (wh *WebHandler) RegisterGinRoutes(router *gin.Engine) {
 		c.Header("X-XSS-Protection", "1; mode=block")
 
 		// Content Security Policy
-		// Temporarily allow inline scripts to unblock dashboard interactions
-		// Long-term: refactor inline handlers to external JS and remove 'unsafe-inline'
-		c.Header("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'")
+		// Strict CSP: inline handlers moved to external JS via addEventListener
+		c.Header("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'")
 
 		// HSTS (HTTP Strict Transport Security)
 		if c.Request.TLS != nil {

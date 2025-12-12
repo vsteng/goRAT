@@ -17,11 +17,11 @@
             </div>
 
             <ul class="sidebar-menu">
-                <li><a href="#" class="active" onclick="showSection('dashboard')"><span>📊</span> <span>Dashboard</span></a></li>
-                <li><a href="#" onclick="showSection('clients')"><span>👥</span> <span>Clients</span></a></li>
-                <li><a href="#" onclick="showSection('proxy')"><span>🌐</span> <span>Proxy</span></a></li>
-                <li><a href="#" onclick="showSection('users')"><span>👤</span> <span>Users</span></a></li>
-                <li><a href="#" onclick="showSection('settings')"><span>⚙️</span> <span>Settings</span></a></li>
+                <li><a href="#" class="active" data-section="dashboard"><span>📊</span> <span>Dashboard</span></a></li>
+                <li><a href="#" data-section="clients"><span>👥</span> <span>Clients</span></a></li>
+                <li><a href="#" data-section="proxy"><span>🌐</span> <span>Proxy</span></a></li>
+                <li><a href="#" data-section="users"><span>👤</span> <span>Users</span></a></li>
+                <li><a href="#" data-section="settings"><span>⚙️</span> <span>Settings</span></a></li>
             </ul>
 
             <div class="sidebar-footer">
@@ -32,7 +32,7 @@
                         <p>Connected</p>
                     </div>
                 </div>
-                <button class="logout-btn" onclick="logout()">Logout</button>
+                <button class="logout-btn">Logout</button>
             </div>
         </aside>
 
@@ -67,8 +67,8 @@
                     </div>
                 </div>
                 <div class="top-bar-actions">
-                    <button class="btn btn-secondary" onclick="loadClients()">🔄 Refresh</button>
-                    <button class="btn btn-primary" onclick="openClientDetailsModal()">➕ Add Client</button>
+                    <button class="btn btn-secondary">🔄 Refresh</button>
+                    <button class="btn btn-primary">➕ Add Client</button>
                 </div>
             </div>
 
@@ -77,12 +77,12 @@
                 <!-- DASHBOARD TAB -->
                 <div class="content-section active" id="dashboardSection">
                     <div class="stats-grid">
-                        <div class="stat-card" onclick="showSection('clients')">
+                        <div class="stat-card">
                             <div class="stat-icon">👥</div>
                             <div class="stat-label">Total Clients</div>
                             <div class="stat-value" id="totalClients">0</div>
                         </div>
-                        <div class="stat-card success" onclick="showSection('clients')">
+                        <div class="stat-card success">
                             <div class="stat-icon">✅</div>
                             <div class="stat-label">Online Now</div>
                             <div class="stat-value" id="onlineClients">0</div>
@@ -135,13 +135,12 @@
                             <h3>👥 Clients</h3>
                             <div style="margin-bottom: 12px;">
                                 <input type="text" id="clientSearchInput" placeholder="🔍 Search by alias, IP, hostname..." 
-                                    style="width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px;"
-                                    oninput="updateSearch(this.value)">
+                                    style="width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px;">
                             </div>
                             <div class="filter-tabs">
-                                <button class="filter-tab active" onclick="filterClients('all')">All</button>
-                                <button class="filter-tab" onclick="filterClients('online')">Online</button>
-                                <button class="filter-tab" onclick="filterClients('offline')">Offline</button>
+                                <button class="filter-tab active">All</button>
+                                <button class="filter-tab">Online</button>
+                                <button class="filter-tab">Offline</button>
                             </div>
                             <ul class="client-list" id="clientList">
                                 <div class="empty-state" style="padding: 40px 10px;">
@@ -174,7 +173,7 @@
                     <div class="section">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
                             <h3>🌐 Proxy Management</h3>
-                            <button class="btn btn-secondary" onclick="loadAllProxies()">🔄 Refresh</button>
+                            <button class="btn btn-secondary">🔄 Refresh</button>
                         </div>
                         
                         <div id="allProxiesList" style="margin-top: 20px;">
@@ -190,7 +189,7 @@
                     <div class="section">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
                             <h3>👤 User Management</h3>
-                            <button class="btn btn-primary" onclick="showAddUserForm()">➕ Add User</button>
+                            <button class="btn btn-primary">➕ Add User</button>
                         </div>
 
                         <!-- Add User Form (hidden by default) -->
@@ -218,8 +217,8 @@
                                     </select>
                                 </div>
                                 <div style="display: flex; gap: 10px;">
-                                    <button class="btn btn-primary" onclick="createUser()">Create User</button>
-                                    <button class="btn btn-secondary" onclick="hideAddUserForm()">Cancel</button>
+                                    <button class="btn btn-primary">Create User</button>
+                                    <button class="btn btn-secondary">Cancel</button>
                                 </div>
                             </div>
                         </div>
@@ -249,8 +248,8 @@
                                     </select>
                                 </div>
                                 <div style="display: flex; gap: 10px;">
-                                    <button class="btn btn-primary" onclick="saveUserEdit()">Save Changes</button>
-                                    <button class="btn btn-secondary" onclick="hideEditUserForm()">Cancel</button>
+                                    <button class="btn btn-primary">Save Changes</button>
+                                    <button class="btn btn-secondary">Cancel</button>
                                 </div>
                             </div>
                         </div>
@@ -317,7 +316,7 @@
                             </div>
                         </div>
                         
-                        <button class="btn btn-primary" style="margin-top: 20px;" onclick="saveUpdatePaths()">💾 Save Settings</button>
+                        <button class="btn btn-primary" style="margin-top: 20px;">💾 Save Settings</button>
                     </div>
 
                     <div class="section" style="margin-top: 30px;">
@@ -355,8 +354,8 @@
                             </div>
 
                             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 15px;">
-                                <button class="btn btn-primary" onclick="pushClientsUpdate()" style="width: 100%;">📤 Push Update</button>
-                                <button class="btn btn-secondary" onclick="clearUpdateForm()" style="width: 100%;">Clear</button>
+                                <button class="btn btn-primary" style="width: 100%;">📤 Push Update</button>
+                                <button class="btn btn-secondary" style="width: 100%;">Clear</button>
                             </div>
                         </div>
 
@@ -395,8 +394,8 @@
             <h3 id="confirmTitle">Confirm Action</h3>
             <p id="confirmMessage"></p>
             <div class="modal-actions">
-                <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
-                <button class="btn btn-danger" onclick="confirmAction()">Confirm</button>
+                <button class="btn btn-secondary">Cancel</button>
+                <button class="btn btn-danger">Confirm</button>
             </div>
         </div>
     </div>
@@ -406,7 +405,7 @@
             <h3 id="statusTitle">Status</h3>
             <p id="statusMessage"></p>
             <div class="modal-actions">
-                <button class="btn btn-primary" onclick="closeModal()">Close</button>
+                <button class="btn btn-primary">Close</button>
             </div>
         </div>
     </div>
