@@ -25,7 +25,14 @@ webui:
 
 # Database Configuration
 database:
-  # Path to SQLite database
+  # Backend type: sqlite | postgres | mysql
+  # Defaults to sqlite if omitted
+  type: sqlite
+  
+  # Path/DSN:
+  # - For sqlite: file path to .db file
+  # - For mysql: DSN like "user:pass@tcp(127.0.0.1:3306)/gorat?parseTime=true&charset=utf8mb4"
+  # - For postgres: DSN like "postgres://user:pass@localhost:5432/gorat?sslmode=disable"
   path: "./clients.db"
   # Maximum database connections
   max_connections: 25

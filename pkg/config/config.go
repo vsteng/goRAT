@@ -37,6 +37,7 @@ type WebUIConfig struct {
 
 // DatabaseConfig represents database settings
 type DatabaseConfig struct {
+	Type              string `yaml:"type"` // sqlite | postgres
 	Path              string `yaml:"path"`
 	MaxConnections    int    `yaml:"max_connections"`
 	ConnectionTimeout int    `yaml:"connection_timeout"`
@@ -71,6 +72,7 @@ func DefaultConfig() *ServerConfig {
 			Port:     8080,
 		},
 		Database: DatabaseConfig{
+			Type:              "sqlite",
 			Path:              "./clients.db",
 			MaxConnections:    25,
 			ConnectionTimeout: 30,

@@ -31,8 +31,8 @@ func NewServices(cfg *config.ServerConfig) (*Services, error) {
 
 	log.InfoWith("initializing services", "config", cfg.String())
 
-	// Initialize storage layer
-	store, err := storage.NewSQLiteStore(cfg.Database.Path)
+	// Initialize storage layer via factory (supports sqlite, postgres)
+	store, err := storage.NewStore(cfg.Database)
 	if err != nil {
 		log.ErrorWithErr("failed to initialize storage", err)
 		return nil, err
