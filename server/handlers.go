@@ -273,6 +273,13 @@ func (s *Server) Start() error {
 
 	// Create Gin router
 	router := gin.Default()
+	// Trust Cloudflare and proxy headers for real client IP extraction
+	// Note: For production, consider programmatically updating with Cloudflare IP ranges.
+	// Limit trusted proxies; do not trust arbitrary proxies by default
+	// In production, set Cloudflare IP ranges here.
+	_ = router.SetTrustedProxies([]string{"127.0.0.1"})
+	router.RemoteIPHeaders = []string{"CF-Connecting-IP", "X-Forwarded-For", "X-Real-IP"}
+	router.ForwardedByClientIP = true
 
 	// Add CORS middleware
 	router.Use(CORSMiddleware())

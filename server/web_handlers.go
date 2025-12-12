@@ -159,8 +159,8 @@ func (wh *WebHandler) HandleLoginAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get client IP for rate limiting and session tracking
-	clientIP := auth.GetClientIP(r.RemoteAddr, r.Header.Get("X-Forwarded-For"))
+	// Get client IP for rate limiting and session tracking (Cloudflare-aware)
+	clientIP := auth.GetClientIPFromRequest(r)
 
 	var credentials struct {
 		Username string `json:"username"`
@@ -1197,7 +1197,9 @@ func (wh *WebHandler) RegisterGinRoutes(router *gin.Engine) {
 		c.Header("X-XSS-Protection", "1; mode=block")
 
 		// Content Security Policy
-		c.Header("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'")
+		// Temporarily allow inline scripts to unblock dashboard interactions
+		// Long-term: refactor inline handlers to external JS and remove 'unsafe-inline'
+		c.Header("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'")
 
 		// HSTS (HTTP Strict Transport Security)
 		if c.Request.TLS != nil {
@@ -1282,8 +1284,8 @@ func (wh *WebHandler) ginRequireAuth(handler gin.HandlerFunc) gin.HandlerFunc {
 			return
 		}
 
-		// Verify session context (IP and User-Agent)
-		clientIP := auth.GetClientIP(c.Request.RemoteAddr, c.Request.Header.Get("X-Forwarded-For"))
+		// Verify session context (IP and User-Agent) with Cloudflare-aware IP
+		clientIP := auth.GetClientIPFromRequest(c.Request)
 		userAgent := c.Request.Header.Get("User-Agent")
 
 		if !wh.sessionMgr.VerifySessionContext(session.ID, clientIP, userAgent) {

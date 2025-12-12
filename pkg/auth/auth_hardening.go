@@ -5,6 +5,8 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net"
+	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -344,22 +346,21 @@ func (sh *SessionHardener) DeleteSession(sessionID string) {
 	delete(sh.sessions, sessionID)
 }
 
-// GetClientIP extracts client IP from request, handling proxies
+// GetClientIP extracts the real client IP, supporting Cloudflare and common proxies.
+// It prefers CF-Connecting-IP, then X-Forwarded-For (first IP), then X-Real-IP, then RemoteAddr.
 func GetClientIP(remoteAddr, xForwardedFor string) string {
 	// Try X-Forwarded-For header first (for proxies)
 	if xForwardedFor != "" {
 		// Take first IP if comma-separated
 		ips := xForwardedFor
-		if idx := xForwardedFor; idx != "" {
-			for i, ch := range xForwardedFor {
-				if ch == ',' {
-					ips = xForwardedFor[:i]
-					break
-				}
+		for i, ch := range xForwardedFor {
+			if ch == ',' {
+				ips = xForwardedFor[:i]
+				break
 			}
 		}
-		if ip := net.ParseIP(ips); ip != nil {
-			return ips
+		if ip := net.ParseIP(strings.TrimSpace(ips)); ip != nil {
+			return strings.TrimSpace(ips)
 		}
 	}
 
@@ -376,4 +377,41 @@ func GetClientIP(remoteAddr, xForwardedFor string) string {
 	}
 
 	return "unknown"
+}
+
+// GetClientIPFromRequest reads headers directly from the request with Cloudflare support.
+// Order: CF-Connecting-IP -> X-Forwarded-For (first IP) -> X-Real-IP -> RemoteAddr.
+func GetClientIPFromRequest(r *http.Request) string {
+	if r == nil {
+		return "unknown"
+	}
+	// Cloudflare specific header
+	if cfIP := strings.TrimSpace(r.Header.Get("CF-Connecting-IP")); cfIP != "" {
+		if ip := net.ParseIP(cfIP); ip != nil {
+			return cfIP
+		}
+	}
+	// X-Forwarded-For (first IP)
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		// first value before comma
+		part := xff
+		for i, ch := range xff {
+			if ch == ',' {
+				part = xff[:i]
+				break
+			}
+		}
+		part = strings.TrimSpace(part)
+		if ip := net.ParseIP(part); ip != nil {
+			return part
+		}
+	}
+	// X-Real-IP
+	if xri := strings.TrimSpace(r.Header.Get("X-Real-IP")); xri != "" {
+		if ip := net.ParseIP(xri); ip != nil {
+			return xri
+		}
+	}
+	// RemoteAddr
+	return GetClientIP(r.RemoteAddr, "")
 }
