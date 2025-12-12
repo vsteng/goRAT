@@ -4,7 +4,7 @@ import (
 "testing"
 "time"
 
-"gorat/common"
+"gorat/pkg/protocol"
 )
 
 func TestNewSessionManager(t *testing.T) {
@@ -103,7 +103,7 @@ func TestNewAuthenticator(t *testing.T) {
 
 func TestAuthenticateSuccess(t *testing.T) {
 	auth := NewAuthenticator("test-token")
-	payload := &common.AuthPayload{
+	payload := &protocol.AuthPayload{
 		ClientID: "test-client",
 		Token:    "test-token",
 	}
@@ -118,7 +118,7 @@ func TestAuthenticateSuccess(t *testing.T) {
 
 func TestAuthenticateFail(t *testing.T) {
 	auth := NewAuthenticator("test-token")
-	payload := &common.AuthPayload{
+	payload := &protocol.AuthPayload{
 		ClientID: "test-client",
 		Token:    "wrong-token",
 	}

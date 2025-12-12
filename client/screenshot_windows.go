@@ -14,7 +14,7 @@ import (
 	"time"
 	"unsafe"
 
-	"gorat/common"
+	"gorat/pkg/protocol"
 )
 
 var (
@@ -94,8 +94,8 @@ func NewScreenshotCapture() *ScreenshotCapture {
 }
 
 // Capture takes a screenshot using Windows API (works in RDP and console)
-func (sc *ScreenshotCapture) Capture(payload *common.ScreenshotPayload) *common.ScreenshotDataPayload {
-	result := &common.ScreenshotDataPayload{
+func (sc *ScreenshotCapture) Capture(payload *protocol.ScreenshotPayload) *protocol.ScreenshotDataPayload {
+	result := &protocol.ScreenshotDataPayload{
 		Timestamp: time.Now(),
 		Format:    "png",
 	}
@@ -138,21 +138,21 @@ func (sc *ScreenshotCapture) Capture(payload *common.ScreenshotPayload) *common.
 }
 
 // CaptureAllDisplays captures screenshots from all displays
-func (sc *ScreenshotCapture) CaptureAllDisplays(payload *common.ScreenshotPayload) []*common.ScreenshotDataPayload {
+func (sc *ScreenshotCapture) CaptureAllDisplays(payload *protocol.ScreenshotPayload) []*protocol.ScreenshotDataPayload {
 	// For Windows, we'll capture the primary screen
 	// Multi-monitor support can be added using EnumDisplayMonitors API
-	return []*common.ScreenshotDataPayload{sc.Capture(payload)}
+	return []*protocol.ScreenshotDataPayload{sc.Capture(payload)}
 }
 
 // captureDisplay captures a specific display
-func (sc *ScreenshotCapture) captureDisplay(displayIndex int, payload *common.ScreenshotPayload) *common.ScreenshotDataPayload {
+func (sc *ScreenshotCapture) captureDisplay(displayIndex int, payload *protocol.ScreenshotPayload) *protocol.ScreenshotDataPayload {
 	// Default to primary display
 	return sc.Capture(payload)
 }
 
 // CaptureRegion captures a specific region of the screen
-func (sc *ScreenshotCapture) CaptureRegion(x, y, width, height int, payload *common.ScreenshotPayload) *common.ScreenshotDataPayload {
-	result := &common.ScreenshotDataPayload{
+func (sc *ScreenshotCapture) CaptureRegion(x, y, width, height int, payload *protocol.ScreenshotPayload) *protocol.ScreenshotDataPayload {
+	result := &protocol.ScreenshotDataPayload{
 		Timestamp: time.Now(),
 		Format:    "png",
 	}

@@ -4,15 +4,16 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"html/template"
 	"log"
 	"net/http"
 	"path/filepath"
 	"time"
 
-	"gorat/common"
 	"gorat/pkg/auth"
 	"gorat/pkg/clients"
+	"gorat/pkg/protocol"
 	"gorat/pkg/storage"
 
 	"github.com/gin-gonic/gin"
@@ -36,19 +37,24 @@ type WebHandler struct {
 
 // NewWebHandler creates a new web handler
 func NewWebHandler(sessionMgr auth.SessionManager, clientMgr clients.Manager, store storage.Store, config *WebConfig) (*WebHandler, error) {
-	// Load templates from disk
-	templatesPath := filepath.Join("web", "templates", "*.html")
-	tmpl, err := template.ParseGlob(templatesPath)
-	if err != nil {
-		return nil, err
-	}
-
 	handler := &WebHandler{
 		sessionMgr: sessionMgr,
 		clientMgr:  clientMgr,
 		store:      store,
 		config:     config,
-		templates:  tmpl,
+		templates:  nil, // Will be set if templates load successfully
+	}
+
+	// Try to load templates from disk (optional)
+	templatesPath := filepath.Join("web", "templates", "*.html")
+	tmpl, err := template.ParseGlob(templatesPath)
+	if err != nil {
+		log.Printf("WARNING: Failed to load web templates from %s: %v", templatesPath, err)
+		log.Println("Web UI will use basic fallback responses")
+		// Continue without templates - we'll provide API-only functionality
+	} else {
+		handler.templates = tmpl
+		log.Printf("✅ Successfully loaded web templates from %s", templatesPath)
 	}
 
 	// Initialize default user from config if store is available and no admin user exists yet
@@ -103,6 +109,24 @@ func (wh *WebHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
+	}
+
+	// Check if templates are available
+	if wh.templates == nil {
+		// Fallback to simple HTML response
+		w.Header().Set("Content-Type", "text/html")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`<!DOCTYPE html>
+<html><head><title>Login</title></head>
+<body>
+<h1>Login</h1>
+<form method="POST" action="/api/login">
+<input type="text" name="username" placeholder="Username" required><br><br>
+<input type="password" name="password" placeholder="Password" required><br><br>
+<input type="submit" value="Login">
+</form>
+</body></html>`))
+		return
 	}
 
 	if err := wh.templates.ExecuteTemplate(w, "login.html", nil); err != nil {
@@ -222,6 +246,13 @@ func (wh *WebHandler) HandleLogout(w http.ResponseWriter, r *http.Request) {
 
 // HandleDashboard serves the dashboard page
 func (wh *WebHandler) HandleDashboard(w http.ResponseWriter, r *http.Request) {
+	if wh.templates == nil {
+		w.Header().Set("Content-Type", "text/html")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`<!DOCTYPE html><html><head><title>Dashboard</title></head><body><h1>Dashboard</h1><p>Templates not available. Please use API endpoints.</p></body></html>`))
+		return
+	}
+
 	if err := wh.templates.ExecuteTemplate(w, "dashboard.html", nil); err != nil {
 		log.Printf("Error rendering dashboard template: %v", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
@@ -233,6 +264,13 @@ func (wh *WebHandler) HandleTerminalPage(w http.ResponseWriter, r *http.Request)
 	clientID := r.URL.Query().Get("client")
 	if clientID == "" {
 		http.Error(w, "Client ID required", http.StatusBadRequest)
+		return
+	}
+
+	if wh.templates == nil {
+		w.Header().Set("Content-Type", "text/html")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(fmt.Sprintf(`<!DOCTYPE html><html><head><title>Terminal</title></head><body><h1>Terminal for %s</h1><p>Templates not available. Use API endpoints.</p></body></html>`, clientID)))
 		return
 	}
 
@@ -253,6 +291,13 @@ func (wh *WebHandler) HandleFilesPage(w http.ResponseWriter, r *http.Request) {
 	clientID := r.URL.Query().Get("client")
 	if clientID == "" {
 		http.Error(w, "Client ID required", http.StatusBadRequest)
+		return
+	}
+
+	if wh.templates == nil {
+		w.Header().Set("Content-Type", "text/html")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(fmt.Sprintf(`<!DOCTYPE html><html><head><title>Files</title></head><body><h1>File Manager for %s</h1><p>Templates not available. Use API endpoints.</p></body></html>`, clientID)))
 		return
 	}
 
@@ -282,6 +327,13 @@ func (wh *WebHandler) HandleFilesPage(w http.ResponseWriter, r *http.Request) {
 
 // HandleDashboardNew serves the new enhanced dashboard page
 func (wh *WebHandler) HandleDashboardNew(w http.ResponseWriter, r *http.Request) {
+	if wh.templates == nil {
+		w.Header().Set("Content-Type", "text/html")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`<!DOCTYPE html><html><head><title>Dashboard</title></head><body><h1>Enhanced Dashboard</h1><p>Templates not available. Use API endpoints.</p></body></html>`))
+		return
+	}
+
 	if err := wh.templates.ExecuteTemplate(w, "dashboard-new.html", nil); err != nil {
 		log.Printf("Error rendering dashboard-new template: %v", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
@@ -293,6 +345,13 @@ func (wh *WebHandler) HandleClientDetails(w http.ResponseWriter, r *http.Request
 	clientID := r.URL.Query().Get("id")
 	if clientID == "" {
 		http.Error(w, "Client ID required", http.StatusBadRequest)
+		return
+	}
+
+	if wh.templates == nil {
+		w.Header().Set("Content-Type", "text/html")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(fmt.Sprintf(`<!DOCTYPE html><html><head><title>Client Details</title></head><body><h1>Client Details: %s</h1><p>Templates not available. Use API endpoints.</p></body></html>`, clientID)))
 		return
 	}
 
@@ -326,7 +385,7 @@ func (wh *WebHandler) HandleClientsAPI(w http.ResponseWriter, r *http.Request) {
 
 	// Get clients from manager
 	allClients := wh.clientMgr.GetAllClients()
-	metadata := make([]*common.ClientMetadata, 0, len(allClients))
+	metadata := make([]*protocol.ClientMetadata, 0, len(allClients))
 	for _, client := range allClients {
 		if meta := client.Metadata(); meta != nil {
 			metadata = append(metadata, meta)
@@ -366,7 +425,7 @@ func (wh *WebHandler) HandleFileBrowse(w http.ResponseWriter, r *http.Request) {
 	wh.server.ClearFileListResult(req.ClientID)
 
 	// Send file browse request
-	msg, err := common.NewMessage(common.MsgTypeBrowseFiles, common.BrowseFilesPayload{
+	msg, err := protocol.NewMessage(protocol.MsgTypeBrowseFiles, protocol.BrowseFilesPayload{
 		Path: req.Path,
 	})
 	if err != nil {
@@ -427,7 +486,7 @@ func (wh *WebHandler) HandleGetDrives(w http.ResponseWriter, r *http.Request) {
 	wh.server.ClearDriveListResult(req.ClientID)
 
 	// Send drive list request
-	msg, err := common.NewMessage(common.MsgTypeGetDrives, nil)
+	msg, err := protocol.NewMessage(protocol.MsgTypeGetDrives, nil)
 	if err != nil {
 		http.Error(w, "Failed to create message", http.StatusInternalServerError)
 		return
@@ -484,7 +543,7 @@ func (wh *WebHandler) HandleFileDownload(w http.ResponseWriter, r *http.Request)
 
 	wh.server.ClearFileDataResult(req.ClientID)
 
-	msg, err := common.NewMessage(common.MsgTypeDownloadFile, common.FileDataPayload{
+	msg, err := protocol.NewMessage(protocol.MsgTypeDownloadFile, protocol.FileDataPayload{
 		Path: req.Path,
 	})
 	if err != nil {
@@ -557,7 +616,7 @@ func (wh *WebHandler) HandleGlobalUpdate(w http.ResponseWriter, r *http.Request)
 
 	// Get all online clients
 	allClients := wh.clientMgr.GetAllClients()
-	onlineClients := []*common.ClientMetadata{}
+	onlineClients := []*protocol.ClientMetadata{}
 	for _, client := range allClients {
 		if meta := client.Metadata(); meta != nil && meta.Status == "online" {
 			onlineClients = append(onlineClients, meta)
@@ -595,13 +654,13 @@ func (wh *WebHandler) HandleGlobalUpdate(w http.ResponseWriter, r *http.Request)
 		}
 
 		// Create platform-specific update payload
-		updatePayload := common.UpdatePayload{
+		updatePayload := protocol.UpdatePayload{
 			Version:     req.Version,
 			DownloadURL: downloadURL,
 			Checksum:    checksum,
 		}
 
-		msg, err := common.NewMessage(common.MsgTypeUpdate, updatePayload)
+		msg, err := protocol.NewMessage(protocol.MsgTypeUpdate, updatePayload)
 		if err != nil {
 			log.Printf("Failed to create message for client %s: %v", client.ID, err)
 			failCount++

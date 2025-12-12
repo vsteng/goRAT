@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"gorat/common"
+	"gorat/pkg/protocol"
 )
 
 func TestNewSQLiteStore(t *testing.T) {
@@ -33,7 +33,7 @@ func TestSaveAndGetClient(t *testing.T) {
 	}
 	defer store.Close()
 
-	client := &common.ClientMetadata{
+	client := &protocol.ClientMetadata{
 		ID:       "test-client-1",
 		Hostname: "test-host",
 		OS:       "Linux",
@@ -78,7 +78,7 @@ func TestGetAllClients(t *testing.T) {
 	defer store.Close()
 
 	for i := 1; i <= 3; i++ {
-		client := &common.ClientMetadata{
+		client := &protocol.ClientMetadata{
 			ID:       "client-" + string(rune(48+i)),
 			Hostname: "host-" + string(rune(48+i)),
 			OS:       "Linux",
@@ -187,7 +187,7 @@ func TestGetStats(t *testing.T) {
 	}
 	defer store.Close()
 
-	clients := []*common.ClientMetadata{
+	clients := []*protocol.ClientMetadata{
 		{ID: "online-1", Status: "online", LastSeen: time.Now()},
 		{ID: "online-2", Status: "online", LastSeen: time.Now()},
 		{ID: "offline-1", Status: "offline", LastSeen: time.Now()},

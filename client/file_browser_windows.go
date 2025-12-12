@@ -7,7 +7,7 @@ import (
 	"syscall"
 	"unsafe"
 
-	"gorat/common"
+	"gorat/pkg/protocol"
 )
 
 var (
@@ -19,8 +19,8 @@ var (
 )
 
 // getDrivesWindows returns a list of available drives on Windows
-func getDrivesWindows() []common.DriveInfo {
-	var drives []common.DriveInfo
+func getDrivesWindows() []protocol.DriveInfo {
+	var drives []protocol.DriveInfo
 
 	// Get logical drives bitmask
 	ret, _, _ := getLogicalDrives.Call()
@@ -34,7 +34,7 @@ func getDrivesWindows() []common.DriveInfo {
 			driveLetter := string(rune('A' + i))
 			drivePath := driveLetter + ":\\"
 
-			driveInfo := common.DriveInfo{
+			driveInfo := protocol.DriveInfo{
 				Name: drivePath,
 			}
 

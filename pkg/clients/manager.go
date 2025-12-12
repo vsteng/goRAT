@@ -2,7 +2,7 @@ package clients
 
 import (
 	"fmt"
-	"gorat/common"
+	"gorat/pkg/protocol"
 	"sync"
 
 	"github.com/gorilla/websocket"
@@ -12,8 +12,8 @@ import (
 type ClientImpl struct {
 	id       string
 	conn     *websocket.Conn
-	metadata *common.ClientMetadata
-	send     chan *common.Message
+	metadata *protocol.ClientMetadata
+	send     chan *protocol.Message
 	mu       sync.RWMutex
 	closed   bool
 	writeMu  sync.Mutex
@@ -32,14 +32,14 @@ func (c *ClientImpl) Conn() *websocket.Conn {
 }
 
 // Metadata returns client metadata
-func (c *ClientImpl) Metadata() *common.ClientMetadata {
+func (c *ClientImpl) Metadata() *protocol.ClientMetadata {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.metadata
 }
 
 // UpdateMetadata updates client metadata
-func (c *ClientImpl) UpdateMetadata(fn func(*common.ClientMetadata)) {
+func (c *ClientImpl) UpdateMetadata(fn func(*protocol.ClientMetadata)) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.metadata != nil && !c.closed {
@@ -48,7 +48,7 @@ func (c *ClientImpl) UpdateMetadata(fn func(*common.ClientMetadata)) {
 }
 
 // SendMessage sends a message to the client
-func (c *ClientImpl) SendMessage(msg *common.Message) error {
+func (c *ClientImpl) SendMessage(msg *protocol.Message) error {
 	c.mu.RLock()
 	if c.closed {
 		c.mu.RUnlock()
@@ -95,7 +95,7 @@ type ManagerImpl struct {
 	clients    map[string]*ClientImpl
 	register   chan *ClientImpl
 	unregister chan string
-	broadcast  chan *common.Message
+	broadcast  chan *protocol.Message
 	mu         sync.RWMutex
 	running    bool
 	stopOnce   sync.Once
@@ -109,7 +109,7 @@ func NewManager() *ManagerImpl {
 		clients:    make(map[string]*ClientImpl),
 		register:   make(chan *ClientImpl, 256),
 		unregister: make(chan string, 256),
-		broadcast:  make(chan *common.Message, 256),
+		broadcast:  make(chan *protocol.Message, 256),
 		stopChan:   make(chan struct{}),
 	}
 }
@@ -123,8 +123,8 @@ func (m *ManagerImpl) RegisterClient(clientID string, conn *websocket.Conn) (Cli
 	client := &ClientImpl{
 		id:       clientID,
 		conn:     conn,
-		metadata: &common.ClientMetadata{ID: clientID},
-		send:     make(chan *common.Message, 256),
+		metadata: &protocol.ClientMetadata{ID: clientID},
+		send:     make(chan *protocol.Message, 256),
 		closed:   false,
 	}
 
@@ -177,7 +177,7 @@ func (m *ManagerImpl) GetAllClients() []Client {
 }
 
 // UpdateClientMetadata updates metadata for a client
-func (m *ManagerImpl) UpdateClientMetadata(clientID string, fn func(*common.ClientMetadata)) error {
+func (m *ManagerImpl) UpdateClientMetadata(clientID string, fn func(*protocol.ClientMetadata)) error {
 	m.mu.RLock()
 	client, ok := m.clients[clientID]
 	m.mu.RUnlock()
@@ -191,7 +191,7 @@ func (m *ManagerImpl) UpdateClientMetadata(clientID string, fn func(*common.Clie
 }
 
 // BroadcastMessage sends a message to all connected clients
-func (m *ManagerImpl) BroadcastMessage(msg *common.Message) {
+func (m *ManagerImpl) BroadcastMessage(msg *protocol.Message) {
 	select {
 	case m.broadcast <- msg:
 	case <-m.stopChan:
@@ -289,7 +289,7 @@ func (m *ManagerImpl) handleUnregister(clientID string) {
 }
 
 // handleBroadcast broadcasts a message to all connected clients
-func (m *ManagerImpl) handleBroadcast(msg *common.Message) {
+func (m *ManagerImpl) handleBroadcast(msg *protocol.Message) {
 	m.mu.RLock()
 	clients := make([]*ClientImpl, 0, len(m.clients))
 	for _, client := range m.clients {
@@ -323,7 +323,7 @@ func (m *ManagerImpl) handleClientMessages(client *ClientImpl) {
 }
 
 // SendToClient sends a message to a specific client
-func (m *ManagerImpl) SendToClient(clientID string, msg *common.Message) error {
+func (m *ManagerImpl) SendToClient(clientID string, msg *protocol.Message) error {
 	client, ok := m.GetClient(clientID)
 	if !ok {
 		return fmt.Errorf("client %s not found", clientID)

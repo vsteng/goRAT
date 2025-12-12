@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"runtime"
 
-	"gorat/common"
+	"gorat/pkg/protocol"
 )
 
 // FileBrowser handles file browsing operations
@@ -18,9 +18,9 @@ func NewFileBrowser() *FileBrowser {
 }
 
 // GetDrives returns a list of available drives (Windows-specific)
-func (fb *FileBrowser) GetDrives() *common.DriveListPayload {
-	result := &common.DriveListPayload{
-		Drives: []common.DriveInfo{},
+func (fb *FileBrowser) GetDrives() *protocol.DriveListPayload {
+	result := &protocol.DriveListPayload{
+		Drives: []protocol.DriveInfo{},
 	}
 
 	// Only applicable for Windows
@@ -37,10 +37,10 @@ func (fb *FileBrowser) GetDrives() *common.DriveListPayload {
 }
 
 // Browse lists files in a directory
-func (fb *FileBrowser) Browse(payload *common.BrowseFilesPayload) *common.FileListPayload {
-	result := &common.FileListPayload{
+func (fb *FileBrowser) Browse(payload *protocol.BrowseFilesPayload) *protocol.FileListPayload {
+	result := &protocol.FileListPayload{
 		Path:  payload.Path,
-		Files: []common.FileInfo{},
+		Files: []protocol.FileInfo{},
 	}
 
 	// Read directory
@@ -54,7 +54,7 @@ func (fb *FileBrowser) Browse(payload *common.BrowseFilesPayload) *common.FileLi
 	for _, entry := range entries {
 		fullPath := filepath.Join(payload.Path, entry.Name())
 
-		fileInfo := common.FileInfo{
+		fileInfo := protocol.FileInfo{
 			Name:    entry.Name(),
 			Path:    fullPath,
 			Size:    entry.Size(),
@@ -67,7 +67,7 @@ func (fb *FileBrowser) Browse(payload *common.BrowseFilesPayload) *common.FileLi
 
 		// Recursively browse subdirectories
 		if payload.Recursive && entry.IsDir() {
-			subPayload := &common.BrowseFilesPayload{
+			subPayload := &protocol.BrowseFilesPayload{
 				Path:      fullPath,
 				Recursive: true,
 			}
@@ -80,8 +80,8 @@ func (fb *FileBrowser) Browse(payload *common.BrowseFilesPayload) *common.FileLi
 }
 
 // ReadFile reads a file and returns its content
-func (fb *FileBrowser) ReadFile(path string) *common.FileDataPayload {
-	result := &common.FileDataPayload{
+func (fb *FileBrowser) ReadFile(path string) *protocol.FileDataPayload {
+	result := &protocol.FileDataPayload{
 		Path: path,
 	}
 
@@ -92,13 +92,13 @@ func (fb *FileBrowser) ReadFile(path string) *common.FileDataPayload {
 	}
 
 	result.Data = data
-	result.Checksum = common.CalculateChecksum(data)
+	result.Checksum = protocol.CalculateChecksum(data)
 
 	return result
 }
 
 // WriteFile writes content to a file
-func (fb *FileBrowser) WriteFile(payload *common.FileDataPayload) error {
+func (fb *FileBrowser) WriteFile(payload *protocol.FileDataPayload) error {
 	// Ensure directory exists
 	dir := filepath.Dir(payload.Path)
 	if err := os.MkdirAll(dir, 0755); err != nil {
@@ -115,7 +115,7 @@ func (fb *FileBrowser) DeleteFile(path string) error {
 }
 
 // GetFileInfo gets file metadata
-func (fb *FileBrowser) GetFileInfo(path string) (*common.FileInfo, error) {
+func (fb *FileBrowser) GetFileInfo(path string) (*protocol.FileInfo, error) {
 	info, err := os.Stat(path)
 	if err != nil {
 		return nil, err
@@ -123,7 +123,7 @@ func (fb *FileBrowser) GetFileInfo(path string) (*common.FileInfo, error) {
 
 	absPath, _ := filepath.Abs(path)
 
-	return &common.FileInfo{
+	return &protocol.FileInfo{
 		Name:    info.Name(),
 		Path:    absPath,
 		Size:    info.Size(),

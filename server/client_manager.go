@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"gorat/common"
+	"gorat/pkg/protocol"
 	"gorat/pkg/storage"
 
 	"github.com/gorilla/websocket"
@@ -15,8 +15,8 @@ import (
 type Client struct {
 	ID       string
 	Conn     *websocket.Conn
-	Metadata *common.ClientMetadata
-	Send     chan *common.Message
+	Metadata *protocol.ClientMetadata
+	Send     chan *protocol.Message
 	mu       sync.RWMutex
 	closed   bool       // Track if Send channel is closed
 	writeMu  sync.Mutex // Protects WebSocket writes (not thread-safe)
@@ -27,7 +27,7 @@ type ClientManager struct {
 	clients    map[string]*Client
 	register   chan *Client
 	unregister chan *Client
-	broadcast  chan *common.Message
+	broadcast  chan *protocol.Message
 	store      storage.Store // Reference to persistent storage
 	mu         sync.RWMutex
 	running    bool
@@ -40,7 +40,7 @@ func NewClientManager() *ClientManager {
 		clients:    make(map[string]*Client),
 		register:   make(chan *Client),
 		unregister: make(chan *Client),
-		broadcast:  make(chan *common.Message, 256),
+		broadcast:  make(chan *protocol.Message, 256),
 	}
 }
 
@@ -84,7 +84,7 @@ func (m *ClientManager) Run() {
 			m.mu.Lock()
 			m.register = make(chan *Client)
 			m.unregister = make(chan *Client)
-			m.broadcast = make(chan *common.Message, 256)
+			m.broadcast = make(chan *protocol.Message, 256)
 			m.mu.Unlock()
 
 			time.Sleep(2 * time.Second)
@@ -177,7 +177,7 @@ func (m *ClientManager) GetAllClients() []*Client {
 }
 
 // SendToClient sends a message to a specific client
-func (m *ClientManager) SendToClient(clientID string, msg *common.Message) error {
+func (m *ClientManager) SendToClient(clientID string, msg *protocol.Message) error {
 	client, ok := m.GetClient(clientID)
 	if !ok {
 		return ErrClientNotFound
@@ -192,7 +192,7 @@ func (m *ClientManager) SendToClient(clientID string, msg *common.Message) error
 }
 
 // Broadcast sends a message to all clients
-func (m *ClientManager) Broadcast(msg *common.Message) {
+func (m *ClientManager) Broadcast(msg *protocol.Message) {
 	m.broadcast <- msg
 }
 
@@ -204,7 +204,7 @@ func (m *ClientManager) GetClientCount() int {
 }
 
 // UpdateClientMetadata updates client metadata
-func (m *ClientManager) UpdateClientMetadata(clientID string, update func(*common.ClientMetadata)) error {
+func (m *ClientManager) UpdateClientMetadata(clientID string, update func(*protocol.ClientMetadata)) error {
 	client, ok := m.GetClient(clientID)
 	if !ok {
 		return ErrClientNotFound
@@ -225,9 +225,9 @@ func (m *ClientManager) IsClientIDRegistered(clientID string) bool {
 }
 
 // GetClients returns metadata for all connected clients
-func (m *ClientManager) GetClients() []*common.ClientMetadata {
+func (m *ClientManager) GetClients() []*protocol.ClientMetadata {
 	m.mu.RLock()
-	connectedClients := make(map[string]*common.ClientMetadata)
+	connectedClients := make(map[string]*protocol.ClientMetadata)
 	for _, client := range m.clients {
 		client.mu.RLock()
 		connectedClients[client.ID] = client.Metadata
@@ -240,7 +240,7 @@ func (m *ClientManager) GetClients() []*common.ClientMetadata {
 		savedClients, err := m.store.GetAllClients()
 		if err == nil {
 			// Create a map to merge clients
-			allClients := make(map[string]*common.ClientMetadata)
+			allClients := make(map[string]*protocol.ClientMetadata)
 
 			// First add all saved clients
 			for _, saved := range savedClients {
@@ -253,7 +253,7 @@ func (m *ClientManager) GetClients() []*common.ClientMetadata {
 			}
 
 			// Convert to slice and sort by last_seen (most recent first)
-			metadata := make([]*common.ClientMetadata, 0, len(allClients))
+			metadata := make([]*protocol.ClientMetadata, 0, len(allClients))
 			for _, client := range allClients {
 				metadata = append(metadata, client)
 			}
@@ -266,7 +266,7 @@ func (m *ClientManager) GetClients() []*common.ClientMetadata {
 	}
 
 	// Fallback: return only connected clients
-	metadata := make([]*common.ClientMetadata, 0, len(connectedClients))
+	metadata := make([]*protocol.ClientMetadata, 0, len(connectedClients))
 	for _, client := range connectedClients {
 		metadata = append(metadata, client)
 	}
@@ -278,7 +278,7 @@ func (m *ClientManager) GetClients() []*common.ClientMetadata {
 }
 
 // sortClientsByLastSeen sorts clients by last_seen in descending order
-func sortClientsByLastSeen(clients []*common.ClientMetadata) {
+func sortClientsByLastSeen(clients []*protocol.ClientMetadata) {
 	// Simple bubble sort for small datasets
 	for i := 0; i < len(clients); i++ {
 		for j := i + 1; j < len(clients); j++ {

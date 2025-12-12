@@ -3,9 +3,9 @@
 
 package client
 
-import "gorat/common"
+import "gorat/pkg/protocol"
 
 // getDrivesWindows is a stub for non-Windows systems
-func getDrivesWindows() []common.DriveInfo {
-	return []common.DriveInfo{}
+func getDrivesWindows() []protocol.DriveInfo {
+	return []protocol.DriveInfo{}
 }

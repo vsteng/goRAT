@@ -4,107 +4,107 @@ import (
 "testing"
 "time"
 
-"gorat/common"
+"gorat/pkg/protocol"
 )
 
 // MockResultStore implements ResultStore for testing
 type MockResultStore struct {
-	commandResults   map[string]*common.CommandResultPayload
-	fileListResults  map[string]*common.FileListPayload
-	driveListResults map[string]*common.DriveListPayload
-	processResults   map[string]*common.ProcessListPayload
-	systemResults    map[string]*common.SystemInfoPayload
-	fileDataResults  map[string]*common.FileDataPayload
-	screenshotResults map[string]*common.ScreenshotDataPayload
+	commandResults   map[string]*protocol.CommandResultPayload
+	fileListResults  map[string]*protocol.FileListPayload
+	driveListResults map[string]*protocol.DriveListPayload
+	processResults   map[string]*protocol.ProcessListPayload
+	systemResults    map[string]*protocol.SystemInfoPayload
+	fileDataResults  map[string]*protocol.FileDataPayload
+	screenshotResults map[string]*protocol.ScreenshotDataPayload
 }
 
 func NewMockResultStore() *MockResultStore {
 	return &MockResultStore{
-		commandResults:    make(map[string]*common.CommandResultPayload),
-		fileListResults:   make(map[string]*common.FileListPayload),
-		driveListResults:  make(map[string]*common.DriveListPayload),
-		processResults:    make(map[string]*common.ProcessListPayload),
-		systemResults:     make(map[string]*common.SystemInfoPayload),
-		fileDataResults:   make(map[string]*common.FileDataPayload),
-		screenshotResults: make(map[string]*common.ScreenshotDataPayload),
+		commandResults:    make(map[string]*protocol.CommandResultPayload),
+		fileListResults:   make(map[string]*protocol.FileListPayload),
+		driveListResults:  make(map[string]*protocol.DriveListPayload),
+		processResults:    make(map[string]*protocol.ProcessListPayload),
+		systemResults:     make(map[string]*protocol.SystemInfoPayload),
+		fileDataResults:   make(map[string]*protocol.FileDataPayload),
+		screenshotResults: make(map[string]*protocol.ScreenshotDataPayload),
 	}
 }
 
-func (m *MockResultStore) SetCommandResult(clientID string, result *common.CommandResultPayload) {
+func (m *MockResultStore) SetCommandResult(clientID string, result *protocol.CommandResultPayload) {
 	m.commandResults[clientID] = result
 }
 
-func (m *MockResultStore) GetCommandResult(clientID string) *common.CommandResultPayload {
+func (m *MockResultStore) GetCommandResult(clientID string) *protocol.CommandResultPayload {
 	return m.commandResults[clientID]
 }
 
-func (m *MockResultStore) SetFileListResult(clientID string, result *common.FileListPayload) {
+func (m *MockResultStore) SetFileListResult(clientID string, result *protocol.FileListPayload) {
 	m.fileListResults[clientID] = result
 }
 
-func (m *MockResultStore) GetFileListResult(clientID string) *common.FileListPayload {
+func (m *MockResultStore) GetFileListResult(clientID string) *protocol.FileListPayload {
 	return m.fileListResults[clientID]
 }
 
-func (m *MockResultStore) SetDriveListResult(clientID string, result *common.DriveListPayload) {
+func (m *MockResultStore) SetDriveListResult(clientID string, result *protocol.DriveListPayload) {
 	m.driveListResults[clientID] = result
 }
 
-func (m *MockResultStore) GetDriveListResult(clientID string) *common.DriveListPayload {
+func (m *MockResultStore) GetDriveListResult(clientID string) *protocol.DriveListPayload {
 	return m.driveListResults[clientID]
 }
 
-func (m *MockResultStore) SetProcessListResult(clientID string, result *common.ProcessListPayload) {
+func (m *MockResultStore) SetProcessListResult(clientID string, result *protocol.ProcessListPayload) {
 	m.processResults[clientID] = result
 }
 
-func (m *MockResultStore) GetProcessListResult(clientID string) *common.ProcessListPayload {
+func (m *MockResultStore) GetProcessListResult(clientID string) *protocol.ProcessListPayload {
 	return m.processResults[clientID]
 }
 
-func (m *MockResultStore) SetSystemInfoResult(clientID string, result *common.SystemInfoPayload) {
+func (m *MockResultStore) SetSystemInfoResult(clientID string, result *protocol.SystemInfoPayload) {
 	m.systemResults[clientID] = result
 }
 
-func (m *MockResultStore) GetSystemInfoResult(clientID string) *common.SystemInfoPayload {
+func (m *MockResultStore) GetSystemInfoResult(clientID string) *protocol.SystemInfoPayload {
 	return m.systemResults[clientID]
 }
 
-func (m *MockResultStore) SetFileDataResult(clientID string, result *common.FileDataPayload) {
+func (m *MockResultStore) SetFileDataResult(clientID string, result *protocol.FileDataPayload) {
 	m.fileDataResults[clientID] = result
 }
 
-func (m *MockResultStore) GetFileDataResult(clientID string) *common.FileDataPayload {
+func (m *MockResultStore) GetFileDataResult(clientID string) *protocol.FileDataPayload {
 	return m.fileDataResults[clientID]
 }
 
-func (m *MockResultStore) SetScreenshotResult(clientID string, result *common.ScreenshotDataPayload) {
+func (m *MockResultStore) SetScreenshotResult(clientID string, result *protocol.ScreenshotDataPayload) {
 	m.screenshotResults[clientID] = result
 }
 
-func (m *MockResultStore) GetScreenshotResult(clientID string) *common.ScreenshotDataPayload {
+func (m *MockResultStore) GetScreenshotResult(clientID string) *protocol.ScreenshotDataPayload {
 	return m.screenshotResults[clientID]
 }
 
 // MockClientMetadataUpdater implements ClientMetadataUpdater for testing
 type MockClientMetadataUpdater struct {
-	metadata map[string]*common.ClientMetadata
+	metadata map[string]*protocol.ClientMetadata
 }
 
 func NewMockClientMetadataUpdater() *MockClientMetadataUpdater {
 	return &MockClientMetadataUpdater{
-		metadata: make(map[string]*common.ClientMetadata),
+		metadata: make(map[string]*protocol.ClientMetadata),
 	}
 }
 
-func (m *MockClientMetadataUpdater) UpdateClientMetadata(clientID string, fn func(*common.ClientMetadata)) {
+func (m *MockClientMetadataUpdater) UpdateClientMetadata(clientID string, fn func(*protocol.ClientMetadata)) {
 	if _, exists := m.metadata[clientID]; !exists {
-		m.metadata[clientID] = &common.ClientMetadata{ID: clientID}
+		m.metadata[clientID] = &protocol.ClientMetadata{ID: clientID}
 	}
 	fn(m.metadata[clientID])
 }
 
-func (m *MockClientMetadataUpdater) GetMetadata(clientID string) *common.ClientMetadata {
+func (m *MockClientMetadataUpdater) GetMetadata(clientID string) *protocol.ClientMetadata {
 	return m.metadata[clientID]
 }
 
@@ -127,7 +127,7 @@ func TestRegisterHandler(t *testing.T) {
 		t.Fatalf("Failed to register handler: %v", err)
 	}
 
-	if !d.HasHandler(common.MsgTypeCommandResult) {
+	if !d.HasHandler(protocol.MsgTypeCommandResult) {
 		t.Fatal("Handler should be registered")
 	}
 }
@@ -151,13 +151,13 @@ func TestDispatchCommandResult(t *testing.T) {
 	handler := NewCommandResultHandler(store)
 	d.Register(handler)
 
-	payload := common.CommandResultPayload{
+	payload := protocol.CommandResultPayload{
 		Success:  true,
 		Output:   "test output",
 		ExitCode: 0,
 	}
 
-	msg, _ := common.NewMessage(common.MsgTypeCommandResult, payload)
+	msg, _ := protocol.NewMessage(protocol.MsgTypeCommandResult, payload)
 	_, err := d.Dispatch("client1", msg)
 
 	if err != nil {
@@ -180,7 +180,7 @@ func TestDispatchHeartbeat(t *testing.T) {
 	handler := NewHeartbeatHandler(updater)
 	d.Register(handler)
 
-	payload := common.HeartbeatPayload{
+	payload := protocol.HeartbeatPayload{
 		ClientID:   "client1",
 		Status:     "online",
 		CPUUsage:   45.5,
@@ -188,7 +188,7 @@ func TestDispatchHeartbeat(t *testing.T) {
 		LastActive: time.Now(),
 	}
 
-	msg, _ := common.NewMessage(common.MsgTypeHeartbeat, payload)
+	msg, _ := protocol.NewMessage(protocol.MsgTypeHeartbeat, payload)
 	_, err := d.Dispatch("client1", msg)
 
 	if err != nil {
@@ -211,15 +211,15 @@ func TestDispatchFileList(t *testing.T) {
 	handler := NewFileListHandler(store)
 	d.Register(handler)
 
-	payload := common.FileListPayload{
+	payload := protocol.FileListPayload{
 		Path: "/test",
-		Files: []common.FileInfo{
+		Files: []protocol.FileInfo{
 			{Name: "file1.txt", Path: "/test/file1.txt", Size: 100},
 			{Name: "file2.txt", Path: "/test/file2.txt", Size: 200},
 		},
 	}
 
-	msg, _ := common.NewMessage(common.MsgTypeFileList, payload)
+	msg, _ := protocol.NewMessage(protocol.MsgTypeFileList, payload)
 	_, err := d.Dispatch("client1", msg)
 
 	if err != nil {
@@ -242,7 +242,7 @@ func TestDispatchScreenshot(t *testing.T) {
 	handler := NewScreenshotDataHandler(store)
 	d.Register(handler)
 
-	payload := common.ScreenshotDataPayload{
+	payload := protocol.ScreenshotDataPayload{
 		Data:      []byte{0x1, 0x2, 0x3},
 		Format:    "png",
 		Width:     1024,
@@ -250,7 +250,7 @@ func TestDispatchScreenshot(t *testing.T) {
 		Timestamp: time.Now(),
 	}
 
-	msg, _ := common.NewMessage(common.MsgTypeScreenshotData, payload)
+	msg, _ := protocol.NewMessage(protocol.MsgTypeScreenshotData, payload)
 	_, err := d.Dispatch("client1", msg)
 
 	if err != nil {
@@ -270,7 +270,7 @@ func TestDispatchScreenshot(t *testing.T) {
 func TestDispatchUnknownHandler(t *testing.T) {
 	d := NewDispatcher()
 
-	msg, _ := common.NewMessage(common.MsgTypeCommandResult, nil)
+	msg, _ := protocol.NewMessage(protocol.MsgTypeCommandResult, nil)
 	_, err := d.Dispatch("client1", msg)
 
 	if err == nil {
@@ -284,11 +284,11 @@ func TestHasHandler(t *testing.T) {
 	handler := NewCommandResultHandler(store)
 	d.Register(handler)
 
-	if !d.HasHandler(common.MsgTypeCommandResult) {
+	if !d.HasHandler(protocol.MsgTypeCommandResult) {
 		t.Fatal("HasHandler should return true for registered handler")
 	}
 
-	if d.HasHandler(common.MsgTypeFileList) {
+	if d.HasHandler(protocol.MsgTypeFileList) {
 		t.Fatal("HasHandler should return false for unregistered handler")
 	}
 }
@@ -302,9 +302,9 @@ func TestMultipleHandlers(t *testing.T) {
 	d.Register(NewFileListHandler(store))
 	d.Register(NewHeartbeatHandler(updater))
 
-	if d.HasHandler(common.MsgTypeCommandResult) &&
-		d.HasHandler(common.MsgTypeFileList) &&
-		d.HasHandler(common.MsgTypeHeartbeat) {
+	if d.HasHandler(protocol.MsgTypeCommandResult) &&
+		d.HasHandler(protocol.MsgTypeFileList) &&
+		d.HasHandler(protocol.MsgTypeHeartbeat) {
 		// All handlers registered successfully
 	} else {
 		t.Fatal("All handlers should be registered")

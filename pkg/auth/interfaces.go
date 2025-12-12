@@ -3,7 +3,7 @@ package auth
 import (
 	"time"
 
-	"gorat/common"
+	"gorat/pkg/protocol"
 )
 
 // SessionManager defines the interface for web session management
@@ -27,7 +27,7 @@ type SessionManager interface {
 // Authenticator defines the interface for client authentication
 type Authenticator interface {
 	// Authenticate authenticates a client with a token
-	Authenticate(payload *common.AuthPayload) (bool, string)
+	Authenticate(payload *protocol.AuthPayload) (bool, string)
 }
 
 // Session represents a web session

@@ -6,9 +6,9 @@ import (
 	"net/http"
 	"sync"
 
-	"gorat/common"
 	"gorat/pkg/auth"
 	"gorat/pkg/clients"
+	"gorat/pkg/protocol"
 
 	"github.com/gorilla/websocket"
 )
@@ -74,7 +74,7 @@ func (tp *TerminalProxy) HandleTerminalWebSocket(w http.ResponseWriter, r *http.
 	}
 
 	// Generate session ID
-	sessionID := common.GenerateID()
+	sessionID := protocol.GenerateID()
 
 	// Create proxy session
 	session := &TerminalProxySession{
@@ -113,13 +113,13 @@ func (tp *TerminalProxy) HandleTerminalWebSocket(w http.ResponseWriter, r *http.
 
 // startTerminalOnClient sends a start terminal message to the client
 func (tp *TerminalProxy) startTerminalOnClient(clientID, sessionID string) error {
-	payload := &common.StartTerminalPayload{
+	payload := &protocol.StartTerminalPayload{
 		SessionID: sessionID,
 		Rows:      24,
 		Cols:      80,
 	}
 
-	msg, err := common.NewMessage(common.MsgTypeStartTerminal, payload)
+	msg, err := protocol.NewMessage(protocol.MsgTypeStartTerminal, payload)
 	if err != nil {
 		return err
 	}
@@ -129,11 +129,11 @@ func (tp *TerminalProxy) startTerminalOnClient(clientID, sessionID string) error
 
 // stopTerminalOnClient sends a stop terminal message to the client
 func (tp *TerminalProxy) stopTerminalOnClient(clientID, sessionID string) {
-	payload := &common.TerminalInputPayload{
+	payload := &protocol.TerminalInputPayload{
 		SessionID: sessionID,
 	}
 
-	msg, err := common.NewMessage(common.MsgTypeStopTerminal, payload)
+	msg, err := protocol.NewMessage(protocol.MsgTypeStopTerminal, payload)
 	if err != nil {
 		return
 	}
@@ -179,12 +179,12 @@ func (tp *TerminalProxy) handleWebMessages(session *TerminalProxySession) {
 
 // forwardInputToClient forwards input from web UI to client
 func (tp *TerminalProxy) forwardInputToClient(clientID, sessionID, data string) {
-	payload := &common.TerminalInputPayload{
+	payload := &protocol.TerminalInputPayload{
 		SessionID: sessionID,
 		Data:      data,
 	}
 
-	msg, err := common.NewMessage(common.MsgTypeTerminalInput, payload)
+	msg, err := protocol.NewMessage(protocol.MsgTypeTerminalInput, payload)
 	if err != nil {
 		log.Printf("Failed to create terminal input message: %v", err)
 		return

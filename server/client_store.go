@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"gorat/common"
+	"gorat/pkg/protocol"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -164,7 +164,7 @@ func (s *ClientStore) runMigrations() error {
 }
 
 // SaveClient saves or updates a client in the database
-func (s *ClientStore) SaveClient(metadata *common.ClientMetadata) error {
+func (s *ClientStore) SaveClient(metadata *protocol.ClientMetadata) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -242,11 +242,11 @@ func (s *ClientStore) SaveClient(metadata *common.ClientMetadata) error {
 }
 
 // GetClient retrieves a client by ID
-func (s *ClientStore) GetClient(id string) (*common.ClientMetadata, error) {
+func (s *ClientStore) GetClient(id string) (*protocol.ClientMetadata, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	var metadata common.ClientMetadata
+	var metadata protocol.ClientMetadata
 	var metadataJSON string
 
 	query := `SELECT id, hostname, os, arch, ip, public_ip, alias, status, last_seen, metadata FROM clients WHERE id = ?`
@@ -271,7 +271,7 @@ func (s *ClientStore) GetClient(id string) (*common.ClientMetadata, error) {
 }
 
 // GetAllClients retrieves all clients, ordered by last_seen DESC
-func (s *ClientStore) GetAllClients() ([]*common.ClientMetadata, error) {
+func (s *ClientStore) GetAllClients() ([]*protocol.ClientMetadata, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -298,9 +298,9 @@ func (s *ClientStore) GetAllClients() ([]*common.ClientMetadata, error) {
 	}
 	defer rows.Close()
 
-	var clients []*common.ClientMetadata
+	var clients []*protocol.ClientMetadata
 	for rows.Next() {
-		var metadata common.ClientMetadata
+		var metadata protocol.ClientMetadata
 		var metadataJSON string
 
 		err := rows.Scan(

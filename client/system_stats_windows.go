@@ -15,7 +15,7 @@ import (
 	"github.com/shirou/gopsutil/v3/host"
 	"github.com/shirou/gopsutil/v3/mem"
 	"github.com/shirou/gopsutil/v3/process"
-	"gorat/common"
+	"gorat/pkg/protocol"
 )
 
 var (
@@ -110,8 +110,8 @@ func getOSProcessListImpl() []OSProcess {
 }
 
 // getSystemInfoImpl returns system information on Windows
-func getSystemInfoImpl() *common.SystemInfoPayload {
-	info := &common.SystemInfoPayload{}
+func getSystemInfoImpl() *protocol.SystemInfoPayload {
+	info := &protocol.SystemInfoPayload{}
 
 	// Get hostname
 	if hostname, err := os.Hostname(); err == nil {

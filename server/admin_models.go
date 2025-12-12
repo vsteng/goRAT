@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"gorat/common"
+	"gorat/pkg/protocol"
 	"gorat/pkg/clients"
 	"gorat/pkg/storage"
 
@@ -286,7 +286,7 @@ func (s *Server) ginHandlePushUpdate(c *gin.Context) {
 		}
 
 		payloadBytes, _ := json.Marshal(updatePayload)
-		msg, err := common.NewMessage(common.MsgTypeUpdateStatus, payloadBytes)
+		msg, err := protocol.NewMessage(protocol.MsgTypeUpdateStatus, payloadBytes)
 		if err != nil {
 			updatesFailed++
 			logs = append(logs, map[string]interface{}{

@@ -14,7 +14,7 @@ import (
 
 	"golang.org/x/text/encoding/simplifiedchinese"
 	"golang.org/x/text/transform"
-	"gorat/common"
+	"gorat/pkg/protocol"
 )
 
 // TerminalSession represents an active terminal session
@@ -313,12 +313,12 @@ func (tm *TerminalManager) decodeOutput(data []byte) string {
 }
 
 // HandleStartTerminal handles a start terminal message
-func HandleStartTerminal(tm *TerminalManager, payload *common.StartTerminalPayload) error {
+func HandleStartTerminal(tm *TerminalManager, payload *protocol.StartTerminalPayload) error {
 	return tm.StartSession(payload.SessionID, payload.Shell)
 }
 
 // HandleTerminalInput handles terminal input
-func HandleTerminalInput(tm *TerminalManager, payload *common.TerminalInputPayload) error {
+func HandleTerminalInput(tm *TerminalManager, payload *protocol.TerminalInputPayload) error {
 	return tm.WriteInput(payload.SessionID, payload.Data)
 }
 

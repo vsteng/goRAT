@@ -1,7 +1,7 @@
 package clients
 
 import (
-	"gorat/common"
+	"gorat/pkg/protocol"
 
 	"github.com/gorilla/websocket"
 )
@@ -13,11 +13,11 @@ type Client interface {
 	// Conn returns the WebSocket connection
 	Conn() *websocket.Conn
 	// Metadata returns client metadata
-	Metadata() *common.ClientMetadata
+	Metadata() *protocol.ClientMetadata
 	// UpdateMetadata updates client metadata
-	UpdateMetadata(fn func(*common.ClientMetadata))
+	UpdateMetadata(fn func(*protocol.ClientMetadata))
 	// SendMessage sends a message to the client
-	SendMessage(msg *common.Message) error
+	SendMessage(msg *protocol.Message) error
 	// Close closes the client connection
 	Close() error
 	// IsClosed checks if the client is closed
@@ -35,11 +35,11 @@ type Manager interface {
 	// GetAllClients returns all connected clients
 	GetAllClients() []Client
 	// UpdateClientMetadata updates metadata for a client
-	UpdateClientMetadata(clientID string, fn func(*common.ClientMetadata)) error
+	UpdateClientMetadata(clientID string, fn func(*protocol.ClientMetadata)) error
 	// BroadcastMessage sends a message to all connected clients
-	BroadcastMessage(msg *common.Message)
+	BroadcastMessage(msg *protocol.Message)
 	// SendToClient sends a message to a specific client
-	SendToClient(clientID string, msg *common.Message) error
+	SendToClient(clientID string, msg *protocol.Message) error
 	// GetClientCount returns the number of connected clients
 	GetClientCount() int
 	// IsClientIDRegistered checks if a client ID is already registered

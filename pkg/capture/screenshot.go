@@ -1,7 +1,7 @@
 //go:build !windows && !noscreenshot
 // +build !windows,!noscreenshot
 
-package client
+package capture
 
 import (
 	"bytes"
@@ -10,8 +10,9 @@ import (
 	"image/png"
 	"time"
 
-	"github.com/kbinani/screenshot"
 	"gorat/pkg/protocol"
+
+	"github.com/kbinani/screenshot"
 )
 
 // ScreenshotCapture handles screenshot functionality

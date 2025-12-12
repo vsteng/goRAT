@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"gorat/common"
+	"gorat/pkg/protocol"
 )
 
 // HandleScreenshotRequest handles screenshot requests from web UI
@@ -21,7 +21,7 @@ func (wh *WebHandler) HandleScreenshotRequest(w http.ResponseWriter, r *http.Req
 	wh.server.ClearScreenshotResult(clientID)
 
 	// Send screenshot request
-	msg, err := common.NewMessage(common.MsgTypeTakeScreenshot, common.ScreenshotPayload{})
+	msg, err := protocol.NewMessage(protocol.MsgTypeTakeScreenshot, protocol.ScreenshotPayload{})
 	if err != nil {
 		log.Printf("Failed to create screenshot message: %v", err)
 		http.Error(w, "Failed to create request", http.StatusInternalServerError)

@@ -1,7 +1,7 @@
 package clients
 
 import (
-	"gorat/common"
+	"gorat/pkg/protocol"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -66,7 +66,7 @@ func TestUpdateClientMetadataNonExistent(t *testing.T) {
 	m.Start()
 	defer m.Stop()
 
-	err := m.UpdateClientMetadata("non-existent", func(meta *common.ClientMetadata) {})
+	err := m.UpdateClientMetadata("non-existent", func(meta *protocol.ClientMetadata) {})
 	if err == nil {
 		t.Error("UpdateClientMetadata should fail for non-existent client")
 	}
@@ -77,8 +77,8 @@ func TestBroadcastMessage(t *testing.T) {
 	m.Start()
 	defer m.Stop()
 
-	payload := common.ExecuteCommandPayload{Command: "test"}
-	msg, _ := common.NewMessage(common.MsgTypeExecuteCommand, payload)
+	payload := protocol.ExecuteCommandPayload{Command: "test"}
+	msg, _ := protocol.NewMessage(protocol.MsgTypeExecuteCommand, payload)
 	m.BroadcastMessage(msg)
 
 	if len(m.GetAllClients()) != 0 {
@@ -134,12 +134,12 @@ func TestManagerConcurrency(t *testing.T) {
 				successCount.Add(1)
 			}
 
-			m.UpdateClientMetadata("non-existent", func(meta *common.ClientMetadata) {
+			m.UpdateClientMetadata("non-existent", func(meta *protocol.ClientMetadata) {
 				meta.OS = "test"
 			})
 
-			payload := common.ExecuteCommandPayload{Command: "test"}
-			msg, _ := common.NewMessage(common.MsgTypeExecuteCommand, payload)
+			payload := protocol.ExecuteCommandPayload{Command: "test"}
+			msg, _ := protocol.NewMessage(protocol.MsgTypeExecuteCommand, payload)
 			m.BroadcastMessage(msg)
 		}(i)
 	}
@@ -154,7 +154,7 @@ func TestManagerConcurrency(t *testing.T) {
 func TestClientImplMetadata(t *testing.T) {
 	client := &ClientImpl{
 		id:       "test-id",
-		metadata: &common.ClientMetadata{ID: "test-id"},
+		metadata: &protocol.ClientMetadata{ID: "test-id"},
 		closed:   false,
 	}
 
@@ -167,7 +167,7 @@ func TestClientImplMetadata(t *testing.T) {
 		t.Errorf("Expected ID 'test-id', got %s", meta.ID)
 	}
 
-	client.UpdateMetadata(func(meta *common.ClientMetadata) {
+	client.UpdateMetadata(func(meta *protocol.ClientMetadata) {
 		meta.OS = "Linux"
 		meta.Hostname = "test-host"
 	})
@@ -185,8 +185,8 @@ func TestClientImplMetadata(t *testing.T) {
 func TestClientImplClose(t *testing.T) {
 	client := &ClientImpl{
 		id:       "test-id",
-		metadata: &common.ClientMetadata{ID: "test-id"},
-		send:     make(chan *common.Message, 256),
+		metadata: &protocol.ClientMetadata{ID: "test-id"},
+		send:     make(chan *protocol.Message, 256),
 		closed:   false,
 		conn:     nil,
 	}
@@ -213,13 +213,13 @@ func TestClientImplClose(t *testing.T) {
 func TestClientImplSendMessage(t *testing.T) {
 	client := &ClientImpl{
 		id:       "test-id",
-		metadata: &common.ClientMetadata{ID: "test-id"},
-		send:     make(chan *common.Message, 256),
+		metadata: &protocol.ClientMetadata{ID: "test-id"},
+		send:     make(chan *protocol.Message, 256),
 		closed:   false,
 	}
 
-	payload := common.ExecuteCommandPayload{Command: "test"}
-	msg, _ := common.NewMessage(common.MsgTypeExecuteCommand, payload)
+	payload := protocol.ExecuteCommandPayload{Command: "test"}
+	msg, _ := protocol.NewMessage(protocol.MsgTypeExecuteCommand, payload)
 
 	err := client.SendMessage(msg)
 	if err != nil {
@@ -228,8 +228,8 @@ func TestClientImplSendMessage(t *testing.T) {
 
 	select {
 	case received := <-client.send:
-		if received.Type != common.MsgTypeExecuteCommand {
-			t.Errorf("Expected message type %v, got %v", common.MsgTypeExecuteCommand, received.Type)
+		if received.Type != protocol.MsgTypeExecuteCommand {
+			t.Errorf("Expected message type %v, got %v", protocol.MsgTypeExecuteCommand, received.Type)
 		}
 	case <-time.After(100 * time.Millisecond):
 		t.Error("Message not received")
@@ -293,7 +293,7 @@ func TestManagerIsRunningStateTransitions(t *testing.T) {
 func TestClientImplConcurrentUpdates(t *testing.T) {
 	client := &ClientImpl{
 		id:       "test-id",
-		metadata: &common.ClientMetadata{ID: "test-id"},
+		metadata: &protocol.ClientMetadata{ID: "test-id"},
 		closed:   false,
 	}
 
@@ -302,7 +302,7 @@ func TestClientImplConcurrentUpdates(t *testing.T) {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
-			client.UpdateMetadata(func(meta *common.ClientMetadata) {
+			client.UpdateMetadata(func(meta *protocol.ClientMetadata) {
 				meta.Hostname = "host-" + string(rune('0'+idx))
 			})
 		}(i)
@@ -332,8 +332,8 @@ func TestBroadcastToEmptyManager(t *testing.T) {
 	m.Start()
 	defer m.Stop()
 
-	payload := common.ExecuteCommandPayload{Command: "ls"}
-	msg, _ := common.NewMessage(common.MsgTypeExecuteCommand, payload)
+	payload := protocol.ExecuteCommandPayload{Command: "ls"}
+	msg, _ := protocol.NewMessage(protocol.MsgTypeExecuteCommand, payload)
 
 	m.BroadcastMessage(msg)
 	m.BroadcastMessage(msg)

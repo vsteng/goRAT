@@ -13,7 +13,7 @@ import (
 	"github.com/shirou/gopsutil/v3/host"
 	"github.com/shirou/gopsutil/v3/mem"
 	"github.com/shirou/gopsutil/v3/process"
-	"gorat/common"
+	"gorat/pkg/protocol"
 )
 
 // getSafeSystemStats returns system stats safely (Unix/Linux/Mac)
@@ -75,8 +75,8 @@ func getOSProcessListImpl() []OSProcess {
 }
 
 // getSystemInfoImpl returns system information on Unix/Linux/Mac
-func getSystemInfoImpl() *common.SystemInfoPayload {
-	info := &common.SystemInfoPayload{}
+func getSystemInfoImpl() *protocol.SystemInfoPayload {
+	info := &protocol.SystemInfoPayload{}
 
 	// Get hostname
 	hostname, _ := os.Hostname()

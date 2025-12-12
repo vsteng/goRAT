@@ -3,7 +3,7 @@ package auth
 import (
 	"log"
 
-	"gorat/common"
+	"gorat/pkg/protocol"
 )
 
 // AuthenticatorImpl implements Authenticator interface
@@ -19,7 +19,7 @@ func NewAuthenticator(serverToken string) Authenticator {
 }
 
 // Authenticate authenticates a client with a token
-func (a *AuthenticatorImpl) Authenticate(payload *common.AuthPayload) (bool, string) {
+func (a *AuthenticatorImpl) Authenticate(payload *protocol.AuthPayload) (bool, string) {
 	// Validate token
 	if payload.Token != a.serverToken {
 		log.Printf("Authentication failed for client %s: invalid token", payload.ClientID)
@@ -27,7 +27,7 @@ func (a *AuthenticatorImpl) Authenticate(payload *common.AuthPayload) (bool, str
 	}
 
 	// Generate new token for this session
-	token := common.GenerateToken(payload.ClientID)
+	token := protocol.GenerateToken(payload.ClientID)
 	log.Printf("Client %s authenticated successfully", payload.ClientID)
 
 	return true, token

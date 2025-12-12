@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"runtime"
 
-	"gorat/common"
+	"gorat/pkg/protocol"
 )
 
 // Updater handles client self-update
@@ -30,8 +30,8 @@ func NewUpdater(version string) *Updater {
 }
 
 // Update performs the update process
-func (u *Updater) Update(payload *common.UpdatePayload) *common.UpdateStatusPayload {
-	result := &common.UpdateStatusPayload{
+func (u *Updater) Update(payload *protocol.UpdatePayload) *protocol.UpdateStatusPayload {
+	result := &protocol.UpdateStatusPayload{
 		Status:  "downloading",
 		Message: fmt.Sprintf("Downloading version %s", payload.Version),
 	}

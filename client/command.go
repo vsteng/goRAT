@@ -9,7 +9,7 @@ import (
 	"runtime"
 	"time"
 
-	"gorat/common"
+	"gorat/pkg/protocol"
 
 	"golang.org/x/text/encoding/simplifiedchinese"
 	"golang.org/x/text/transform"
@@ -24,10 +24,10 @@ func NewCommandExecutor() *CommandExecutor {
 }
 
 // Execute executes a command and returns the result
-func (e *CommandExecutor) Execute(payload *common.ExecuteCommandPayload) *common.CommandResultPayload {
+func (e *CommandExecutor) Execute(payload *protocol.ExecuteCommandPayload) *protocol.CommandResultPayload {
 	startTime := time.Now()
 
-	result := &common.CommandResultPayload{
+	result := &protocol.CommandResultPayload{
 		Success:  false,
 		ExitCode: -1,
 	}

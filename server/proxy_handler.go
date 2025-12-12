@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"gorat/common"
+	"gorat/pkg/protocol"
 	"gorat/pkg/clients"
 	"gorat/pkg/storage"
 )
@@ -454,10 +454,10 @@ func (pm *ProxyManager) sendWebSocketMessage(client clients.Client, msg interfac
 		return fmt.Errorf("client is invalid")
 	}
 
-	// Convert msg to common.Message for sending through the client interface
-	// If it's already a common.Message, use it directly
-	var cmsg *common.Message
-	if m, ok := msg.(*common.Message); ok {
+	// Convert msg to protocol.Message for sending through the client interface
+	// If it's already a protocol.Message, use it directly
+	var cmsg *protocol.Message
+	if m, ok := msg.(*protocol.Message); ok {
 		cmsg = m
 	} else {
 		// For other message types, we need to serialize and deserialize
@@ -1285,10 +1285,10 @@ func (s *Server) handleClientLookup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Return metadata using the interface
-	var meta *common.ClientMetadata
+	var meta *protocol.ClientMetadata
 	if clientMeta := client.Metadata(); clientMeta == nil {
 		// Fallback: return minimal metadata if nil
-		meta = &common.ClientMetadata{
+		meta = &protocol.ClientMetadata{
 			ID:     client.ID(),
 			Status: "unknown",
 		}
@@ -1406,7 +1406,7 @@ func (s *Server) HandleUpdateClientAlias(w http.ResponseWriter, r *http.Request)
 	// Update in memory using the interface
 	client, exists := s.manager.GetClient(clientID)
 	if exists && client != nil {
-		client.UpdateMetadata(func(m *common.ClientMetadata) {
+		client.UpdateMetadata(func(m *protocol.ClientMetadata) {
 			if m != nil {
 				m.Alias = alias
 			}
@@ -1490,7 +1490,7 @@ func (s *Server) HandleProcessesAPI(w http.ResponseWriter, r *http.Request) {
 	s.ClearProcessListResult(clientID)
 
 	// Send process list request to client
-	msg, err := common.NewMessage(common.MsgTypeListProcesses, nil)
+	msg, err := protocol.NewMessage(protocol.MsgTypeListProcesses, nil)
 	if err != nil {
 		http.Error(w, "Failed to create message", http.StatusInternalServerError)
 		return
@@ -1521,7 +1521,7 @@ func (s *Server) HandleProcessesAPI(w http.ResponseWriter, r *http.Request) {
 				// Ensure Processes is not nil
 				processes := result.Processes
 				if processes == nil {
-					processes = []common.Process{}
+					processes = []protocol.Process{}
 				}
 
 				if err := json.NewEncoder(w).Encode(processes); err != nil {
@@ -1553,7 +1553,7 @@ func (s *Server) HandleSystemInfoAPI(w http.ResponseWriter, r *http.Request) {
 	s.ClearSystemInfoResult(clientID)
 
 	// Send system info request to client
-	msg, err := common.NewMessage(common.MsgTypeGetSystemInfo, nil)
+	msg, err := protocol.NewMessage(protocol.MsgTypeGetSystemInfo, nil)
 	if err != nil {
 		http.Error(w, "Failed to create message", http.StatusInternalServerError)
 		return

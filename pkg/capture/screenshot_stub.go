@@ -1,7 +1,7 @@
-//go:build noscreenshot
-// +build noscreenshot
+//go:build windows || noscreenshot
+// +build windows noscreenshot
 
-package client
+package capture
 
 import (
 	"time"
@@ -17,36 +17,28 @@ func NewScreenshotCapture() *ScreenshotCapture {
 	return &ScreenshotCapture{}
 }
 
-// Capture takes a screenshot and returns the data (stub)
+// Capture takes a screenshot and returns the data (stub implementation)
 func (sc *ScreenshotCapture) Capture(payload *protocol.ScreenshotPayload) *protocol.ScreenshotDataPayload {
 	return &protocol.ScreenshotDataPayload{
 		Timestamp: time.Now(),
-		Error:     "Screenshot functionality not available (built with noscreenshot tag)",
+		Error:     "Screenshot not supported on this platform",
 	}
 }
 
-// CaptureAllDisplays captures screenshots from all displays (stub)
+// CaptureAllDisplays captures screenshots from all displays (stub implementation)
 func (sc *ScreenshotCapture) CaptureAllDisplays(payload *protocol.ScreenshotPayload) []*protocol.ScreenshotDataPayload {
 	return []*protocol.ScreenshotDataPayload{
 		{
 			Timestamp: time.Now(),
-			Error:     "Screenshot functionality not available (built with noscreenshot tag)",
+			Error:     "Screenshot not supported on this platform",
 		},
 	}
 }
 
-// captureDisplay captures a specific display (stub)
-func (sc *ScreenshotCapture) captureDisplay(displayIndex int, payload *protocol.ScreenshotPayload) *protocol.ScreenshotDataPayload {
-	return &protocol.ScreenshotDataPayload{
-		Timestamp: time.Now(),
-		Error:     "Screenshot functionality not available (built with noscreenshot tag)",
-	}
-}
-
-// CaptureRegion captures a specific region of the screen (stub)
+// CaptureRegion captures a specific region of the screen (stub implementation)
 func (sc *ScreenshotCapture) CaptureRegion(x, y, width, height int, payload *protocol.ScreenshotPayload) *protocol.ScreenshotDataPayload {
 	return &protocol.ScreenshotDataPayload{
 		Timestamp: time.Now(),
-		Error:     "Screenshot functionality not available (built with noscreenshot tag)",
+		Error:     "Screenshot not supported on this platform",
 	}
 }

@@ -3,15 +3,15 @@ package storage
 import (
 	"time"
 
-	"gorat/common"
+	"gorat/pkg/protocol"
 )
 
 // Store defines the interface for persistent storage operations
 type Store interface {
 	// Client operations
-	SaveClient(metadata *common.ClientMetadata) error
-	GetClient(id string) (*common.ClientMetadata, error)
-	GetAllClients() ([]*common.ClientMetadata, error)
+	SaveClient(metadata *protocol.ClientMetadata) error
+	GetClient(id string) (*protocol.ClientMetadata, error)
+	GetAllClients() ([]*protocol.ClientMetadata, error)
 	MarkOffline(timeout time.Duration) error
 	DeleteClient(id string) error
 	UpdateClientAlias(clientID, alias string) error

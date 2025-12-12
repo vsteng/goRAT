@@ -5,19 +5,19 @@ import (
 "log"
 "sync"
 
-"gorat/common"
+"gorat/pkg/protocol"
 )
 
 // DispatcherImpl implements the Dispatcher interface
 type DispatcherImpl struct {
-	handlers map[common.MessageType]Handler
+	handlers map[protocol.MessageType]Handler
 	mu       sync.RWMutex
 }
 
 // NewDispatcher creates a new message dispatcher
 func NewDispatcher() *DispatcherImpl {
 	return &DispatcherImpl{
-		handlers: make(map[common.MessageType]Handler),
+		handlers: make(map[protocol.MessageType]Handler),
 	}
 }
 
@@ -41,7 +41,7 @@ func (d *DispatcherImpl) Register(handler Handler) error {
 }
 
 // Dispatch dispatches a message to the appropriate handler
-func (d *DispatcherImpl) Dispatch(clientID string, msg *common.Message) (interface{}, error) {
+func (d *DispatcherImpl) Dispatch(clientID string, msg *protocol.Message) (interface{}, error) {
 	d.mu.RLock()
 	handler, exists := d.handlers[msg.Type]
 	d.mu.RUnlock()
@@ -54,7 +54,7 @@ func (d *DispatcherImpl) Dispatch(clientID string, msg *common.Message) (interfa
 }
 
 // HasHandler checks if a handler exists for the message type
-func (d *DispatcherImpl) HasHandler(msgType common.MessageType) bool {
+func (d *DispatcherImpl) HasHandler(msgType protocol.MessageType) bool {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
 	_, exists := d.handlers[msgType]
