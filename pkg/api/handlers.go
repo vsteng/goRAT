@@ -74,7 +74,7 @@ func (h *Handler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	// Check if already logged in
 	if cookie, err := r.Cookie("session_id"); err == nil {
 		if _, exists := h.sessionMgr.GetSession(cookie.Value); exists {
-			http.Redirect(w, r, "/dashboard", http.StatusSeeOther)
+			http.Redirect(w, r, "/dashboard-new", http.StatusSeeOther)
 			return
 		}
 	}
@@ -87,10 +87,8 @@ func (h *Handler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 
 // HandleDashboard serves the dashboard page
 func (h *Handler) HandleDashboard(w http.ResponseWriter, r *http.Request) {
-	if err := h.templates.ExecuteTemplate(w, "dashboard.html", nil); err != nil {
-		log.Printf("Error rendering dashboard template: %v", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-	}
+	// Old dashboard is deprecated; redirect to the new dashboard
+	http.Redirect(w, r, "/dashboard-new", http.StatusSeeOther)
 }
 
 // HandleLogout handles logout requests
@@ -226,7 +224,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 func (h *Handler) GinHandleLogin(c *gin.Context) {
 	if cookie, err := c.Cookie("session_id"); err == nil {
 		if _, exists := h.sessionMgr.GetSession(cookie); exists {
-			c.Redirect(http.StatusSeeOther, "/dashboard")
+			c.Redirect(http.StatusSeeOther, "/dashboard-new")
 			return
 		}
 	}
@@ -238,9 +236,8 @@ func (h *Handler) GinHandleLogin(c *gin.Context) {
 
 // GinHandleDashboard handles dashboard with Gin
 func (h *Handler) GinHandleDashboard(c *gin.Context) {
-	if err := h.templates.ExecuteTemplate(c.Writer, "dashboard.html", nil); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-	}
+	// Old dashboard is deprecated; redirect to the new dashboard
+	c.Redirect(http.StatusSeeOther, "/dashboard-new")
 }
 
 // GinHandleLoginAPI handles API login with Gin
@@ -327,5 +324,12 @@ func (h *Handler) RegisterGinRoutes(router *gin.Engine) {
 	router.GET("/api/health", h.GinHandleHealthAPI)
 	router.GET("/", h.GinHandleDashboard)
 	router.GET("/dashboard", h.GinHandleDashboard)
+	// New dashboard route renders the updated template
+	router.GET("/dashboard-new", func(c *gin.Context) {
+		if err := h.templates.ExecuteTemplate(c.Writer, "dashboard-new.html", nil); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+	})
 	router.GET("/api/clients", h.GinHandleClientsAPI)
 }
