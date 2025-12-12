@@ -1,0 +1,149 @@
+/* Terminal Page Specific Styles */
+
+body {
+    background: #1e1e1e;
+    color: #d4d4d4;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.header {
+    background: #2d2d30;
+    padding: 10px 20px;
+    border-bottom: 1px solid #3e3e42;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.header h1 {
+    font-size: 14px;
+    color: #cccccc;
+}
+
+.status {
+    font-size: 12px;
+    padding: 4px 10px;
+    border-radius: 3px;
+}
+
+.status.connected {
+    background: #14532d;
+    color: #4ade80;
+}
+
+.status.disconnected {
+    background: #7f1d1d;
+    color: #f87171;
+}
+
+#terminal {
+    flex: 1;
+    padding: 20px;
+    overflow-y: auto;
+    font-size: 14px;
+    font-family: 'Courier New', monospace;
+    line-height: 1.5;
+}
+
+.terminal-line {
+    margin-bottom: 5px;
+    word-wrap: break-word;
+}
+
+.terminal-line.prompt::before {
+    content: '$ ';
+    color: #4ade80;
+    font-weight: bold;
+}
+
+.terminal-line.error {
+    color: #f87171;
+}
+
+.terminal-line.success {
+    color: #4ade80;
+}
+
+.terminal-line.warning {
+    color: #facc15;
+}
+
+.terminal-input-wrapper {
+    background: #2d2d30;
+    padding: 15px 20px;
+    border-top: 1px solid #3e3e42;
+    display: flex;
+    gap: 10px;
+}
+
+.terminal-input-wrapper input {
+    flex: 1;
+    background: #1e1e1e;
+    color: #d4d4d4;
+    border: 1px solid #3e3e42;
+    padding: 8px 12px;
+    border-radius: 3px;
+    font-family: 'Courier New', monospace;
+    font-size: 13px;
+}
+
+.terminal-input-wrapper input:focus {
+    border-color: #007acc;
+    box-shadow: 0 0 0 2px rgba(0, 122, 204, 0.2);
+}
+
+.terminal-input-wrapper button {
+    padding: 8px 16px;
+    background: #007acc;
+    color: white;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.terminal-input-wrapper button:hover {
+    background: #005a9e;
+}
+
+/* VS Code-like scrollbar */
+::-webkit-scrollbar {
+    width: 12px;
+}
+
+::-webkit-scrollbar-track {
+    background: #1e1e1e;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #464647;
+    border-radius: 6px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #5a5a5a;
+}
+
+@media (max-width: 768px) {
+    .header {
+        flex-direction: column;
+        gap: 10px;
+        padding: 15px 10px;
+    }
+
+    #terminal {
+        padding: 15px 10px;
+        font-size: 12px;
+    }
+
+    .terminal-input-wrapper {
+        flex-direction: column;
+    }
+
+    .terminal-input-wrapper button {
+        width: 100%;
+    }
+}
