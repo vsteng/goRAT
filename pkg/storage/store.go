@@ -34,6 +34,7 @@ type Store interface {
 	UserExists(username string) (bool, error)
 	AdminExists() (bool, error)
 	UpdateWebUser(username string, fullName, passwordHash *string) error // partial update helper
+	UpdateWebUserStatus(username, status string) error                   // update user status (active/inactive)
 
 	// Server settings operations
 	GetServerSetting(key string) (string, error)

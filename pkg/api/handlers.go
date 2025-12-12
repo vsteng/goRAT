@@ -12,6 +12,8 @@ import (
 
 	"gorat/pkg/auth"
 	"gorat/pkg/clients"
+	"gorat/pkg/health"
+	"gorat/pkg/middleware"
 	"gorat/pkg/storage"
 
 	"github.com/gin-gonic/gin"
@@ -25,6 +27,7 @@ type Handler struct {
 	username   string
 	password   string
 	templates  *template.Template
+	healthMon  *health.Monitor
 }
 
 // NewHandler creates a new API handler
@@ -43,6 +46,7 @@ func NewHandler(sessionMgr auth.SessionManager, clientMgr clients.Manager, store
 		username:   username,
 		password:   password,
 		templates:  tmpl,
+		healthMon:  health.NewMonitor(),
 	}
 
 	// Initialize default user from config if store is available and no admin user exists yet
@@ -58,27 +62,6 @@ func NewHandler(sessionMgr auth.SessionManager, clientMgr clients.Manager, store
 				log.Printf("WARNING: Failed to create default web user: %v", err)
 			} else {
 				log.Printf("✅ Created default web user: %s (role: admin)", username)
-			}
-
-			// Create sample users for demonstration (only when creating fresh database)
-			sampleUsers := []struct {
-				username, password, fullName, role string
-			}{
-				{"john.doe", "password123", "John Doe", "operator"},
-				{"jane.smith", "secure456", "Jane Smith", "admin"},
-				{"mike.wilson", "pass789", "Mike Wilson", "viewer"},
-				{"sarah.jones", "mypass321", "Sarah Jones", "operator"},
-				{"bob.brown", "demo123", "Bob Brown", "viewer"},
-			}
-
-			for _, user := range sampleUsers {
-				hash := sha256.Sum256([]byte(user.password))
-				userPasswordHash := hex.EncodeToString(hash[:])
-				if err := store.CreateWebUser(user.username, userPasswordHash, user.fullName, user.role); err != nil {
-					log.Printf("WARNING: Failed to create sample user %s: %v", user.username, err)
-				} else {
-					log.Printf("✅ Created sample user: %s (%s) - role: %s", user.username, user.fullName, user.role)
-				}
 			}
 		}
 	}
@@ -117,15 +100,8 @@ func (h *Handler) HandleLogout(w http.ResponseWriter, r *http.Request) {
 		h.sessionMgr.DeleteSession(cookie.Value)
 	}
 
-	// Clear cookie
-	http.SetCookie(w, &http.Cookie{
-		Name:     "session_id",
-		Value:    "",
-		Path:     "/",
-		HttpOnly: true,
-		Secure:   false,
-		MaxAge:   -1,
-	})
+	// Clear cookie with secure settings
+	http.SetCookie(w, middleware.ExpiredCookie("session_id"))
 
 	http.Redirect(w, r, "/login", http.StatusSeeOther)
 }
@@ -168,15 +144,8 @@ func (h *Handler) HandleLoginAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Set cookie
-	http.SetCookie(w, &http.Cookie{
-		Name:     "session_id",
-		Value:    session.ID,
-		Path:     "/",
-		HttpOnly: true,
-		Secure:   false,
-		MaxAge:   int(time.Hour.Seconds()),
-	})
+	// Set cookie with secure settings
+	http.SetCookie(w, middleware.SessionCookie(session.ID))
 
 	RespondSuccess(w, gin.H{"session_id": session.ID}, "Login successful")
 }
@@ -216,11 +185,33 @@ func (h *Handler) HandleClientsAPI(w http.ResponseWriter, r *http.Request) {
 	RespondJSON(w, http.StatusOK, response)
 }
 
+// HandleHealthAPI returns server health status
+func (h *Handler) HandleHealthAPI(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		RespondError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	activeClients := len(h.clientMgr.GetAllClients())
+	healthStatus := h.healthMon.GetHealth(activeClients)
+
+	// Set status code based on health
+	statusCode := http.StatusOK
+	if healthStatus.Status == health.StatusUnhealthy {
+		statusCode = http.StatusServiceUnavailable
+	} else if healthStatus.Status == health.StatusDegraded {
+		statusCode = http.StatusOK // Still OK but marked as degraded
+	}
+
+	RespondJSON(w, statusCode, healthStatus)
+}
+
 // RegisterRoutes registers all HTTP routes
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
-	// Public routes
+	// Public routes (no auth required)
 	mux.HandleFunc("/login", h.HandleLogin)
 	mux.HandleFunc("/api/login", h.HandleLoginAPI)
+	mux.HandleFunc("/api/health", h.HandleHealthAPI)
 
 	// Protected routes
 	mux.HandleFunc("/", h.HandleDashboard)
@@ -315,10 +306,25 @@ func (h *Handler) GinHandleClientsAPI(c *gin.Context) {
 	GinRespondJSON(c, http.StatusOK, response)
 }
 
+// GinHandleHealthAPI returns server health with Gin
+func (h *Handler) GinHandleHealthAPI(c *gin.Context) {
+	activeClients := len(h.clientMgr.GetAllClients())
+	healthStatus := h.healthMon.GetHealth(activeClients)
+
+	// Set status code based on health
+	statusCode := http.StatusOK
+	if healthStatus.Status == health.StatusUnhealthy {
+		statusCode = http.StatusServiceUnavailable
+	}
+
+	c.JSON(statusCode, healthStatus)
+}
+
 // RegisterGinRoutes registers Gin routes
 func (h *Handler) RegisterGinRoutes(router *gin.Engine) {
 	router.GET("/login", h.GinHandleLogin)
 	router.POST("/api/login", h.GinHandleLoginAPI)
+	router.GET("/api/health", h.GinHandleHealthAPI)
 	router.GET("/", h.GinHandleDashboard)
 	router.GET("/dashboard", h.GinHandleDashboard)
 	router.GET("/api/clients", h.GinHandleClientsAPI)

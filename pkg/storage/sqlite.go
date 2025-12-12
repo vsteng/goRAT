@@ -794,6 +794,20 @@ func (s *SQLiteStore) UpdateWebUser(username string, fullName, passwordHash *str
 	return err
 }
 
+// UpdateWebUserStatus updates the status (active/inactive) for a web user
+func (s *SQLiteStore) UpdateWebUserStatus(username, status string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if status != "active" && status != "inactive" {
+		return nil // Invalid status, silently ignore
+	}
+
+	query := "UPDATE web_users SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE username = ?"
+	_, err := s.db.Exec(query, status, username)
+	return err
+}
+
 // Close closes the database connection
 func (s *SQLiteStore) Close() error {
 	return s.db.Close()

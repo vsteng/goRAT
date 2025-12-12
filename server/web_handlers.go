@@ -13,6 +13,7 @@ import (
 
 	"gorat/pkg/auth"
 	"gorat/pkg/clients"
+	"gorat/pkg/health"
 	"gorat/pkg/protocol"
 	"gorat/pkg/storage"
 
@@ -33,6 +34,7 @@ type WebHandler struct {
 	config     *WebConfig
 	templates  *template.Template
 	server     *Server // Reference to main server for result access
+	healthMon  *health.Monitor
 }
 
 // NewWebHandler creates a new web handler
@@ -43,6 +45,7 @@ func NewWebHandler(sessionMgr auth.SessionManager, clientMgr clients.Manager, st
 		store:      store,
 		config:     config,
 		templates:  nil, // Will be set if templates load successfully
+		healthMon:  health.NewMonitor(),
 	}
 
 	// Try to load templates from disk (optional)
@@ -682,12 +685,48 @@ func (wh *WebHandler) HandleGlobalUpdate(w http.ResponseWriter, r *http.Request)
 	})
 }
 
+// HandleHealthAPI returns server health status
+func (wh *WebHandler) HandleHealthAPI(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	activeClients := len(wh.clientMgr.GetAllClients())
+	healthStatus := wh.healthMon.GetHealth(activeClients)
+
+	// Set status code based on health
+	statusCode := http.StatusOK
+	if healthStatus.Status == health.StatusUnhealthy {
+		statusCode = http.StatusServiceUnavailable
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+	json.NewEncoder(w).Encode(healthStatus)
+}
+
+// ginHandleHealthAPI handles health endpoint with Gin
+func (wh *WebHandler) ginHandleHealthAPI(c *gin.Context) {
+	activeClients := len(wh.clientMgr.GetAllClients())
+	healthStatus := wh.healthMon.GetHealth(activeClients)
+
+	// Set status code based on health
+	statusCode := http.StatusOK
+	if healthStatus.Status == health.StatusUnhealthy {
+		statusCode = http.StatusServiceUnavailable
+	}
+
+	c.JSON(statusCode, healthStatus)
+}
+
 // RegisterWebRoutes registers all web UI routes
 func (wh *WebHandler) RegisterWebRoutes(mux *http.ServeMux) {
-	// Public routes
+	// Public routes (no auth required)
 	mux.HandleFunc("/login", wh.HandleLogin)
 	mux.HandleFunc("/api/login", wh.HandleLoginAPI)
 	mux.HandleFunc("/api/logout", wh.HandleLogout)
+	mux.HandleFunc("/api/health", wh.HandleHealthAPI)
 
 	// User management API routes
 	mux.HandleFunc("/api/users", wh.requireAuth(wh.HandleUsersAPI))
@@ -840,8 +879,24 @@ func (wh *WebHandler) HandleUserAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// Prepare updates - note: Status and Role updates would require additional interface methods
-		// For now, we only support FullName and Password updates via the public interface
+		// Handle status update (active/inactive)
+		if req.Status != "" {
+			if req.Status != "active" && req.Status != "inactive" {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusBadRequest)
+				json.NewEncoder(w).Encode(map[string]string{"error": "Status must be 'active' or 'inactive'"})
+				return
+			}
+			if err := wh.store.UpdateWebUserStatus(username, req.Status); err != nil {
+				log.Printf("Error updating user status: %v", err)
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusInternalServerError)
+				json.NewEncoder(w).Encode(map[string]string{"error": "Failed to update user status"})
+				return
+			}
+		}
+
+		// Prepare updates for password and full name
 		var passwordHash *string
 		var fullName *string
 
@@ -864,21 +919,15 @@ func (wh *WebHandler) HandleUserAPI(w http.ResponseWriter, r *http.Request) {
 			fullName = &req.FullName
 		}
 
-		// If nothing to update, return error
-		if passwordHash == nil && fullName == nil && req.Status == "" && req.Role == "" {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(map[string]string{"error": "No fields to update"})
-			return
-		}
-
-		// Update in database using storage interface
-		if err := wh.store.UpdateWebUser(username, fullName, passwordHash); err != nil {
-			log.Printf("Error updating user: %v", err)
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(map[string]string{"error": "Failed to update user"})
-			return
+		// Update other fields if provided
+		if passwordHash != nil || fullName != nil {
+			if err := wh.store.UpdateWebUser(username, fullName, passwordHash); err != nil {
+				log.Printf("Error updating user: %v", err)
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusInternalServerError)
+				json.NewEncoder(w).Encode(map[string]string{"error": "Failed to update user"})
+				return
+			}
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -911,10 +960,11 @@ func (wh *WebHandler) RegisterGinRoutes(router *gin.Engine) {
 	router.Static("/static", "./web/static")
 	router.Static("/assets", "./web/assets")
 
-	// Public routes
+	// Public routes (no auth required)
 	router.GET("/login", wh.ginHandleLogin)
 	router.POST("/api/login", wh.ginHandleLoginAPI)
 	router.POST("/api/logout", wh.ginHandleLogout)
+	router.GET("/api/health", wh.ginHandleHealthAPI)
 
 	// User management API routes
 	router.GET("/api/users", wh.ginRequireAuth(wh.ginHandleUsersAPI))
