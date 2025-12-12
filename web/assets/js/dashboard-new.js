@@ -105,7 +105,8 @@ function renderClientList() {
 
     let html = pageClients.map(client => `
         <li class="client-item ${selectedClient?.id === client.id ? 'active' : ''}" 
-            onclick="selectClient(event, ${JSON.stringify(client).replace(/"/g, '&quot;')})">
+            data-client-id="${escapeHtml(client.id)}" 
+            data-client-json="${JSON.stringify(client).replace(/"/g, '&quot;')}">
             <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;">
                 <div style="flex: 1;">
                     <div class="client-name">${escapeHtml(client.alias || client.hostname || client.id)}</div>
@@ -120,14 +121,154 @@ function renderClientList() {
     if (totalPages > 1) {
         html += `
             <div style="display: flex; justify-content: center; gap: 8px; margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border);">
-                <button onclick="prevPage()" class="btn btn-secondary" style="padding: 6px 10px; font-size: 12px;" ${currentPage === 1 ? 'disabled' : ''}>← Prev</button>
+                <button class="btn btn-secondary pagination-prev" data-action="prevPage" style="padding: 6px 10px; font-size: 12px;" ${currentPage === 1 ? 'disabled' : ''}>← Prev</button>
                 <div style="display: flex; align-items: center; font-size: 12px; color: var(--text-light);">${currentPage} / ${totalPages}</div>
-                <button onclick="nextPage()" class="btn btn-secondary" style="padding: 6px 10px; font-size: 12px;" ${currentPage === totalPages ? 'disabled' : ''}>Next →</button>
+                <button class="btn btn-secondary pagination-next" data-action="nextPage" style="padding: 6px 10px; font-size: 12px;" ${currentPage === totalPages ? 'disabled' : ''}>Next →</button>
             </div>
         `;
     }
 
     list.innerHTML = html;
+    
+    // Wire up event listeners for dynamically generated client items
+    setupClientListListeners();
+}
+
+function setupClientListListeners() {
+    const clientItems = document.querySelectorAll('.client-item[data-client-json]');
+    clientItems.forEach(item => {
+        item.addEventListener('click', (e) => {
+            e.preventDefault();
+            const clientJson = item.getAttribute('data-client-json');
+            try {
+                const client = JSON.parse(clientJson.replace(/&quot;/g, '"'));
+                selectClient(e, client);
+            } catch (err) {
+                console.error('Failed to parse client data:', err);
+            }
+        });
+    });
+    
+    // Wire up pagination buttons
+    const prevBtn = document.querySelector('.pagination-prev[data-action="prevPage"]');
+    const nextBtn = document.querySelector('.pagination-next[data-action="nextPage"]');
+    
+    if (prevBtn) {
+        prevBtn.addEventListener('click', prevPage);
+    }
+    if (nextBtn) {
+        nextBtn.addEventListener('click', nextPage);
+    }
+    
+    // Wire up client detail action buttons
+    setupClientActionButtons();
+    setupProxyButtons();
+    setupUserButtons();
+}
+
+function setupClientActionButtons() {
+    // These buttons are dynamically generated in showClientInColumns()
+    const clientDetailsSection = document.getElementById('clientRight');
+    if (!clientDetailsSection) return;
+    
+    const buttons = clientDetailsSection.querySelectorAll('button[data-action]');
+    buttons.forEach(btn => {
+        const action = btn.getAttribute('data-action');
+        btn.removeEventListener('click', null); // Clear any existing listeners
+        
+        if (action === 'openClientPanel') {
+            btn.addEventListener('click', openClientPanel);
+        } else if (action === 'sendCommand') {
+            btn.addEventListener('click', sendCommand);
+        } else if (action === 'viewStats') {
+            btn.addEventListener('click', viewStats);
+        } else if (action === 'browseLogs') {
+            btn.addEventListener('click', browseLogs);
+        } else if (action === 'confirmRemove') {
+            btn.addEventListener('click', confirmRemove);
+        } else if (action === 'confirmUninstall') {
+            btn.addEventListener('click', confirmUninstall);
+        } else if (action === 'saveAlias') {
+            btn.addEventListener('click', saveAlias);
+        }
+    });
+    
+    // Wire up proxy form add button
+    const proxyMiddle = document.getElementById('proxyMiddle');
+    if (proxyMiddle) {
+        const addProxyBtn = proxyMiddle.querySelector('button[data-action="addProxy"]');
+        if (addProxyBtn) {
+            addProxyBtn.addEventListener('click', addProxy);
+        }
+    }
+}
+
+function setupProxyButtons() {
+    // Wire up proxy edit/delete buttons in proxy list
+    const proxyList = document.getElementById('proxyList');
+    if (!proxyList) return;
+    
+    const editButtons = proxyList.querySelectorAll('button[data-action="editProxy"]');
+    editButtons.forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const proxyId = btn.getAttribute('data-proxy-id');
+            const remoteHost = btn.getAttribute('data-remote-host');
+            const remotePort = btn.getAttribute('data-remote-port');
+            const localPort = btn.getAttribute('data-local-port');
+            const protocol = btn.getAttribute('data-protocol');
+            editProxy(proxyId, remoteHost, parseInt(remotePort), parseInt(localPort), protocol);
+        });
+    });
+    
+    const deleteButtons = proxyList.querySelectorAll('button[data-action="deleteProxy"]');
+    deleteButtons.forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const proxyId = btn.getAttribute('data-proxy-id');
+            deleteProxy(proxyId);
+        });
+    });
+    
+    // Wire up close button in all proxies list
+    const closeButtons = document.querySelectorAll('button[data-action="deleteProxyFromAll"]');
+    closeButtons.forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const proxyId = btn.getAttribute('data-proxy-id');
+            deleteProxyFromAll(proxyId);
+        });
+    });
+}
+
+function setupUserButtons() {
+    // Wire up user management buttons
+    const usersList = document.querySelector('table');
+    if (!usersList) return;
+    
+    const editUserButtons = usersList.querySelectorAll('button[data-action="showEditUserForm"]');
+    editUserButtons.forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const username = btn.getAttribute('data-username');
+            const fullname = btn.getAttribute('data-fullname');
+            const role = btn.getAttribute('data-role');
+            showEditUserForm(username, fullname, role);
+        });
+    });
+    
+    const toggleStatusButtons = usersList.querySelectorAll('button[data-action="toggleUserStatus"]');
+    toggleStatusButtons.forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const username = btn.getAttribute('data-username');
+            const status = btn.getAttribute('data-status');
+            toggleUserStatus(username, status);
+        });
+    });
+    
+    const deleteUserButtons = usersList.querySelectorAll('button[data-action="deleteUser"]');
+    deleteUserButtons.forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const username = btn.getAttribute('data-username');
+            deleteUser(username);
+        });
+    });
 }
 
 function nextPage() {
@@ -215,7 +356,7 @@ function showClientInColumns(client) {
                     <option value="HTTPS">HTTPS</option>
                 </select>
             </div>
-            <button onclick="addProxy()">➕ Add Proxy Connection</button>
+            <button class="btn-add-proxy" data-action="addProxy">➕ Add Proxy Connection</button>
         </div>
     `;
     
@@ -232,7 +373,7 @@ function showClientInColumns(client) {
                 <div class="details-label">Alias</div>
                 <div style="display: flex; gap: 8px; align-items: center;">
                     <input type="text" id="aliasInput" placeholder="Enter alias..." value="${escapeHtml(client.alias || '')}" style="flex: 1; padding: 6px 8px; border: 1px solid var(--border); border-radius: 4px;">
-                    <button onclick="saveAlias()" style="padding: 6px 12px; background: var(--primary); color: white; border: none; border-radius: 4px; cursor: pointer;">✓</button>
+                    <button class="btn-save-alias" data-action="saveAlias" style="padding: 6px 12px; background: var(--primary); color: white; border: none; border-radius: 4px; cursor: pointer;">✓</button>
                 </div>
             </div>
             <div class="details-row">
@@ -255,12 +396,12 @@ function showClientInColumns(client) {
         
         <h3 style="margin-top: 25px;">⚡ Control Panel</h3>
         <div class="details-actions">
-            <button class="btn-action-primary" onclick="openClientPanel()">🖥️ Control</button>
-            <button class="btn-action-primary" onclick="sendCommand()">⌨️ Terminal</button>
-            <button class="btn-action-secondary" onclick="viewStats()">📊 Stats</button>
-            <button class="btn-action-secondary" onclick="browseLogs()">📋 Logs</button>
-            <button class="btn-action-danger" onclick="confirmRemove()">🗑️ Remove</button>
-            <button class="btn-action-danger" onclick="confirmUninstall()">❌ Uninstall</button>
+            <button class="btn-action-primary" data-action="openClientPanel">🖥️ Control</button>
+            <button class="btn-action-primary" data-action="sendCommand">⌨️ Terminal</button>
+            <button class="btn-action-secondary" data-action="viewStats">📊 Stats</button>
+            <button class="btn-action-secondary" data-action="browseLogs">📋 Logs</button>
+            <button class="btn-action-danger" data-action="confirmRemove">🗑️ Remove</button>
+            <button class="btn-action-danger" data-action="confirmUninstall">❌ Uninstall</button>
         </div>
     `;
     
@@ -356,8 +497,8 @@ function renderProxies(proxies) {
                 <span>Protocol: ${escapeHtml(proxy.Protocol)}</span>
                 <span>Status: ${escapeHtml(proxy.Status)}</span>
             </div>
-            <button onclick="editProxy('${escapeHtml(proxy.ID)}', '${escapeHtml(proxy.RemoteHost)}', ${proxy.RemotePort}, ${proxy.LocalPort}, '${escapeHtml(proxy.Protocol)}')">✏️ Edit</button>
-            <button onclick="deleteProxy('${escapeHtml(proxy.ID)}')">🗑️ Delete</button>
+            <button class="btn-edit-proxy" data-action="editProxy" data-proxy-id="${escapeHtml(proxy.ID)}" data-remote-host="${escapeHtml(proxy.RemoteHost)}" data-remote-port="${proxy.RemotePort}" data-local-port="${proxy.LocalPort}" data-protocol="${escapeHtml(proxy.Protocol)}">✏️ Edit</button>
+            <button class="btn-delete-proxy" data-action="deleteProxy" data-proxy-id="${escapeHtml(proxy.ID)}">🗑️ Delete</button>
         </li>
     `).join('');
 }
@@ -404,10 +545,11 @@ function editProxy(proxyId, remoteHost, remotePort, localPort, protocol) {
     hiddenId.value = proxyId;
     
     // Change button text
-    const addBtn = document.querySelector('button[onclick="addProxy()"]');
-    if (addBtn) {
+    const addBtn = document.querySelector('#proxyLocalPort')?.closest('form')?.querySelector('button[type="button"]') || document.querySelector('.clients-middle button');
+    if (addBtn && !addBtn.dataset.updateProxyWired) {
         addBtn.textContent = '💾 Update Proxy Connection';
-        addBtn.onclick = function() { updateProxy(); };
+        addBtn.addEventListener('click', updateProxy);
+        addBtn.dataset.updateProxyWired = 'true';
     }
     
     // Scroll to form
@@ -479,10 +621,10 @@ function cancelProxyEdit() {
         hiddenId.value = '';
     }
     
-    const addBtn = document.querySelector('button[onclick="updateProxy()"]');
+    // Update the add proxy button (now uses data-action instead of onclick)
+    const addBtn = document.querySelector('button[data-action="addProxy"]');
     if (addBtn) {
         addBtn.textContent = '➕ Add Proxy Connection';
-        addBtn.onclick = function() { addProxy(); };
     }
 
     // If there are no proxies, re-suggest a port after cancelling edit
@@ -863,15 +1005,15 @@ function renderUsersTable(users) {
             <td>${user.LastLogin ? formatDate(user.LastLogin) : 'Never'}</td>
             <td>
                 <button class="btn btn-sm" style="padding: 5px 10px; font-size: 12px; margin-right: 5px; background: var(--primary);" 
-                        onclick="showEditUserForm('${escapeHtml(user.Username)}', '${escapeHtml(user.FullName || '')}', '${user.Role}')">
+                        data-action="showEditUserForm" data-username="${escapeHtml(user.Username)}" data-fullname="${escapeHtml(user.FullName || '')}" data-role="${user.Role}">
                     ✏️ Edit
                 </button>
                 <button class="btn btn-sm" style="padding: 5px 10px; font-size: 12px; margin-right: 5px; background: var(--warning);" 
-                        onclick="toggleUserStatus('${escapeHtml(user.Username)}', '${user.Status}')">
+                        data-action="toggleUserStatus" data-username="${escapeHtml(user.Username)}" data-status="${user.Status}">
                     ${user.Status === 'active' ? '🔒 Disable' : '🔓 Enable'}
                 </button>
                 <button class="btn btn-sm btn-danger" style="padding: 5px 10px; font-size: 12px;" 
-                        onclick="deleteUser('${escapeHtml(user.Username)}')">
+                        data-action="deleteUser" data-username="${escapeHtml(user.Username)}">
                     🗑️ Delete
                 </button>
             </td>
@@ -1263,7 +1405,7 @@ function renderAllProxies(proxies) {
                                             </span>
                                         </div>
                                     </div>
-                                    <button onclick="deleteProxyFromAll('${escapeHtml(proxy.ID)}')" 
+                                    <button class="btn-delete-proxy-all" data-action="deleteProxyFromAll" data-proxy-id="${escapeHtml(proxy.ID)}"
                                             style="padding: 6px 12px; background: var(--danger); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">
                                         🗑️ Close
                                     </button>
@@ -1329,168 +1471,149 @@ function formatBytes(bytes) {
 
 // Setup event listeners for all interactive elements (replaces inline onclick/oninput handlers)
 function setupEventListeners() {
+    console.log('Setting up event listeners...');
+    
+    // Sidebar navigation links (by data-section attribute) - MUST preventDefault on anchor
+    const sidebarLinks = document.querySelectorAll('.sidebar-menu a[data-section]');
+    sidebarLinks.forEach(link => {
+        link.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const section = link.getAttribute('data-section');
+            console.log(`Navigating to section: ${section}`);
+            showSection(section);
+        });
+    });
+    console.log(`Wired ${sidebarLinks.length} sidebar links`);
+
     // Logout button
     const logoutBtn = document.querySelector('.logout-btn');
-    if (logoutBtn) logoutBtn.addEventListener('click', logout);
-
-    // Refresh buttons
-    const topBarRefresh = document.querySelector('.top-bar-actions button[onclick*="loadClients"]');
-    if (topBarRefresh) {
-        const newBtn = topBarRefresh.cloneNode(true);
-        newBtn.onclick = null;
-        newBtn.addEventListener('click', loadClients);
-        topBarRefresh.parentNode.replaceChild(newBtn, topBarRefresh);
+    if (logoutBtn) {
+        logoutBtn.addEventListener('click', logout);
+        console.log('Wired logout button');
     }
 
-    // Add client button
-    const addClientBtn = document.querySelector('.top-bar-actions button[onclick*="openClientDetailsModal"]');
-    if (addClientBtn) {
-        const newBtn = addClientBtn.cloneNode(true);
-        newBtn.onclick = null;
-        newBtn.addEventListener('click', openClientDetailsModal);
-        addClientBtn.parentNode.replaceChild(newBtn, addClientBtn);
+    // Top bar refresh and add client buttons (first two buttons in .top-bar-actions)
+    const topBarActions = document.querySelectorAll('.top-bar-actions button');
+    if (topBarActions.length >= 2) {
+        topBarActions[0].addEventListener('click', loadClients);
+        topBarActions[1].addEventListener('click', openClientDetailsModal);
+        console.log('Wired top bar buttons');
     }
 
-    // Stat cards that are clickable
-    const statCards = document.querySelectorAll('.stat-card[onclick*="showSection"]');
+    // Stat cards (clickable ones to show clients)
+    const statCards = document.querySelectorAll('.stat-card');
     statCards.forEach(card => {
-        const newCard = card.cloneNode(true);
-        newCard.onclick = null;
-        newCard.style.cursor = 'pointer';
-        newCard.addEventListener('click', () => showSection('clients'));
-        card.parentNode.replaceChild(newCard, card);
+        card.style.cursor = 'pointer';
+        card.addEventListener('click', () => showSection('clients'));
     });
+    console.log(`Wired ${statCards.length} stat cards`);
 
     // Client search input
     const clientSearch = document.getElementById('clientSearchInput');
     if (clientSearch) {
-        clientSearch.oninput = null;
         clientSearch.addEventListener('input', (e) => updateSearch(e.target.value));
+        console.log('Wired search input');
     }
 
     // Filter tabs for clients
     const filterTabs = document.querySelectorAll('.filter-tab');
     filterTabs.forEach(tab => {
-        const newTab = tab.cloneNode(true);
-        newTab.onclick = null;
-        const filter = newTab.textContent.toLowerCase().trim();
+        const filter = tab.textContent.toLowerCase().trim();
         const filterValue = filter === 'all' ? 'all' : (filter === 'online' ? 'online' : 'offline');
-        newTab.addEventListener('click', () => filterClients(filterValue));
-        tab.parentNode.replaceChild(newTab, tab);
+        tab.addEventListener('click', (e) => {
+            e.preventDefault();
+            filterClients(filterValue);
+        });
     });
+    console.log(`Wired ${filterTabs.length} filter tabs`);
 
-    // User management buttons
-    const addUserBtn = document.querySelector('button[onclick*="showAddUserForm"]');
-    if (addUserBtn) {
-        const newBtn = addUserBtn.cloneNode(true);
-        newBtn.onclick = null;
-        newBtn.addEventListener('click', showAddUserForm);
-        addUserBtn.parentNode.replaceChild(newBtn, addUserBtn);
-    }
-
-    const createUserBtn = document.querySelector('button[onclick="createUser()"]');
-    if (createUserBtn) {
-        const newBtn = createUserBtn.cloneNode(true);
-        newBtn.onclick = null;
-        newBtn.addEventListener('click', createUser);
-        createUserBtn.parentNode.replaceChild(newBtn, createUserBtn);
-    }
-
-    const cancelAddUserBtn = document.querySelector('button[onclick="hideAddUserForm()"]');
-    if (cancelAddUserBtn) {
-        const newBtn = cancelAddUserBtn.cloneNode(true);
-        newBtn.onclick = null;
-        newBtn.addEventListener('click', hideAddUserForm);
-        cancelAddUserBtn.parentNode.replaceChild(newBtn, cancelAddUserBtn);
-    }
-
-    const saveUserEditBtn = document.querySelector('button[onclick="saveUserEdit()"]');
-    if (saveUserEditBtn) {
-        const newBtn = saveUserEditBtn.cloneNode(true);
-        newBtn.onclick = null;
-        newBtn.addEventListener('click', saveUserEdit);
-        saveUserEditBtn.parentNode.replaceChild(newBtn, saveUserEditBtn);
-    }
-
-    const cancelEditUserBtn = document.querySelectorAll('button[onclick="hideEditUserForm()"]');
-    cancelEditUserBtn.forEach(btn => {
-        if (btn.textContent.includes('Cancel')) {
-            const newBtn = btn.cloneNode(true);
-            newBtn.onclick = null;
-            newBtn.addEventListener('click', hideEditUserForm);
-            btn.parentNode.replaceChild(newBtn, btn);
+    // Proxy section refresh button
+    const proxySection = document.getElementById('proxySection');
+    if (proxySection) {
+        const refreshBtn = proxySection.querySelector('button');
+        if (refreshBtn) {
+            refreshBtn.addEventListener('click', loadAllProxies);
+            console.log('Wired proxy refresh button');
         }
-    });
-
-    // Proxy refresh button
-    const proxyRefreshBtn = document.querySelector('.clients-middle button[onclick*="loadAllProxies"]');
-    if (proxyRefreshBtn) {
-        const newBtn = proxyRefreshBtn.cloneNode(true);
-        newBtn.onclick = null;
-        newBtn.addEventListener('click', loadAllProxies);
-        proxyRefreshBtn.parentNode.replaceChild(newBtn, proxyRefreshBtn);
     }
 
-    // Settings buttons
-    const saveSettingsBtn = document.querySelector('button[onclick="saveUpdatePaths()"]');
-    if (saveSettingsBtn) {
-        const newBtn = saveSettingsBtn.cloneNode(true);
-        newBtn.onclick = null;
-        newBtn.addEventListener('click', saveUpdatePaths);
-        saveSettingsBtn.parentNode.replaceChild(newBtn, saveSettingsBtn);
+    // Users section - add user button
+    const usersSection = document.getElementById('usersSection');
+    if (usersSection) {
+        const addUserBtn = usersSection.querySelector('button.btn-primary');
+        if (addUserBtn) {
+            addUserBtn.addEventListener('click', showAddUserForm);
+            console.log('Wired add user button');
+        }
+
+        // Create user form buttons
+        const addUserForm = document.getElementById('addUserForm');
+        if (addUserForm) {
+            const formButtons = addUserForm.querySelectorAll('button');
+            if (formButtons.length >= 2) {
+                formButtons[0].addEventListener('click', createUser);
+                formButtons[1].addEventListener('click', hideAddUserForm);
+                console.log('Wired add user form buttons');
+            }
+        }
+
+        // Edit user form buttons
+        const editUserForm = document.getElementById('editUserForm');
+        if (editUserForm) {
+            const formButtons = editUserForm.querySelectorAll('button');
+            if (formButtons.length >= 2) {
+                formButtons[0].addEventListener('click', saveUserEdit);
+                formButtons[1].addEventListener('click', hideEditUserForm);
+                console.log('Wired edit user form buttons');
+            }
+        }
     }
 
-    const pushUpdateBtn = document.querySelector('button[onclick="pushClientsUpdate()"]');
-    if (pushUpdateBtn) {
-        const newBtn = pushUpdateBtn.cloneNode(true);
-        newBtn.onclick = null;
-        newBtn.addEventListener('click', pushClientsUpdate);
-        pushUpdateBtn.parentNode.replaceChild(newBtn, pushUpdateBtn);
-    }
-
-    const clearUpdateBtn = document.querySelector('button[onclick="clearUpdateForm()"]');
-    if (clearUpdateBtn) {
-        const newBtn = clearUpdateBtn.cloneNode(true);
-        newBtn.onclick = null;
-        newBtn.addEventListener('click', clearUpdateForm);
-        clearUpdateBtn.parentNode.replaceChild(newBtn, clearUpdateBtn);
+    // Settings section buttons
+    const settingsSection = document.getElementById('settingsSection');
+    if (settingsSection) {
+        const buttons = settingsSection.querySelectorAll('button');
+        buttons.forEach(btn => {
+            const text = btn.textContent.trim();
+            if (text.includes('Save Settings')) {
+                btn.addEventListener('click', saveUpdatePaths);
+                console.log('Wired save settings button');
+            } else if (text.includes('Push Update')) {
+                btn.addEventListener('click', pushClientsUpdate);
+                console.log('Wired push update button');
+            } else if (text === 'Clear') {
+                btn.addEventListener('click', clearUpdateForm);
+                console.log('Wired clear button');
+            }
+        });
     }
 
     // Modal buttons
-    const closeModalBtns = document.querySelectorAll('button[onclick="closeModal()"]');
-    closeModalBtns.forEach(btn => {
-        const newBtn = btn.cloneNode(true);
-        newBtn.onclick = null;
-        newBtn.addEventListener('click', closeModal);
-        btn.parentNode.replaceChild(newBtn, btn);
-    });
-
-    const confirmActionBtn = document.querySelector('button[onclick="confirmAction()"]');
-    if (confirmActionBtn) {
-        const newBtn = confirmActionBtn.cloneNode(true);
-        newBtn.onclick = null;
-        newBtn.addEventListener('click', confirmAction);
-        confirmActionBtn.parentNode.replaceChild(newBtn, confirmActionBtn);
+    const confirmModal = document.getElementById('confirmModal');
+    if (confirmModal) {
+        const buttons = confirmModal.querySelectorAll('button');
+        buttons.forEach(btn => {
+            const text = btn.textContent.trim();
+            if (text === 'Cancel') {
+                btn.addEventListener('click', closeModal);
+            } else if (text === 'Confirm') {
+                btn.addEventListener('click', confirmAction);
+            }
+        });
+        console.log('Wired confirm modal buttons');
     }
 
-    // Sidebar navigation links
-    const sidebarLinks = document.querySelectorAll('.sidebar-menu a');
-    sidebarLinks.forEach(link => {
-        const newLink = link.cloneNode(true);
-        newLink.onclick = null;
-        const href = newLink.getAttribute('href');
-        if (href === '#') {
-            newLink.addEventListener('click', (e) => {
-                e.preventDefault();
-                const onclick = link.getAttribute('onclick');
-                if (onclick && onclick.includes('showSection')) {
-                    const match = onclick.match(/'([^']+)'/);
-                    if (match) showSection(match[1]);
-                }
-            });
+    const statusModal = document.getElementById('statusModal');
+    if (statusModal) {
+        const closeBtn = statusModal.querySelector('button');
+        if (closeBtn) {
+            closeBtn.addEventListener('click', closeModal);
+            console.log('Wired status modal button');
         }
-        link.parentNode.replaceChild(newLink, link);
-    });
+    }
+    
+    console.log('Event listener setup complete!');
 }
 
 // Initialize
