@@ -59,6 +59,27 @@ func NewHandler(sessionMgr auth.SessionManager, clientMgr clients.Manager, store
 			} else {
 				log.Printf("✅ Created default web user: %s (role: admin)", username)
 			}
+
+			// Create sample users for demonstration (only when creating fresh database)
+			sampleUsers := []struct {
+				username, password, fullName, role string
+			}{
+				{"john.doe", "password123", "John Doe", "operator"},
+				{"jane.smith", "secure456", "Jane Smith", "admin"},
+				{"mike.wilson", "pass789", "Mike Wilson", "viewer"},
+				{"sarah.jones", "mypass321", "Sarah Jones", "operator"},
+				{"bob.brown", "demo123", "Bob Brown", "viewer"},
+			}
+
+			for _, user := range sampleUsers {
+				hash := sha256.Sum256([]byte(user.password))
+				userPasswordHash := hex.EncodeToString(hash[:])
+				if err := store.CreateWebUser(user.username, userPasswordHash, user.fullName, user.role); err != nil {
+					log.Printf("WARNING: Failed to create sample user %s: %v", user.username, err)
+				} else {
+					log.Printf("✅ Created sample user: %s (%s) - role: %s", user.username, user.fullName, user.role)
+				}
+			}
 		}
 	}
 

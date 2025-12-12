@@ -1967,7 +1967,9 @@
         // User Management Functions
         async function loadUsers() {
             try {
-                const response = await fetch('/api/users');
+                const response = await fetch('/api/users', {
+                    credentials: 'include'
+                });
                 if (response.status === 401) {
                     window.location.href = '/login';
                     return;
@@ -1983,30 +1985,31 @@
         }
 
         function renderUsersTable(users) {
+            console.log('Rendering users:', users); // Debug log
             const tbody = document.getElementById('usersTableBody');
             if (users.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 40px; color: var(--text-light);">No users found</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 40px; color: var(--text-light);">No users found</td></tr>';
                 return;
             }
             tbody.innerHTML = users.map(user => `
                 <tr>
-                    <td><strong>${escapeHtml(user.username)}</strong></td>
-                    <td>${escapeHtml(user.full_name || 'N/A')}</td>
-                    <td><span class="badge" style="background: var(--info); color: white; padding: 4px 8px; border-radius: 4px; font-size: 11px;">${escapeHtml(user.role || 'user')}</span></td>
-                    <td><span class="status-badge ${user.status === 'active' ? 'online' : 'offline'}">${escapeHtml(user.status)}</span></td>
-                    <td>${formatDate(user.created_at)}</td>
-                    <td>${user.last_login ? formatDate(user.last_login) : 'Never'}</td>
+                    <td><strong>${escapeHtml(user.Username)}</strong></td>
+                    <td>${escapeHtml(user.FullName || 'N/A')}</td>
+                    <td><span class="badge" style="background: var(--info); color: white; padding: 4px 8px; border-radius: 4px; font-size: 11px;">${escapeHtml(user.Role || 'user')}</span></td>
+                    <td><span class="status-badge ${user.Status === 'active' ? 'online' : 'offline'}">${escapeHtml(user.Status)}</span></td>
+                    <td>${formatDate(user.CreatedAt)}</td>
+                    <td>${user.LastLogin ? formatDate(user.LastLogin) : 'Never'}</td>
                     <td>
                         <button class="btn btn-sm" style="padding: 5px 10px; font-size: 12px; margin-right: 5px; background: var(--primary);" 
-                                onclick="showEditUserForm('${escapeHtml(user.username)}', '${escapeHtml(user.full_name || '')}', '${user.role}')">
+                                onclick="showEditUserForm('${escapeHtml(user.Username)}', '${escapeHtml(user.FullName || '')}', '${user.Role}')">
                             ✏️ Edit
                         </button>
                         <button class="btn btn-sm" style="padding: 5px 10px; font-size: 12px; margin-right: 5px; background: var(--warning);" 
-                                onclick="toggleUserStatus('${escapeHtml(user.username)}', '${user.status}')">
-                            ${user.status === 'active' ? '🔒 Disable' : '🔓 Enable'}
+                                onclick="toggleUserStatus('${escapeHtml(user.Username)}', '${user.Status}')">
+                            ${user.Status === 'active' ? '🔒 Disable' : '🔓 Enable'}
                         </button>
                         <button class="btn btn-sm btn-danger" style="padding: 5px 10px; font-size: 12px;" 
-                                onclick="deleteUser('${escapeHtml(user.username)}')">
+                                onclick="deleteUser('${escapeHtml(user.Username)}')">
                             🗑️ Delete
                         </button>
                     </td>

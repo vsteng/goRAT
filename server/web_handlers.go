@@ -57,20 +57,13 @@ func NewWebHandler(sessionMgr auth.SessionManager, clientMgr clients.Manager, st
 		log.Printf("✅ Successfully loaded web templates from %s", templatesPath)
 	}
 
-	// Initialize default user from config if store is available and no admin user exists yet
+	// Check if user initialization already happened (for debugging)
 	if store != nil && config.Username != "" {
 		adminExists, err := store.AdminExists()
 		if err != nil {
 			log.Printf("WARNING: Failed to check if admin user exists: %v", err)
-		} else if !adminExists {
-			// Create default admin user with hashed password
-			hash := sha256.Sum256([]byte(config.Password))
-			passwordHash := hex.EncodeToString(hash[:])
-			if err := store.CreateWebUser(config.Username, passwordHash, "Administrator", "admin"); err != nil {
-				log.Printf("WARNING: Failed to create default web user: %v", err)
-			} else {
-				log.Printf("✅ Created default web user: %s (role: admin)", config.Username)
-			}
+		} else {
+			log.Printf("DEBUG: Admin exists check in web handler: %v", adminExists)
 		}
 	}
 
