@@ -1197,8 +1197,8 @@ func (wh *WebHandler) RegisterGinRoutes(router *gin.Engine) {
 		c.Header("X-XSS-Protection", "1; mode=block")
 
 		// Content Security Policy
-		// Strict CSP: inline handlers moved to external JS via addEventListener
-		c.Header("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'")
+		// Strict CSP: inline handlers moved to external JS; allow Google Fonts for stylesheets
+		c.Header("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'")
 
 		// HSTS (HTTP Strict Transport Security)
 		if c.Request.TLS != nil {
