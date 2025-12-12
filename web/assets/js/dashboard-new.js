@@ -169,28 +169,47 @@ function setupClientListListeners() {
 function setupClientActionButtons() {
     // These buttons are dynamically generated in showClientInColumns()
     const clientDetailsSection = document.getElementById('clientRight');
-    if (!clientDetailsSection) return;
+    if (!clientDetailsSection) {
+        console.warn('setupClientActionButtons: clientRight not found');
+        return;
+    }
     
     const buttons = clientDetailsSection.querySelectorAll('button[data-action]');
+    console.log(`setupClientActionButtons: found ${buttons.length} buttons with data-action`);
+    
     buttons.forEach(btn => {
         const action = btn.getAttribute('data-action');
-        btn.removeEventListener('click', null); // Clear any existing listeners
+            const handler = {
+                'openClientPanel': openClientPanel,
+                'sendCommand': sendCommand,
+                'viewStats': viewStats,
+                'browseLogs': browseLogs,
+                'confirmRemove': confirmRemove,
+                'confirmUninstall': confirmUninstall,
+                'saveAlias': saveAlias
+            }[action];
         
-        if (action === 'openClientPanel') {
-            btn.addEventListener('click', openClientPanel);
-        } else if (action === 'sendCommand') {
-            btn.addEventListener('click', sendCommand);
-        } else if (action === 'viewStats') {
-            btn.addEventListener('click', viewStats);
-        } else if (action === 'browseLogs') {
-            btn.addEventListener('click', browseLogs);
-        } else if (action === 'confirmRemove') {
-            btn.addEventListener('click', confirmRemove);
-        } else if (action === 'confirmUninstall') {
-            btn.addEventListener('click', confirmUninstall);
-        } else if (action === 'saveAlias') {
-            btn.addEventListener('click', saveAlias);
-        }
+            if (!handler) {
+                console.warn(`No handler found for action: ${action}`);
+                return;
+            }
+        
+            console.log(`Wiring button with action: ${action}, handler: ${handler.name}`);
+        
+            // Remove all old listeners by cloning the node
+            const newBtn = btn.cloneNode(true);
+            btn.parentNode.replaceChild(newBtn, btn);
+        
+        newBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log(`Button clicked: ${action}`);
+            try {
+                handler.call(newBtn, e);
+            } catch (err) {
+                console.error(`Error in handler for ${action}:`, err);
+            }
+        });
     });
     
     // Wire up proxy form add button
@@ -198,6 +217,7 @@ function setupClientActionButtons() {
     if (proxyMiddle) {
         const addProxyBtn = proxyMiddle.querySelector('button[data-action="addProxy"]');
         if (addProxyBtn) {
+            console.log('Wiring addProxy button');
             addProxyBtn.addEventListener('click', addProxy);
         }
     }
@@ -762,7 +782,16 @@ async function refreshHealth() {
 
 function openClientPanel() {
     if (!selectedClient) return;
-    window.open(`/client-details?id=${encodeURIComponent(selectedClient.id)}`, '_blank', 'width=1400,height=800');
+    const cid = selectedClient.ID || selectedClient.id;
+    if (!cid) {
+        console.error('openClientPanel: missing client id');
+        return;
+    }
+    const url = `/client-details?id=${encodeURIComponent(cid)}`;
+    const win = window.open(url, '_blank', 'noopener,width=1400,height=900');
+    if (!win) {
+        console.warn('Popup blocked: enable popups for this site to open client details in a new tab');
+    }
 }
 
 async function saveAlias() {
@@ -798,7 +827,16 @@ async function saveAlias() {
 
 function sendCommand() {
     if (!selectedClient) return;
-    window.open(`/terminal?client=${encodeURIComponent(selectedClient.id)}`, '_blank', 'width=1000,height=600');
+    const cid = selectedClient.ID || selectedClient.id;
+    if (!cid) {
+        console.error('sendCommand: missing client id');
+        return;
+    }
+    const url = `/terminal?client=${encodeURIComponent(cid)}`;
+    const win = window.open(url, '_blank', 'noopener,width=1100,height=750');
+    if (!win) {
+        console.warn('Popup blocked: enable popups for this site to open terminal in a new tab');
+    }
 }
 
 function viewStats() {

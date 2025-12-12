@@ -11,12 +11,14 @@ function getClientId() {
 }
 
 // Switch tabs
-function switchTab(tabName) {
+function switchTab(tabName, e) {
     document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
     document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
     
-    document.getElementById(tabName).classList.add('active');
-    event.target.classList.add('active');
+    document.getElementById(tabName)?.classList.add('active');
+    if (e?.currentTarget) {
+        e.currentTarget.classList.add('active');
+    }
     
     // Load data when switching to specific tabs
     if (tabName === 'processes') {
@@ -774,8 +776,47 @@ function closeModal() {
     document.getElementById('statusModal').classList.remove('active');
 }
 
+function setupEventListeners() {
+    // Tabs
+    document.querySelectorAll('.tabs .tab[data-tab]').forEach(tab => {
+        tab.addEventListener('click', (e) => {
+            e.preventDefault();
+            const tabName = tab.getAttribute('data-tab');
+            switchTab(tabName, e);
+        });
+    });
+
+    const actions = {
+        closeWindow: () => window.close(),
+        browseFolder,
+        toggleDrives,
+        uploadFile,
+        refreshFiles,
+        clearTerminal,
+        connectTerminal,
+        disconnectTerminal,
+        refreshProcesses,
+        closeModal,
+        executeAction: (e) => {
+            const actionName = e.currentTarget.getAttribute('data-action-name');
+            if (actionName) executeAction(actionName);
+        },
+    };
+
+    document.querySelectorAll('[data-action]').forEach(el => {
+        const action = el.getAttribute('data-action');
+        const handler = actions[action];
+        if (!handler) return;
+        el.addEventListener('click', (e) => {
+            e.preventDefault();
+            handler(e);
+        });
+    });
+}
+
 // Initialize
 window.addEventListener('DOMContentLoaded', () => {
+    setupEventListeners();
     loadClientDetails();
     setInterval(() => {
         if (currentClient && currentClient.status === 'online') {
