@@ -407,6 +407,9 @@ function showClientInColumns(client) {
     
     // Load proxies for this client
     loadProxies();
+    
+    // Wire up the new action buttons now that they're rendered
+    setupClientActionButtons();
 }
 async function loadProxies() {
     if (!selectedClient) return;
@@ -501,6 +504,9 @@ function renderProxies(proxies) {
             <button class="btn-delete-proxy" data-action="deleteProxy" data-proxy-id="${escapeHtml(proxy.ID)}">🗑️ Delete</button>
         </li>
     `).join('');
+    
+    // Wire up the proxy edit/delete buttons
+    setupProxyButtons();
 }
 
 async function deleteProxy(proxyId) {
@@ -1019,6 +1025,9 @@ function renderUsersTable(users) {
             </td>
         </tr>
     `).join('');
+    
+    // Wire up the user action buttons
+    setupUserButtons();
 }
 
 function showAddUserForm() {
