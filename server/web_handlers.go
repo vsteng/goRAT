@@ -29,24 +29,30 @@ type WebConfig struct {
 
 // WebHandler handles web UI requests
 type WebHandler struct {
-	sessionMgr auth.SessionManager
-	clientMgr  clients.Manager
-	store      storage.Store
-	config     *WebConfig
-	templates  *template.Template
-	server     *Server // Reference to main server for result access
-	healthMon  *health.Monitor
+	sessionMgr     auth.SessionManager
+	clientMgr      clients.Manager
+	store          storage.Store
+	config         *WebConfig
+	templates      *template.Template
+	server         *Server // Reference to main server for result access
+	healthMon      *health.Monitor
+	rateLimiter    *auth.RateLimiter      // Rate limiting for login attempts
+	passwordHasher *auth.PasswordHasher   // Bcrypt password hasher
+	csrfMgr        *auth.CSRFTokenManager // CSRF token management
 }
 
 // NewWebHandler creates a new web handler
 func NewWebHandler(sessionMgr auth.SessionManager, clientMgr clients.Manager, store storage.Store, config *WebConfig) (*WebHandler, error) {
 	handler := &WebHandler{
-		sessionMgr: sessionMgr,
-		clientMgr:  clientMgr,
-		store:      store,
-		config:     config,
-		templates:  nil, // Will be set if templates load successfully
-		healthMon:  health.NewMonitor(),
+		sessionMgr:     sessionMgr,
+		clientMgr:      clientMgr,
+		store:          store,
+		config:         config,
+		templates:      nil, // Will be set if templates load successfully
+		healthMon:      health.NewMonitor(),
+		rateLimiter:    auth.NewRateLimiter(5, 15*time.Minute), // 5 attempts per 15 minutes
+		passwordHasher: auth.NewPasswordHasher(),
+		csrfMgr:        auth.NewCSRFTokenManager(),
 	}
 
 	// Try to load templates from disk (optional)
@@ -139,6 +145,9 @@ func (wh *WebHandler) HandleLoginAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Get client IP for rate limiting and session tracking
+	clientIP := auth.GetClientIP(r.RemoteAddr, r.Header.Get("X-Forwarded-For"))
+
 	var credentials struct {
 		Username string `json:"username"`
 		Password string `json:"password"`
@@ -149,6 +158,25 @@ func (wh *WebHandler) HandleLoginAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Sanitize input
+	credentials.Username = strings.TrimSpace(credentials.Username)
+	if credentials.Username == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Invalid username or password"})
+		log.Printf("⚠️ LOGIN ATTEMPT: Empty username from IP %s", clientIP)
+		return
+	}
+
+	// Rate limiting check per IP
+	if !wh.rateLimiter.AllowRequest(clientIP) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusTooManyRequests)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Too many login attempts. Please try again later"})
+		log.Printf("⚠️ RATE LIMITED: IP %s exceeded login attempts", clientIP)
+		return
+	}
+
 	// Validate credentials against database if store is available
 	if wh.store != nil {
 		user, passwordHash, err := wh.store.GetWebUser(credentials.Username)
@@ -156,6 +184,7 @@ func (wh *WebHandler) HandleLoginAPI(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusUnauthorized)
 			json.NewEncoder(w).Encode(map[string]string{"error": "Invalid username or password"})
+			log.Printf("⚠️ LOGIN FAILED: User not found - Username: %s, IP: %s", credentials.Username, clientIP)
 			return
 		}
 
@@ -164,16 +193,16 @@ func (wh *WebHandler) HandleLoginAPI(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusUnauthorized)
 			json.NewEncoder(w).Encode(map[string]string{"error": "User account is inactive"})
+			log.Printf("⚠️ LOGIN FAILED: User inactive - Username: %s, IP: %s", credentials.Username, clientIP)
 			return
 		}
 
-		// Verify password
-		hash := sha256.Sum256([]byte(credentials.Password))
-		providedHash := hex.EncodeToString(hash[:])
-		if providedHash != passwordHash {
+		// Verify password with bcrypt
+		if !wh.passwordHasher.Verify(passwordHash, credentials.Password) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusUnauthorized)
 			json.NewEncoder(w).Encode(map[string]string{"error": "Invalid username or password"})
+			log.Printf("⚠️ LOGIN FAILED: Invalid password - Username: %s, IP: %s", credentials.Username, clientIP)
 			return
 		}
 
@@ -185,6 +214,7 @@ func (wh *WebHandler) HandleLoginAPI(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusUnauthorized)
 			json.NewEncoder(w).Encode(map[string]string{"error": "Invalid username or password"})
+			log.Printf("⚠️ LOGIN FAILED: Invalid config credentials - Username: %s, IP: %s", credentials.Username, clientIP)
 			return
 		}
 	}
@@ -198,10 +228,15 @@ func (wh *WebHandler) HandleLoginAPI(w http.ResponseWriter, r *http.Request) {
 	session, err := wh.sessionMgr.CreateSession(credentials.Username)
 	if err != nil {
 		http.Error(w, "Failed to create session", http.StatusInternalServerError)
+		log.Printf("❌ SESSION CREATION FAILED: %v", err)
 		return
 	}
 
-	// Set session cookie
+	// Update session with IP and User-Agent
+	userAgent := r.Header.Get("User-Agent")
+	wh.sessionMgr.UpdateSessionContext(session.ID, clientIP, userAgent)
+
+	// Set session cookie with security flags
 	http.SetCookie(w, &http.Cookie{
 		Name:     "session_id",
 		Value:    session.ID,
@@ -211,6 +246,9 @@ func (wh *WebHandler) HandleLoginAPI(w http.ResponseWriter, r *http.Request) {
 		SameSite: http.SameSiteStrictMode,
 		Expires:  session.ExpiresAt,
 	})
+
+	// Log successful login
+	log.Printf("✅ LOGIN SUCCESS: Username: %s, IP: %s, User-Agent: %s", credentials.Username, clientIP, userAgent)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "success"})
@@ -1111,6 +1149,39 @@ func (wh *WebHandler) RegisterGinRoutes(router *gin.Engine) {
 	router.Static("/static", "./web/static")
 	router.Static("/assets", "./web/assets")
 
+	// Add security headers middleware
+	router.Use(func(c *gin.Context) {
+		// Prevent clickjacking
+		c.Header("X-Frame-Options", "SAMEORIGIN")
+
+		// Prevent MIME type sniffing
+		c.Header("X-Content-Type-Options", "nosniff")
+
+		// Enable XSS protection
+		c.Header("X-XSS-Protection", "1; mode=block")
+
+		// Content Security Policy
+		c.Header("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'")
+
+		// HSTS (HTTP Strict Transport Security)
+		if c.Request.TLS != nil {
+			c.Header("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+		}
+
+		// Referrer Policy
+		c.Header("Referrer-Policy", "strict-origin-when-cross-origin")
+
+		// Feature Policy / Permissions Policy
+		c.Header("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
+
+		// Prevent caching of sensitive pages
+		c.Header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+		c.Header("Pragma", "no-cache")
+		c.Header("Expires", "0")
+
+		c.Next()
+	})
+
 	// Public routes (no auth required)
 	router.GET("/login", wh.ginHandleLogin)
 	router.POST("/api/login", wh.ginHandleLoginAPI)
@@ -1170,6 +1241,18 @@ func (wh *WebHandler) ginRequireAuth(handler gin.HandlerFunc) gin.HandlerFunc {
 
 		session, exists := wh.sessionMgr.GetSession(cookie)
 		if !exists {
+			c.Redirect(http.StatusSeeOther, "/login")
+			c.Abort()
+			return
+		}
+
+		// Verify session context (IP and User-Agent)
+		clientIP := auth.GetClientIP(c.Request.RemoteAddr, c.Request.Header.Get("X-Forwarded-For"))
+		userAgent := c.Request.Header.Get("User-Agent")
+
+		if !wh.sessionMgr.VerifySessionContext(session.ID, clientIP, userAgent) {
+			log.Printf("⚠️ SESSION VERIFICATION FAILED: IP mismatch or user-agent change - Username: %s, Session: %s", session.Username, session.ID)
+			wh.sessionMgr.DeleteSession(session.ID)
 			c.Redirect(http.StatusSeeOther, "/login")
 			c.Abort()
 			return

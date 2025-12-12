@@ -40,6 +40,9 @@ func (sm *SessionManagerImpl) CreateSession(username string) (*Session, error) {
 		Username:  username,
 		CreatedAt: now,
 		ExpiresAt: now.Add(sm.timeout),
+		ClientIP:  "", // Will be set on first request
+		UserAgent: "", // Will be set on first request
+		Verified:  false,
 	}
 
 	sm.mu.Lock()
@@ -119,6 +122,39 @@ func (sm *SessionManagerImpl) cleanupExpiredSessions() {
 		}
 		sm.mu.Unlock()
 	}
+}
+
+// UpdateSessionContext updates session with client IP and User-Agent
+func (sm *SessionManagerImpl) UpdateSessionContext(sessionID, clientIP, userAgent string) bool {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+
+	session, exists := sm.sessions[sessionID]
+	if !exists {
+		return false
+	}
+
+	// Only update on first request
+	if !session.Verified {
+		session.ClientIP = clientIP
+		session.UserAgent = userAgent
+		session.Verified = true
+	}
+
+	return true
+}
+
+// VerifySessionContext checks if session's IP and User-Agent match request
+func (sm *SessionManagerImpl) VerifySessionContext(sessionID, clientIP, userAgent string) bool {
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
+
+	session, exists := sm.sessions[sessionID]
+	if !exists {
+		return false
+	}
+
+	return session.IsValidForRequest(clientIP, userAgent)
 }
 
 // generateSessionID generates a random session ID
