@@ -18,6 +18,8 @@ type Client interface {
 	UpdateMetadata(fn func(*protocol.ClientMetadata))
 	// SendMessage sends a message to the client
 	SendMessage(msg *protocol.Message) error
+	// SendRaw sends a raw JSON payload using the client's write lock (for non-protocol messages)
+	SendRaw(fn func(conn *websocket.Conn) error) error
 	// Close closes the client connection
 	Close() error
 	// IsClosed checks if the client is closed

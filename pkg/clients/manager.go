@@ -65,6 +65,28 @@ func (c *ClientImpl) SendMessage(msg *protocol.Message) error {
 	}
 }
 
+// SendRaw executes a write against the websocket using the client's write lock.
+// This is useful for non-protocol control messages (e.g., proxy frames) that
+// are not sent via the buffered protocol channel.
+func (c *ClientImpl) SendRaw(fn func(conn *websocket.Conn) error) error {
+	c.mu.RLock()
+	if c.closed {
+		c.mu.RUnlock()
+		return fmt.Errorf("client %s is closed", c.id)
+	}
+	conn := c.conn
+	c.mu.RUnlock()
+
+	if conn == nil {
+		return fmt.Errorf("client %s connection is nil", c.id)
+	}
+
+	c.writeMu.Lock()
+	defer c.writeMu.Unlock()
+
+	return fn(conn)
+}
+
 // Close closes the client connection
 func (c *ClientImpl) Close() error {
 	c.mu.Lock()

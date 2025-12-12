@@ -13,9 +13,11 @@ import (
 	"sync"
 	"time"
 
-	"gorat/pkg/protocol"
 	"gorat/pkg/clients"
+	"gorat/pkg/protocol"
 	"gorat/pkg/storage"
+
+	"github.com/gorilla/websocket"
 )
 
 // ProxyConnection represents a proxy tunnel connection
@@ -221,6 +223,7 @@ type ProxyManager struct {
 	portMap     map[int]string // Maps port to proxy connection ID (like lanproxy)
 	portMapMu   sync.RWMutex
 	stopMonitor chan struct{} // Signal to stop idle monitoring
+	wsLocks     sync.Map      // per-client websocket write locks for raw proxy frames
 }
 
 // NewProxyManager creates a new proxy manager
@@ -449,28 +452,35 @@ func (pm *ProxyManager) acceptConnections(conn *ProxyConnection) {
 }
 
 // sendWebSocketMessage sends a message to websocket (thread-safe write)
+func (pm *ProxyManager) getClientLock(clientID string) *sync.Mutex {
+	if v, ok := pm.wsLocks.Load(clientID); ok {
+		return v.(*sync.Mutex)
+	}
+	mu := &sync.Mutex{}
+	actual, _ := pm.wsLocks.LoadOrStore(clientID, mu)
+	return actual.(*sync.Mutex)
+}
+
+// sendWebSocketMessage delivers either protocol messages (via client channel) or raw proxy frames (map) using the client's write lock.
 func (pm *ProxyManager) sendWebSocketMessage(client clients.Client, msg interface{}) error {
 	if client == nil {
 		return fmt.Errorf("client is invalid")
 	}
 
-	// Convert msg to protocol.Message for sending through the client interface
-	// If it's already a protocol.Message, use it directly
-	var cmsg *protocol.Message
-	if m, ok := msg.(*protocol.Message); ok {
-		cmsg = m
-	} else {
-		// For other message types, we need to serialize and deserialize
-		// Or create a message wrapper
-		// For now, return error for unsupported types
+	switch m := msg.(type) {
+	case *protocol.Message:
+		return client.SendMessage(m)
+	case map[string]interface{}:
+		lock := pm.getClientLock(client.ID())
+		lock.Lock()
+		defer lock.Unlock()
+		return client.SendRaw(func(conn *websocket.Conn) error {
+			conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+			return conn.WriteJSON(m)
+		})
+	default:
 		return fmt.Errorf("unsupported message type for proxy communication")
 	}
-
-	if conn := client.Conn(); conn == nil {
-		return fmt.Errorf("websocket connection is invalid")
-	}
-
-	return client.SendMessage(cmsg)
 }
 
 // handleUserConnection handles a user connection by relaying through websocket to the remote server

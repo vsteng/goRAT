@@ -290,6 +290,9 @@ type Client struct {
 
 	// Connection pool manager
 	poolMgr *PoolManager
+
+	// WebSocket write lock to prevent concurrent writes
+	writeMu sync.Mutex
 }
 
 // Config holds client configuration
@@ -689,13 +692,17 @@ func (c *Client) writePump(disconnectChan chan bool) {
 			if c.conn == nil {
 				return
 			}
+			c.writeMu.Lock()
 			c.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
 			if !ok {
 				c.conn.WriteMessage(websocket.CloseMessage, []byte{})
+				c.writeMu.Unlock()
 				return
 			}
 
-			if err := c.conn.WriteJSON(message); err != nil {
+			err := c.conn.WriteJSON(message)
+			c.writeMu.Unlock()
+			if err != nil {
 				log.Printf("Write error: %v", err)
 				return
 			}
@@ -704,8 +711,11 @@ func (c *Client) writePump(disconnectChan chan bool) {
 			if c.conn == nil {
 				return
 			}
+			c.writeMu.Lock()
 			c.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
-			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+			err := c.conn.WriteMessage(websocket.PingMessage, nil)
+			c.writeMu.Unlock()
+			if err != nil {
 				return
 			}
 
@@ -931,7 +941,14 @@ func (c *Client) sendProxyMessage(msgType, proxyID, userID string, data []byte) 
 		msg["data"] = base64.StdEncoding.EncodeToString(data)
 	}
 
-	c.conn.WriteJSON(msg)
+	c.writeMu.Lock()
+	c.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+	err := c.conn.WriteJSON(msg)
+	c.writeMu.Unlock()
+
+	if err != nil {
+		log.Printf("Failed to send proxy message: %v", err)
+	}
 }
 
 // relayProxyData relays data from remote host back to the server
