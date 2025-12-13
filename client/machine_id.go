@@ -7,7 +7,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -108,7 +107,7 @@ func (m *MachineIDGenerator) readLinuxMachineID() (string, error) {
 	}
 
 	for _, path := range paths {
-		data, err := ioutil.ReadFile(path)
+		data, err := os.ReadFile(path)
 		if err == nil {
 			return strings.TrimSpace(string(data)), nil
 		}
@@ -134,7 +133,7 @@ func (m *MachineIDGenerator) readDarwinMachineID() (string, error) {
 // readCachedID reads the cached machine ID
 func (m *MachineIDGenerator) readCachedID() (string, error) {
 	idFile := filepath.Join(m.cacheDir, "machine-id")
-	data, err := ioutil.ReadFile(idFile)
+	data, err := os.ReadFile(idFile)
 	if err != nil {
 		return "", err
 	}
@@ -149,7 +148,7 @@ func (m *MachineIDGenerator) writeCachedID(id string) error {
 	}
 
 	idFile := filepath.Join(m.cacheDir, "machine-id")
-	return ioutil.WriteFile(idFile, []byte(id), 0600)
+	return os.WriteFile(idFile, []byte(id), 0600)
 }
 
 // getDefaultCacheDir returns the default cache directory for the application

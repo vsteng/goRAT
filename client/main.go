@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -802,7 +803,8 @@ func (c *Client) handleProxyConnect(rawMsg map[string]interface{}) {
 	log.Printf("Proxy connect request: proxy=%s, user=%s, remote=%s:%d, protocol=%s",
 		proxyID, userID, remoteHost, int(remotePort), protocol)
 
-	remoteAddr := fmt.Sprintf("%s:%d", remoteHost, int(remotePort))
+	// Build host:port safely for IPv4/IPv6 using net.JoinHostPort
+	remoteAddr := net.JoinHostPort(remoteHost, strconv.Itoa(int(remotePort)))
 	usePooling := shouldPoolConnection(protocol)
 
 	var remoteConn net.Conn
@@ -937,7 +939,7 @@ func (c *Client) sendProxyMessage(msgType, proxyID, userID string, data []byte) 
 		"user_id":  userID,
 	}
 
-	if data != nil && len(data) > 0 {
+	if len(data) > 0 {
 		msg["data"] = base64.StdEncoding.EncodeToString(data)
 	}
 

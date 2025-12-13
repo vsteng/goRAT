@@ -1,7 +1,6 @@
 package filebrowser
 
 import (
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -34,7 +33,7 @@ func (b *Browser) Drives() *protocol.DriveListPayload {
 func (b *Browser) Browse(payload *protocol.BrowseFilesPayload) *protocol.FileListPayload {
 	result := &protocol.FileListPayload{Path: payload.Path, Files: []protocol.FileInfo{}}
 
-	entries, err := ioutil.ReadDir(payload.Path)
+	entries, err := os.ReadDir(payload.Path)
 	if err != nil {
 		result.Error = err.Error()
 		return result
@@ -42,12 +41,17 @@ func (b *Browser) Browse(payload *protocol.BrowseFilesPayload) *protocol.FileLis
 
 	for _, entry := range entries {
 		fullPath := filepath.Join(payload.Path, entry.Name())
+		info, err := entry.Info()
+		if err != nil {
+			// Skip entries we can't stat
+			continue
+		}
 		fileInfo := protocol.FileInfo{
 			Name:    entry.Name(),
 			Path:    fullPath,
-			Size:    entry.Size(),
-			Mode:    entry.Mode().String(),
-			ModTime: entry.ModTime(),
+			Size:    info.Size(),
+			Mode:    info.Mode().String(),
+			ModTime: info.ModTime(),
 			IsDir:   entry.IsDir(),
 		}
 		result.Files = append(result.Files, fileInfo)
@@ -66,7 +70,7 @@ func (b *Browser) Browse(payload *protocol.BrowseFilesPayload) *protocol.FileLis
 func (b *Browser) ReadFile(path string) *protocol.FileDataPayload {
 	result := &protocol.FileDataPayload{Path: path}
 
-	data, err := ioutil.ReadFile(path)
+	data, err := os.ReadFile(path)
 	if err != nil {
 		result.Error = err.Error()
 		return result
@@ -83,7 +87,7 @@ func (b *Browser) WriteFile(payload *protocol.FileDataPayload) error {
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return err
 	}
-	return ioutil.WriteFile(payload.Path, payload.Data, 0644)
+	return os.WriteFile(payload.Path, payload.Data, 0644)
 }
 
 // DeleteFile deletes a file or directory.

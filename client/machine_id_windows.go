@@ -7,7 +7,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -87,7 +86,7 @@ func (m *MachineIDGenerator) readDarwinMachineID() (string, error) {
 
 func (m *MachineIDGenerator) readCachedID() (string, error) {
 	idFile := filepath.Join(m.cacheDir, "machine-id")
-	data, err := ioutil.ReadFile(idFile)
+	data, err := os.ReadFile(idFile)
 	if err != nil {
 		return "", err
 	}
@@ -99,7 +98,7 @@ func (m *MachineIDGenerator) writeCachedID(id string) error {
 		return err
 	}
 	idFile := filepath.Join(m.cacheDir, "machine-id")
-	return ioutil.WriteFile(idFile, []byte(id), 0600)
+	return os.WriteFile(idFile, []byte(id), 0600)
 }
 
 func getDefaultCacheDir() string {

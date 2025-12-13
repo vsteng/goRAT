@@ -5,7 +5,6 @@ package client
 
 import (
 	"io"
-	"io/ioutil"
 	"log"
 	"os"
 )
@@ -25,7 +24,7 @@ const (
 func init() {
 	// Release mode: Disable logging by default
 	if !DefaultEnableLog {
-		log.SetOutput(ioutil.Discard)
+		log.SetOutput(io.Discard)
 	}
 }
 
@@ -48,7 +47,7 @@ func SetupLogging(daemon bool) io.WriteCloser {
 	}
 
 	// Disable logging
-	log.SetOutput(ioutil.Discard)
+	log.SetOutput(io.Discard)
 	return nil
 }
 
