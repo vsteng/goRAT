@@ -14,11 +14,11 @@
     
     <div class="toolbar">
         <input type="text" id="currentPath" placeholder="Enter a path...">
-        <button onclick="browsePath()">📂 Browse</button>
-        <button onclick="goUp()">⬆️ Up</button>
-        <button onclick="goHome()">🏠 Home</button>
-        <button onclick="refresh()">🔄 Refresh</button>
-        <button id="drivesBtn" onclick="showDrives()" style="display:none;">💾 Drives</button>
+        <button id="btnBrowse" data-action="browse">📂 Browse</button>
+        <button id="btnUp" data-action="up">⬆️ Up</button>
+        <button id="btnHome" data-action="home">🏠 Home</button>
+        <button id="btnRefresh" data-action="refresh">🔄 Refresh</button>
+        <button id="drivesBtn" data-action="drives" style="display:none;">💾 Drives</button>
     </div>
     
     <div id="drivesPanel" style="display:none; background:white; padding:15px; margin:20px; border-radius:10px; box-shadow:0 2px 10px rgba(0,0,0,0.05);">

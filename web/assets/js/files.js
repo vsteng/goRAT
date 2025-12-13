@@ -92,9 +92,8 @@ function showDrives() {
     }
     
     drivesList.innerHTML = drivesCache.map(drive => {
-        const escapedPath = JSON.stringify(drive.name);
         return `
-            <div class="drive-card" onclick="browseDrive(${escapedPath})" style="background:white; padding:15px; border-radius:5px; border:1px solid #e1e1e1; cursor:pointer; transition:all 0.2s;">
+            <div class="drive-card" data-path="${escapeHtml(drive.name)}" style="background:white; padding:15px; border-radius:5px; border:1px solid #e1e1e1; cursor:pointer; transition:all 0.2s;">
                 <div style="font-weight:600; margin-bottom:8px;">💾 ${escapeHtml(drive.name)}</div>
                 <div style="font-size:12px; color:#666; margin-bottom:6px;">${escapeHtml(drive.label || 'Local Disk')}</div>
                 <div style="font-size:11px; color:#999;">
@@ -177,17 +176,16 @@ function displayFiles(files) {
     }
     
     tbody.innerHTML = files.map(file => {
-        const escapedPath = JSON.stringify(file.path);
         return `
             <tr>
                 <td>
                     <span class="file-icon">${file.is_dir ? '📁' : '📄'}</span>
-                    <span class="file-name" onclick="handleFileClick(${escapedPath}, ${file.is_dir})">${escapeHtml(file.name)}</span>
+                    <span class="file-name" data-path="${escapeHtml(file.path)}" data-is-dir="${file.is_dir}">${escapeHtml(file.name)}</span>
                 </td>
                 <td>${file.is_dir ? '-' : formatSize(file.size)}</td>
                 <td>${formatDate(file.mod_time)}</td>
                 <td>
-                    ${!file.is_dir ? `<button class="action-btn" onclick="downloadFile(${escapedPath})">⬇️ Download</button>` : ''}
+                    ${!file.is_dir ? `<button class="action-btn" data-action="download" data-path="${escapeHtml(file.path)}">⬇️ Download</button>` : ''}
                 </td>
             </tr>
         `;
@@ -295,6 +293,55 @@ document.addEventListener('DOMContentLoaded', function() {
         loadDrives();
     }
     
+    // Wire toolbar buttons without inline handlers
+    const btnBrowse = document.getElementById('btnBrowse');
+    const btnUp = document.getElementById('btnUp');
+    const btnHome = document.getElementById('btnHome');
+    const btnRefresh = document.getElementById('btnRefresh');
+    if (btnBrowse) btnBrowse.addEventListener('click', () => browsePath());
+    if (btnUp) btnUp.addEventListener('click', () => goUp());
+    if (btnHome) btnHome.addEventListener('click', () => goHome());
+    if (btnRefresh) btnRefresh.addEventListener('click', () => refresh());
+
+    // Drives button
+    const drivesBtn2 = document.getElementById('drivesBtn');
+    if (drivesBtn2) drivesBtn2.addEventListener('click', () => showDrives());
+
+    // Event delegation for file list interactions
+    const tbody = document.getElementById('fileList');
+    if (tbody) {
+        tbody.addEventListener('click', (e) => {
+            const nameEl = e.target.closest('.file-name');
+            if (nameEl) {
+                const path = nameEl.dataset.path;
+                const isDir = nameEl.dataset.isDir === 'true' || nameEl.dataset.isDir === true;
+                if (isDir) {
+                    browsePath(path);
+                } else {
+                    if (confirm('Download this file?')) {
+                        downloadFile(path);
+                    }
+                }
+                return;
+            }
+
+            const btn = e.target.closest('button.action-btn');
+            if (btn && btn.dataset.action === 'download') {
+                const path = btn.dataset.path;
+                if (path) downloadFile(path);
+            }
+        });
+    }
+
+    // Event delegation for drives panel cards
+    const drivesList = document.getElementById('drivesList');
+    if (drivesList) {
+        drivesList.addEventListener('click', (e) => {
+            const card = e.target.closest('.drive-card');
+            if (card && card.dataset.path) browseDrive(card.dataset.path);
+        });
+    }
+
     // Set initial path
     if (clientOS === 'windows') {
         currentPath = 'C:\\';

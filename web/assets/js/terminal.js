@@ -168,6 +168,12 @@ function navigateCommandHistory(direction) {
 
 // Initialize event listeners
 document.addEventListener('DOMContentLoaded', function() {
+    // Wire toolbar buttons without inline handlers
+    const btnClear = document.getElementById('btnClear');
+    const btnInterrupt = document.getElementById('btnInterrupt');
+    if (btnClear) btnClear.addEventListener('click', () => clearTerminal());
+    if (btnInterrupt) btnInterrupt.addEventListener('click', () => interruptCommand());
+
     if (commandInput) {
         commandInput.addEventListener('keydown', function(e) {
             if (e.key === 'Enter') {

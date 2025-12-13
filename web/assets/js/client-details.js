@@ -221,7 +221,7 @@ function toggleDrives() {
         list.innerHTML = drivesCache.map(drive => {
             const encodedPath = encodeURIComponent(drive.name || '');
             return `
-                <div class="file-card" style="background: #151826; border: 1px solid #1f2230; border-radius: 10px; padding: 10px; cursor: pointer;" onclick="browseDrive('${encodedPath}')">
+                <div class="file-card" data-path="${encodedPath}" style="background: #151826; border: 1px solid #1f2230; border-radius: 10px; padding: 10px; cursor: pointer;">
                     <div style="font-weight: 600; color: #fff;">💾 ${escapeHtml(drive.name)}</div>
                     <div style="color: var(--text-light); font-size: 12px;">${escapeHtml(drive.label || 'Local Disk')}</div>
                     <div style="color: var(--text-muted); font-size: 12px; margin-top: 6px;">${drive.type} | ${formatBytes(drive.free_size)} free of ${formatBytes(drive.total_size)}</div>
@@ -250,14 +250,15 @@ function renderFileList(files, currentPath) {
         const modified = file.modified ? new Date(file.modified).toLocaleString() : '';
         return `
         <tr>
-            <td><span class="file-icon">${file.is_dir ? '📁' : '📄'}</span>
-                <span class="file-name" onclick="handleFileClick('${encodedPath}')">${escapeHtml(file.name)}</span>
+            <td>
+                <span class="file-icon">${file.is_dir ? '📁' : '📄'}</span>
+                <span class="file-name" data-path="${encodedPath}" data-is-dir="${file.is_dir}">${escapeHtml(file.name)}</span>
             </td>
-            <td>${formatBytes(file.size)}</td>
+            <td>${file.is_dir ? '-' : formatBytes(file.size)}</td>
             <td>${modified}</td>
             <td>
-                <button class="btn btn-small btn-primary" onclick="downloadFile('${encodedPath}')">Download</button>
-                <button class="btn btn-small btn-secondary" onclick="deleteFile('${encodedPath}')">Delete</button>
+                ${!file.is_dir ? `<button class="btn btn-small btn-primary action" data-action="downloadFile" data-path="${encodedPath}">Download</button>` : ''}
+                <button class="btn btn-small btn-secondary action" data-action="deleteFile" data-path="${encodedPath}">Delete</button>
             </td>
         </tr>
         `;
@@ -468,7 +469,7 @@ function renderProcessList(processes) {
             <div><div class="cpu-bar"><div class="cpu-fill" style="width: ${proc.cpu}%"></div></div>${proc.cpu}%</div>
             <div><div class="mem-bar"><div class="mem-fill" style="width: ${proc.memory}%"></div></div>${proc.memory}%</div>
             <div>${proc.status}</div>
-            <button class="kill-btn" onclick="killProcess(${proc.pid})">Kill</button>
+            <button class="kill-btn action" data-action="killProcess" data-pid="${proc.pid}">Kill</button>
         </div>
     `).join('');
 }
@@ -812,6 +813,54 @@ function setupEventListeners() {
             handler(e);
         });
     });
+
+    // Delegation for file table interactions
+    const fileTableBody = document.getElementById('fileTableBody');
+    if (fileTableBody) {
+        fileTableBody.addEventListener('click', (e) => {
+            const nameEl = e.target.closest('.file-name');
+            if (nameEl) {
+                const encodedPath = nameEl.getAttribute('data-path') || '';
+                handleFileClick(encodedPath);
+                return;
+            }
+            const actionBtn = e.target.closest('button.action');
+            if (actionBtn) {
+                const action = actionBtn.getAttribute('data-action');
+                if (action === 'downloadFile') {
+                    const p = actionBtn.getAttribute('data-path') || '';
+                    downloadFile(p);
+                } else if (action === 'deleteFile') {
+                    const p = actionBtn.getAttribute('data-path') || '';
+                    deleteFile(p);
+                }
+            }
+        });
+    }
+
+    // Delegation for drives panel
+    const drivesList = document.getElementById('drivesList');
+    if (drivesList) {
+        drivesList.addEventListener('click', (e) => {
+            const card = e.target.closest('.file-card');
+            if (card) {
+                const encodedPath = card.getAttribute('data-path') || '';
+                browseDrive(encodedPath);
+            }
+        });
+    }
+
+    // Delegation for processes actions
+    const processContainer = document.getElementById('processListContainer');
+    if (processContainer) {
+        processContainer.addEventListener('click', (e) => {
+            const killBtn = e.target.closest('button.kill-btn');
+            if (killBtn) {
+                const pid = killBtn.getAttribute('data-pid');
+                if (pid) killProcess(Number(pid));
+            }
+        });
+    }
 }
 
 // Initialize
