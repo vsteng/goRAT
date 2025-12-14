@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
-	"log"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -13,6 +12,7 @@ import (
 	"gorat/pkg/auth"
 	"gorat/pkg/clients"
 	"gorat/pkg/health"
+	"gorat/pkg/logger"
 	"gorat/pkg/protocol"
 	"gorat/pkg/storage"
 
@@ -57,38 +57,38 @@ func NewWebHandler(sessionMgr auth.SessionManager, clientMgr clients.Manager, st
 	templatesPath := filepath.Join("web", "templates", "*.html")
 	tmpl, err := template.ParseGlob(templatesPath)
 	if err != nil {
-		log.Printf("WARNING: Failed to load web templates from %s: %v", templatesPath, err)
-		log.Println("Web UI will use basic fallback responses")
+		logger.Get().WarnWith("failed to load web templates", "path", templatesPath, "error", err)
+		logger.Get().Warn("web UI will use basic fallback responses")
 		// Continue without templates - we'll provide API-only functionality
 	} else {
 		handler.templates = tmpl
-		log.Printf("✅ Successfully loaded web templates from %s", templatesPath)
+		logger.Get().InfoWith("successfully loaded web templates", "path", templatesPath)
 	}
 
 	// Check if user initialization already happened (for debugging)
 	if store != nil && config.Username != "" {
-		log.Printf("🔐 Initializing admin user - store: %v, config.Username: %s", store != nil, config.Username)
+		logger.Get().InfoWith("initializing admin user", "username", config.Username)
 		adminExists, err := store.AdminExists()
 		if err != nil {
-			log.Printf("WARNING: Failed to check if admin user exists: %v", err)
+			logger.Get().WarnWith("failed to check if admin user exists", "error", err)
 		} else {
-			log.Printf("DEBUG: Admin exists check in web handler: %v", adminExists)
+			logger.Get().DebugWith("admin exists check in web handler", "exists", adminExists)
 
 			// Create admin user if it doesn't exist
 			if !adminExists {
-				log.Printf("🔐 Creating default admin user with username: %s", config.Username)
+				logger.Get().InfoWith("creating default admin user", "username", config.Username)
 				passwordHash, err := handler.passwordHasher.Hash(config.Password)
 				if err != nil {
-					log.Printf("ERROR: Failed to hash admin password: %v", err)
+					logger.Get().ErrorWithErr("failed to hash admin password", err)
 				} else if err := store.CreateWebUser(config.Username, passwordHash, "Administrator", "admin"); err != nil {
-					log.Printf("ERROR: Failed to create admin user: %v", err)
+					logger.Get().ErrorWithErr("failed to create admin user", err)
 				} else {
-					log.Printf("✅ Admin user created successfully with bcrypt hash")
+					logger.Get().Info("admin user created successfully with bcrypt hash")
 				}
 			}
 		}
 	} else {
-		log.Printf("DEBUG: Skipping admin user initialization - store: %v, config.Username: %s", store != nil, config.Username)
+		logger.Get().DebugWith("skipping admin user initialization", "storeAvailable", store != nil, "username", config.Username)
 	}
 
 	return handler, nil
@@ -147,7 +147,7 @@ func (wh *WebHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := wh.templates.ExecuteTemplate(w, "login.html", nil); err != nil {
-		log.Printf("Error rendering login template: %v", err)
+		logger.Get().ErrorWithErr("error rendering login template", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}
 }
@@ -178,7 +178,7 @@ func (wh *WebHandler) HandleLoginAPI(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusUnauthorized)
 		json.NewEncoder(w).Encode(map[string]string{"error": "Invalid username or password"})
-		log.Printf("⚠️ LOGIN ATTEMPT: Empty username from IP %s", clientIP)
+		logger.Get().WarnWith("login attempt with empty username", "ip", clientIP)
 		return
 	}
 
@@ -187,7 +187,7 @@ func (wh *WebHandler) HandleLoginAPI(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusTooManyRequests)
 		json.NewEncoder(w).Encode(map[string]string{"error": "Too many login attempts. Please try again later"})
-		log.Printf("⚠️ RATE LIMITED: IP %s exceeded login attempts", clientIP)
+		logger.Get().WarnWith("rate limited - exceeded login attempts", "ip", clientIP)
 		return
 	}
 
@@ -198,7 +198,7 @@ func (wh *WebHandler) HandleLoginAPI(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusUnauthorized)
 			json.NewEncoder(w).Encode(map[string]string{"error": "Invalid username or password"})
-			log.Printf("⚠️ LOGIN FAILED: User not found - Username: %s, IP: %s", credentials.Username, clientIP)
+			logger.Get().WarnWith("login failed - user not found", "username", credentials.Username, "ip", clientIP)
 			return
 		}
 
@@ -207,7 +207,7 @@ func (wh *WebHandler) HandleLoginAPI(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusUnauthorized)
 			json.NewEncoder(w).Encode(map[string]string{"error": "User account is inactive"})
-			log.Printf("⚠️ LOGIN FAILED: User inactive - Username: %s, IP: %s", credentials.Username, clientIP)
+			logger.Get().WarnWith("login failed - user inactive", "username", credentials.Username, "ip", clientIP)
 			return
 		}
 
@@ -216,7 +216,7 @@ func (wh *WebHandler) HandleLoginAPI(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusUnauthorized)
 			json.NewEncoder(w).Encode(map[string]string{"error": "Invalid username or password"})
-			log.Printf("⚠️ LOGIN FAILED: Invalid password - Username: %s, IP: %s", credentials.Username, clientIP)
+			logger.Get().WarnWith("login failed - invalid password", "username", credentials.Username, "ip", clientIP)
 			return
 		}
 
@@ -229,7 +229,7 @@ func (wh *WebHandler) HandleLoginAPI(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusUnauthorized)
 			json.NewEncoder(w).Encode(map[string]string{"error": "Invalid username or password"})
-			log.Printf("⚠️ LOGIN FAILED: Invalid config credentials - Username: %s, IP: %s", credentials.Username, clientIP)
+			logger.Get().WarnWith("login failed - invalid config username", "username", credentials.Username, "ip", clientIP)
 			return
 		}
 
@@ -238,7 +238,7 @@ func (wh *WebHandler) HandleLoginAPI(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusUnauthorized)
 			json.NewEncoder(w).Encode(map[string]string{"error": "Invalid username or password"})
-			log.Printf("⚠️ LOGIN FAILED: Invalid config credentials - Username: %s, IP: %s", credentials.Username, clientIP)
+			logger.Get().WarnWith("login failed - invalid config password", "username", credentials.Username, "ip", clientIP)
 			return
 		}
 	}
@@ -252,7 +252,7 @@ func (wh *WebHandler) HandleLoginAPI(w http.ResponseWriter, r *http.Request) {
 	session, err := wh.sessionMgr.CreateSession(credentials.Username)
 	if err != nil {
 		http.Error(w, "Failed to create session", http.StatusInternalServerError)
-		log.Printf("❌ SESSION CREATION FAILED: %v", err)
+		logger.Get().ErrorWithErr("session creation failed", err)
 		return
 	}
 
@@ -272,7 +272,7 @@ func (wh *WebHandler) HandleLoginAPI(w http.ResponseWriter, r *http.Request) {
 	})
 
 	// Log successful login
-	log.Printf("✅ LOGIN SUCCESS: Username: %s, IP: %s, User-Agent: %s", credentials.Username, clientIP, userAgent)
+	logger.Get().InfoWith("login success", "username", credentials.Username, "ip", clientIP, "userAgent", userAgent)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "success"})
@@ -331,7 +331,7 @@ func (wh *WebHandler) HandleTerminalPage(w http.ResponseWriter, r *http.Request)
 	}
 
 	if err := wh.templates.ExecuteTemplate(w, "terminal.html", data); err != nil {
-		log.Printf("Error rendering terminal template: %v", err)
+		logger.Get().ErrorWithErr("error rendering terminal template", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}
 }
@@ -370,7 +370,7 @@ func (wh *WebHandler) HandleFilesPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := wh.templates.ExecuteTemplate(w, "files.html", data); err != nil {
-		log.Printf("Error rendering files template: %v", err)
+		logger.Get().ErrorWithErr("error rendering files template", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}
 }
@@ -385,7 +385,7 @@ func (wh *WebHandler) HandleDashboardNew(w http.ResponseWriter, r *http.Request)
 	}
 
 	if err := wh.templates.ExecuteTemplate(w, "dashboard-new.html", nil); err != nil {
-		log.Printf("Error rendering dashboard-new template: %v", err)
+		logger.Get().ErrorWithErr("error rendering dashboard-new template", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}
 }
@@ -412,7 +412,7 @@ func (wh *WebHandler) HandleClientDetails(w http.ResponseWriter, r *http.Request
 	}
 
 	if err := wh.templates.ExecuteTemplate(w, "client-details.html", data); err != nil {
-		log.Printf("Error rendering client-details template: %v", err)
+		logger.Get().ErrorWithErr("error rendering client-details template", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}
 }
@@ -444,7 +444,7 @@ func (wh *WebHandler) HandleClientsAPI(w http.ResponseWriter, r *http.Request) {
 				clientsMap[c.ID] = &copy
 			}
 		} else {
-			log.Printf("Error loading persisted clients: %v", err)
+			logger.Get().ErrorWithErr("error loading persisted clients", err)
 		}
 	}
 
@@ -617,7 +617,7 @@ func (wh *WebHandler) HandleFileBrowse(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid request", http.StatusBadRequest)
 		return
 	}
-	log.Printf("[FileBrowse] Received path: '%s' for client '%s'", req.Path, req.ClientID)
+	logger.Get().DebugWith("file browse request", "path", req.Path, "clientID", req.ClientID)
 
 	// Get client
 	client, ok := wh.clientMgr.GetClient(req.ClientID)
@@ -817,7 +817,7 @@ func (wh *WebHandler) HandleGlobalUpdate(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	log.Printf("Global update initiated: version=%s, platforms=%d", req.Version, len(req.URLs))
+	logger.Get().InfoWith("global update initiated", "version", req.Version, "platforms", len(req.URLs))
 
 	// Get all online clients
 	allClients := wh.clientMgr.GetAllClients()
@@ -847,7 +847,7 @@ func (wh *WebHandler) HandleGlobalUpdate(w http.ResponseWriter, r *http.Request)
 		// Get URL for this platform
 		downloadURL, hasURL := req.URLs[platform]
 		if !hasURL {
-			log.Printf("No URL provided for platform %s, skipping client %s", platform, client.ID)
+			logger.Get().WarnWith("no URL provided for platform, skipping client", "platform", platform, "clientID", client.ID)
 			skippedCount++
 			continue
 		}
@@ -867,16 +867,16 @@ func (wh *WebHandler) HandleGlobalUpdate(w http.ResponseWriter, r *http.Request)
 
 		msg, err := protocol.NewMessage(protocol.MsgTypeUpdate, updatePayload)
 		if err != nil {
-			log.Printf("Failed to create message for client %s: %v", client.ID, err)
+			logger.Get().ErrorWithErr("failed to create message for client", err, "clientID", client.ID)
 			failCount++
 			continue
 		}
 
 		if err := wh.clientMgr.SendToClient(client.ID, msg); err != nil {
-			log.Printf("Failed to send update to client %s (%s): %v", client.ID, platform, err)
+			logger.Get().ErrorWithErr("failed to send update to client", err, "clientID", client.ID, "platform", platform)
 			failCount++
 		} else {
-			log.Printf("Update sent to client %s (%s)", client.ID, platform)
+			logger.Get().InfoWith("update sent to client", "clientID", client.ID, "platform", platform)
 			successCount++
 		}
 	}
@@ -977,7 +977,7 @@ func (wh *WebHandler) HandleUsersAPI(w http.ResponseWriter, r *http.Request) {
 		// List all users
 		users, err := wh.store.GetAllWebUsers()
 		if err != nil {
-			log.Printf("Error getting users: %v", err)
+			logger.Get().ErrorWithErr("error getting users", err)
 			http.Error(w, "Failed to get users", http.StatusInternalServerError)
 			return
 		}
@@ -1016,7 +1016,7 @@ func (wh *WebHandler) HandleUsersAPI(w http.ResponseWriter, r *http.Request) {
 		// Check if user already exists
 		exists, err := wh.store.UserExists(req.Username)
 		if err != nil {
-			log.Printf("Error checking user existence: %v", err)
+			logger.Get().ErrorWithErr("error checking user existence", err)
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
 			return
 		}
@@ -1035,7 +1035,7 @@ func (wh *WebHandler) HandleUsersAPI(w http.ResponseWriter, r *http.Request) {
 		// Hash password with bcrypt before storing
 		passwordHash, err := wh.passwordHasher.Hash(req.Password)
 		if err != nil {
-			log.Printf("Error hashing password: %v", err)
+			logger.Get().ErrorWithErr("error hashing password", err)
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusInternalServerError)
 			json.NewEncoder(w).Encode(map[string]string{"error": "Failed to create user"})
@@ -1044,7 +1044,7 @@ func (wh *WebHandler) HandleUsersAPI(w http.ResponseWriter, r *http.Request) {
 
 		// Create user
 		if err := wh.store.CreateWebUser(req.Username, passwordHash, req.FullName, req.Role); err != nil {
-			log.Printf("Error creating user: %v", err)
+			logger.Get().ErrorWithErr("error creating user", err)
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusInternalServerError)
 			json.NewEncoder(w).Encode(map[string]string{"error": "Failed to create user"})
@@ -1107,7 +1107,7 @@ func (wh *WebHandler) HandleUserAPI(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			if err := wh.store.UpdateWebUserStatus(username, req.Status); err != nil {
-				log.Printf("Error updating user status: %v", err)
+				logger.Get().ErrorWithErr("error updating user status", err)
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusInternalServerError)
 				json.NewEncoder(w).Encode(map[string]string{"error": "Failed to update user status"})
@@ -1130,7 +1130,7 @@ func (wh *WebHandler) HandleUserAPI(w http.ResponseWriter, r *http.Request) {
 			// Hash the new password with bcrypt
 			hash, err := wh.passwordHasher.Hash(req.Password)
 			if err != nil {
-				log.Printf("Error hashing password: %v", err)
+				logger.Get().ErrorWithErr("error hashing password", err)
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusInternalServerError)
 				json.NewEncoder(w).Encode(map[string]string{"error": "Failed to update user"})
@@ -1147,7 +1147,7 @@ func (wh *WebHandler) HandleUserAPI(w http.ResponseWriter, r *http.Request) {
 		// Update other fields if provided
 		if passwordHash != nil || fullName != nil {
 			if err := wh.store.UpdateWebUser(username, fullName, passwordHash); err != nil {
-				log.Printf("Error updating user: %v", err)
+				logger.Get().ErrorWithErr("error updating user", err)
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusInternalServerError)
 				json.NewEncoder(w).Encode(map[string]string{"error": "Failed to update user"})
@@ -1161,7 +1161,7 @@ func (wh *WebHandler) HandleUserAPI(w http.ResponseWriter, r *http.Request) {
 	case http.MethodDelete:
 		// Delete user
 		if err := wh.store.DeleteWebUser(username); err != nil {
-			log.Printf("Error deleting user: %v", err)
+			logger.Get().ErrorWithErr("error deleting user", err)
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusInternalServerError)
 			json.NewEncoder(w).Encode(map[string]string{"error": "Failed to delete user"})
@@ -1288,7 +1288,7 @@ func (wh *WebHandler) ginRequireAuth(handler gin.HandlerFunc) gin.HandlerFunc {
 		userAgent := c.Request.Header.Get("User-Agent")
 
 		if !wh.sessionMgr.VerifySessionContext(session.ID, clientIP, userAgent) {
-			log.Printf("⚠️ SESSION VERIFICATION FAILED: IP mismatch or user-agent change - Username: %s, Session: %s", session.Username, session.ID)
+			logger.Get().WarnWith("session verification failed - IP mismatch or user-agent change", "username", session.Username, "sessionID", session.ID)
 			wh.sessionMgr.DeleteSession(session.ID)
 			c.Redirect(http.StatusSeeOther, "/login")
 			c.Abort()
@@ -1466,13 +1466,13 @@ func (wh *WebHandler) HandleKeyloggerStart(w http.ResponseWriter, r *http.Reques
 	// Send start keylogger message to client
 	msg, err := protocol.NewMessage(protocol.MsgTypeStartKeylogger, protocol.KeyloggerPayload{})
 	if err != nil {
-		log.Printf("Failed to create start keylogger message: %v", err)
+		logger.Get().ErrorWithErr("failed to create start keylogger message", err)
 		http.Error(w, "Failed to create request", http.StatusInternalServerError)
 		return
 	}
 
 	if err := wh.clientMgr.SendToClient(req.ClientID, msg); err != nil {
-		log.Printf("Failed to send start keylogger message to %s: %v", req.ClientID, err)
+		logger.Get().ErrorWithErr("failed to send start keylogger message", err, "clientID", req.ClientID)
 		http.Error(w, "Failed to send request", http.StatusInternalServerError)
 		return
 	}
@@ -1482,7 +1482,7 @@ func (wh *WebHandler) HandleKeyloggerStart(w http.ResponseWriter, r *http.Reques
 		"status":  "started",
 		"message": "Keylogger started",
 	})
-	log.Printf("Keylogger started for client %s", req.ClientID)
+	logger.Get().InfoWith("keylogger started for client", "clientID", req.ClientID)
 }
 
 // HandleKeyloggerStop handles keylogger stop requests
@@ -1504,13 +1504,13 @@ func (wh *WebHandler) HandleKeyloggerStop(w http.ResponseWriter, r *http.Request
 	// Send stop keylogger message to client
 	msg, err := protocol.NewMessage(protocol.MsgTypeStopKeylogger, protocol.KeyloggerPayload{})
 	if err != nil {
-		log.Printf("Failed to create stop keylogger message: %v", err)
+		logger.Get().ErrorWithErr("failed to create stop keylogger message", err)
 		http.Error(w, "Failed to create request", http.StatusInternalServerError)
 		return
 	}
 
 	if err := wh.clientMgr.SendToClient(req.ClientID, msg); err != nil {
-		log.Printf("Failed to send stop keylogger message to %s: %v", req.ClientID, err)
+		logger.Get().ErrorWithErr("failed to send stop keylogger message", err, "clientID", req.ClientID)
 		http.Error(w, "Failed to send request", http.StatusInternalServerError)
 		return
 	}
@@ -1520,7 +1520,7 @@ func (wh *WebHandler) HandleKeyloggerStop(w http.ResponseWriter, r *http.Request
 		"status":  "stopped",
 		"message": "Keylogger stopped",
 	})
-	log.Printf("Keylogger stopped for client %s", req.ClientID)
+	logger.Get().InfoWith("keylogger stopped for client", "clientID", req.ClientID)
 }
 
 // Gin wrapper for HandleKeyloggerStart

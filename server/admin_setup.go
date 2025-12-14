@@ -1,10 +1,9 @@
 package server
 
 import (
-	"log"
-
 	"gorat/pkg/auth"
 	"gorat/pkg/clients"
+	"gorat/pkg/logger"
 	"gorat/pkg/storage"
 
 	ggin "github.com/gin-gonic/gin"
@@ -26,7 +25,7 @@ func SetupGinRouter(config *Config, manager clients.Manager, store storage.Store
 	// Load HTML templates
 	router.LoadHTMLGlob("web/templates/*.html")
 
-	log.Println("✅ Gin router initialized")
+	logger.Get().Info("gin router initialized")
 	return router, nil
 }
 

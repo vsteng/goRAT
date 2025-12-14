@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"net/http"
 	"strings"
@@ -13,6 +12,7 @@ import (
 	"time"
 
 	"gorat/pkg/clients"
+	"gorat/pkg/logger"
 	"gorat/pkg/protocol"
 	"gorat/pkg/proxy"
 	"gorat/pkg/storage"
@@ -382,15 +382,20 @@ func (pm *ProxyManager) createProxyConnectionWithID(id, clientID, remoteHost str
 	// Persist to database if store is available
 	if pm.store != nil {
 		if err := pm.store.SaveProxy(conn.toStorageProxy()); err != nil {
-			log.Printf("WARNING: Failed to save proxy to database: %v", err)
+			logger.Get().WarnWith("failed to save proxy to database", "error", err)
 		}
 	}
 
 	// Start accepting connections
 	go pm.acceptConnections(conn)
 
-	log.Printf("Created proxy connection: %s (client: %s, local: :%d -> %s:%d protocol: %s)",
-		id, clientID, localPort, remoteHost, remotePort, protocol)
+	logger.Get().InfoWith("created proxy connection",
+		"proxyID", id,
+		"clientID", clientID,
+		"localPort", localPort,
+		"remoteHost", remoteHost,
+		"remotePort", remotePort,
+		"protocol", protocol)
 
 	return conn, nil
 }
@@ -399,7 +404,7 @@ func (pm *ProxyManager) createProxyConnectionWithID(id, clientID, remoteHost str
 func (pm *ProxyManager) acceptConnections(conn *ProxyConnection) {
 	defer func() {
 		if r := recover(); r != nil {
-			log.Printf("Panic in acceptConnections: %v", r)
+			logger.Get().ErrorWith("panic in acceptConnections", "panic", r)
 		}
 	}()
 
@@ -422,7 +427,7 @@ func (pm *ProxyManager) acceptConnections(conn *ProxyConnection) {
 			if conn.listener == nil {
 				break
 			}
-			log.Printf("Error accepting connection on proxy %s: %v", conn.ID, err)
+			logger.Get().ErrorWithErr("error accepting connection on proxy", err, "proxyID", conn.ID)
 			continue
 		}
 
@@ -435,7 +440,10 @@ func (pm *ProxyManager) acceptConnections(conn *ProxyConnection) {
 		conn.UserCount++
 		conn.channelsMu.Unlock()
 
-		log.Printf("New user connection accepted on proxy %s: %s (total users: %d)", conn.ID, userID, conn.UserCount)
+		logger.Get().DebugWith("new user connection accepted on proxy",
+			"proxyID", conn.ID,
+			"userID", userID,
+			"totalUsers", conn.UserCount)
 
 		// Handle the connection in a goroutine
 		go pm.handleUserConnection(conn, userConn, userID)
@@ -448,7 +456,7 @@ func (pm *ProxyManager) acceptConnections(conn *ProxyConnection) {
 	}
 	conn.mu.Unlock()
 
-	log.Printf("Stopped accepting connections for proxy %s", conn.ID)
+	logger.Get().InfoWith("stopped accepting connections for proxy", "proxyID", conn.ID)
 }
 
 // sendWebSocketMessage sends a message to websocket (thread-safe write)
@@ -505,18 +513,21 @@ func (pm *ProxyManager) handleUserConnection(proxyConn *ProxyConnection, userCon
 			go pm.sendWebSocketMessage(client, msg) // Async, don't block
 		}
 
-		log.Printf("User connection closed: proxy=%s, user=%s (remaining users: %d)", proxyConn.ID, userID, proxyConn.UserCount)
+		logger.Get().DebugWith("user connection closed",
+			"proxyID", proxyConn.ID,
+			"userID", userID,
+			"remainingUsers", proxyConn.UserCount)
 	}()
 
 	// Get the client
 	client, ok := pm.manager.GetClient(proxyConn.ClientID)
 	if !ok {
-		log.Printf("Client %s not found for proxy relay", proxyConn.ClientID)
+		logger.Get().WarnWith("client not found for proxy relay", "clientID", proxyConn.ClientID)
 		return
 	}
 
 	if client.Conn() == nil {
-		log.Printf("Client websocket not connected: %s", proxyConn.ClientID)
+		logger.Get().WarnWith("client websocket not connected", "clientID", proxyConn.ClientID)
 		return
 	}
 
@@ -531,12 +542,15 @@ func (pm *ProxyManager) handleUserConnection(proxyConn *ProxyConnection, userCon
 	}
 
 	if err := pm.sendWebSocketMessage(client, connectMsg); err != nil {
-		log.Printf("Failed to send proxy_connect message: %v", err)
+		logger.Get().ErrorWithErr("failed to send proxy_connect message", err)
 		return
 	}
 
-	log.Printf("Sent proxy_connect to client: proxy=%s, user=%s, remote=%s:%d",
-		proxyConn.ID, userID, proxyConn.RemoteHost, proxyConn.RemotePort)
+	logger.Get().DebugWith("sent proxy_connect to client",
+		"proxyID", proxyConn.ID,
+		"userID", userID,
+		"remoteHost", proxyConn.RemoteHost,
+		"remotePort", proxyConn.RemotePort)
 
 	// Read from user connection and relay to client via websocket
 	// Increased buffer size for better throughput (16KB like LanProxy's typical frame size)
@@ -551,7 +565,7 @@ func (pm *ProxyManager) handleUserConnection(proxyConn *ProxyConnection, userCon
 		n, err := userConn.Read(buf)
 		if err != nil {
 			if err != io.EOF {
-				log.Printf("Error reading from user connection: %v", err)
+				logger.Get().ErrorWithErr("error reading from user connection", err)
 			}
 			break
 		}
@@ -571,7 +585,7 @@ func (pm *ProxyManager) handleUserConnection(proxyConn *ProxyConnection, userCon
 			}
 
 			if err := pm.sendWebSocketMessage(client, dataMsg); err != nil {
-				log.Printf("Failed to send proxy_data message: %v", err)
+				logger.Get().ErrorWithErr("failed to send proxy_data message", err)
 				break
 			}
 		}
@@ -616,12 +630,12 @@ func (pm *ProxyManager) CloseProxyConnection(id string) error {
 	}
 
 	delete(pm.connections, id)
-	log.Printf("Closed proxy connection: %s (port %d)", id, conn.LocalPort)
+	logger.Get().InfoWith("closed proxy connection", "proxyID", id, "localPort", conn.LocalPort)
 
 	// Update database status if store is available
 	if pm.store != nil {
 		if err := pm.store.DeleteProxy(id); err != nil {
-			log.Printf("WARNING: Failed to delete proxy from database: %v", err)
+			logger.Get().WarnWith("failed to delete proxy from database", "error", err)
 		}
 	}
 
@@ -650,7 +664,7 @@ func (pm *ProxyManager) HandleProxyDataFromClient(proxyID, userID string, data [
 	userConn := *userConnPtr
 	n, err := userConn.Write(data)
 	if err != nil {
-		log.Printf("Error writing to user connection: %v", err)
+		logger.Get().ErrorWithErr("error writing to user connection", err)
 		return err
 	}
 
@@ -692,7 +706,7 @@ func (pm *ProxyManager) HandleProxyDisconnect(proxyID, userID string) error {
 	delete(conn.userChannels, userID)
 	conn.channelsMu.Unlock()
 
-	log.Printf("User disconnected from proxy: proxy=%s, user=%s", proxyID, userID)
+	logger.Get().DebugWith("user disconnected from proxy", "proxyID", proxyID, "userID", userID)
 	return nil
 }
 
@@ -758,17 +772,25 @@ func (pm *ProxyManager) UpdateProxyConnection(id, remoteHost string, remotePort,
 	// Persist changes to database
 	if pm.store != nil {
 		if err := pm.store.UpdateProxy(conn.toStorageProxy()); err != nil {
-			log.Printf("ERROR: Failed to update proxy in database: %v", err)
+			logger.Get().ErrorWithErr("failed to update proxy in database", err)
 			return fmt.Errorf("failed to update database: %v", err)
 		}
-		log.Printf("✅ Updated proxy in database: %s (local: :%d -> %s:%d, protocol: %s)",
-			id, localPort, remoteHost, remotePort, protocol)
+		logger.Get().InfoWith("updated proxy in database",
+			"proxyID", id,
+			"localPort", localPort,
+			"remoteHost", remoteHost,
+			"remotePort", remotePort,
+			"protocol", protocol)
 	} else {
-		log.Printf("⚠️  No database store available, proxy updated in memory only")
+		logger.Get().WarnWith("no database store available, proxy updated in memory only")
 	}
 
-	log.Printf("Updated proxy connection: %s (local: :%d -> %s:%d, protocol: %s)",
-		id, localPort, remoteHost, remotePort, protocol)
+	logger.Get().InfoWith("updated proxy connection",
+		"proxyID", id,
+		"localPort", localPort,
+		"remoteHost", remoteHost,
+		"remotePort", remotePort,
+		"protocol", protocol)
 
 	return nil
 }
@@ -802,21 +824,23 @@ func (pm *ProxyManager) monitorIdleConnections() {
 
 					if idle > conn.MaxIdleTime && userCount == 0 {
 						toClose = append(toClose, id)
-						log.Printf("Proxy %s idle for %v (max: %v), scheduling for closure",
-							id, idle, conn.MaxIdleTime)
+						logger.Get().InfoWith("proxy idle, scheduling for closure",
+							"proxyID", id,
+							"idleTime", idle,
+							"maxIdleTime", conn.MaxIdleTime)
 					}
 				}
 			}
 			pm.mu.RUnlock()
 
 			if totalPoolCleaned > 0 {
-				log.Printf("Cleaned %d idle pooled connections across all proxies", totalPoolCleaned)
+				logger.Get().DebugWith("cleaned idle pooled connections", "count", totalPoolCleaned)
 			}
 
 			// Close idle connections
 			for _, id := range toClose {
 				if err := pm.CloseProxyConnection(id); err != nil {
-					log.Printf("Failed to close idle proxy %s: %v", id, err)
+					logger.Get().ErrorWithErr("failed to close idle proxy", err, "proxyID", id)
 				}
 			}
 
@@ -873,7 +897,7 @@ func (pm *ProxyManager) RestoreProxiesForClient(clientID string) {
 	// Get proxies for this client from database
 	proxies, err := pm.store.GetProxies(clientID)
 	if err != nil {
-		log.Printf("Error loading proxies for client %s: %v", clientID, err)
+		logger.Get().ErrorWithErr("error loading proxies for client", err, "clientID", clientID)
 		return
 	}
 
@@ -881,7 +905,7 @@ func (pm *ProxyManager) RestoreProxiesForClient(clientID string) {
 		return // No proxies to restore
 	}
 
-	log.Printf("Restoring %d proxies for client %s...", len(proxies), clientID)
+	logger.Get().InfoWith("restoring proxies for client", "count", len(proxies), "clientID", clientID)
 
 	for _, proxy := range proxies {
 		// Check if this proxy already exists in memory (already running)
@@ -890,7 +914,7 @@ func (pm *ProxyManager) RestoreProxiesForClient(clientID string) {
 		for _, conn := range pm.connections {
 			if conn.ClientID == clientID && conn.LocalPort == proxy.LocalPort {
 				alreadyExists = true
-				log.Printf("  ℹ️  Proxy already running on :%d, skipping restore", proxy.LocalPort)
+				logger.Get().DebugWith("proxy already running, skipping restore", "localPort", proxy.LocalPort)
 				break
 			}
 		}
@@ -911,15 +935,16 @@ func (pm *ProxyManager) RestoreProxiesForClient(clientID string) {
 		)
 
 		if err != nil {
-			log.Printf("  ⚠️  Failed to restore proxy %s: %v", proxy.ID, err)
+			logger.Get().WarnWith("failed to restore proxy", "error", err, "proxyID", proxy.ID)
 			continue
 		}
 
-		log.Printf("  ✅ Restored proxy: :%d -> %s:%d (protocol: %s)",
-			conn.LocalPort, conn.RemoteHost, conn.RemotePort, conn.Protocol)
-	}
-
-	// Clean up old/duplicate proxy records with same client_id and local_port but different IDs
+		logger.Get().InfoWith("restored proxy",
+			"localPort", conn.LocalPort,
+			"remoteHost", conn.RemoteHost,
+			"remotePort", conn.RemotePort,
+			"protocol", conn.Protocol)
+	} // Clean up old/duplicate proxy records with same client_id and local_port but different IDs
 	if pm.store != nil {
 		pm.store.CleanupDuplicateProxies(clientID)
 	}
@@ -1108,7 +1133,7 @@ func (s *Server) handleClientDelete(w http.ResponseWriter, r *http.Request) {
 	// Remove persistent data (client record and proxies)
 	if s.store != nil {
 		if err := s.store.DeleteClient(clientID); err != nil {
-			log.Printf("Failed to delete client %s from store: %v", clientID, err)
+			logger.Get().ErrorWithErr("failed to delete client from store", err, "clientID", clientID)
 			http.Error(w, "Failed to delete client", http.StatusInternalServerError)
 			return
 		}
@@ -1256,7 +1281,7 @@ func (s *Server) HandleProcessesAPI(w http.ResponseWriter, r *http.Request) {
 	for {
 		select {
 		case <-timeout:
-			log.Printf("Process request timeout for client %s", clientID)
+			logger.Get().WarnWith("process request timeout for client", "clientID", clientID)
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
 			w.Write([]byte("[]"))
@@ -1274,7 +1299,7 @@ func (s *Server) HandleProcessesAPI(w http.ResponseWriter, r *http.Request) {
 				}
 
 				if err := json.NewEncoder(w).Encode(processes); err != nil {
-					log.Printf("Error encoding processes: %v", err)
+					logger.Get().ErrorWithErr("error encoding processes", err)
 				}
 				s.ClearProcessListResult(clientID)
 				return
@@ -1321,7 +1346,7 @@ func (s *Server) HandleSystemInfoAPI(w http.ResponseWriter, r *http.Request) {
 	for {
 		select {
 		case <-timeout:
-			log.Printf("System info request timeout for client %s", clientID)
+			logger.Get().WarnWith("system info request timeout for client", "clientID", clientID)
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
 			w.Write([]byte("{}"))
@@ -1333,7 +1358,7 @@ func (s *Server) HandleSystemInfoAPI(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusOK)
 
 				if err := json.NewEncoder(w).Encode(result); err != nil {
-					log.Printf("Error encoding system info: %v", err)
+					logger.Get().ErrorWithErr("error encoding system info", err)
 				}
 				s.ClearSystemInfoResult(clientID)
 				return

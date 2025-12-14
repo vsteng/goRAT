@@ -2,10 +2,10 @@ package server
 
 import (
 	"encoding/json"
-	"log"
 	"net/http"
 	"time"
 
+	"gorat/pkg/logger"
 	"gorat/pkg/protocol"
 )
 
@@ -23,18 +23,18 @@ func (wh *WebHandler) HandleScreenshotRequest(w http.ResponseWriter, r *http.Req
 	// Send screenshot request
 	msg, err := protocol.NewMessage(protocol.MsgTypeTakeScreenshot, protocol.ScreenshotPayload{})
 	if err != nil {
-		log.Printf("Failed to create screenshot message: %v", err)
+		logger.Get().ErrorWithErr("failed to create screenshot message", err)
 		http.Error(w, "Failed to create request", http.StatusInternalServerError)
 		return
 	}
 
 	if err := wh.clientMgr.SendToClient(clientID, msg); err != nil {
-		log.Printf("Failed to send screenshot request to %s: %v", clientID, err)
+		logger.Get().ErrorWithErr("failed to send screenshot request", err, "clientID", clientID)
 		http.Error(w, "Failed to send request", http.StatusInternalServerError)
 		return
 	}
 
-	log.Printf("Screenshot requested for client %s", clientID)
+	logger.Get().InfoWith("screenshot requested for client", "clientID", clientID)
 
 	// Wait for response with timeout
 	timeout := time.After(30 * time.Second)
@@ -44,7 +44,7 @@ func (wh *WebHandler) HandleScreenshotRequest(w http.ResponseWriter, r *http.Req
 	for {
 		select {
 		case <-timeout:
-			log.Printf("Screenshot request timeout for client %s", clientID)
+			logger.Get().WarnWith("screenshot request timeout", "clientID", clientID)
 			http.Error(w, "Request timeout", http.StatusRequestTimeout)
 			return
 		case <-ticker.C:

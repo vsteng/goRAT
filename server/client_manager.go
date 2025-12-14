@@ -1,10 +1,10 @@
 package server
 
 import (
-	"log"
 	"sync"
 	"time"
 
+	"gorat/pkg/logger"
 	"gorat/pkg/protocol"
 	"gorat/pkg/storage"
 
@@ -64,7 +64,7 @@ func (m *ClientManager) Run() {
 	// Prevent multiple instances
 	m.runningMu.Lock()
 	if m.running {
-		log.Println("ClientManager.Run() already running, skipping duplicate start")
+		logger.Get().Warn("ClientManager.Run() already running, skipping duplicate start")
 		m.runningMu.Unlock()
 		return
 	}
@@ -77,8 +77,8 @@ func (m *ClientManager) Run() {
 		m.runningMu.Unlock()
 
 		if r := recover(); r != nil {
-			log.Printf("PANIC RECOVERED in ClientManager.Run: %v", r)
-			log.Println("Recreating channels and restarting client manager in 2 seconds...")
+			logger.Get().ErrorWith("panic recovered in ClientManager.Run", "panic", r)
+			logger.Get().Info("recreating channels and restarting client manager in 2 seconds")
 
 			// Recreate channels to avoid issues with closed channels
 			m.mu.Lock()
@@ -99,13 +99,13 @@ func (m *ClientManager) Run() {
 			// Check if client ID already exists
 			if existing, exists := m.clients[client.ID]; exists {
 				// Client ID already registered - close the existing connection
-				log.Printf("Client ID %s already exists, closing old connection", client.ID)
+				logger.Get().InfoWith("client ID already exists, closing old connection", "clientID", client.ID)
 				m.safeCloseClient(existing)
 				existing.Conn.Close()
 			}
 			m.clients[client.ID] = client
 			m.mu.Unlock()
-			log.Printf("Client registered: %s (%s)", client.ID, client.Metadata.Hostname)
+			logger.Get().InfoWith("client registered", "clientID", client.ID, "hostname", client.Metadata.Hostname)
 
 		case client := <-m.unregister:
 			m.mu.Lock()
@@ -114,10 +114,10 @@ func (m *ClientManager) Run() {
 			if current, ok := m.clients[client.ID]; ok && current == client {
 				m.safeCloseClient(client)
 				delete(m.clients, client.ID)
-				log.Printf("Client unregistered: %s", client.ID)
+				logger.Get().InfoWith("client unregistered", "clientID", client.ID)
 			} else if ok {
 				// This is an old connection being cleaned up, ignore
-				log.Printf("Ignoring unregister for old connection: %s", client.ID)
+				logger.Get().DebugWith("ignoring unregister for old connection", "clientID", client.ID)
 			}
 			m.mu.Unlock()
 

