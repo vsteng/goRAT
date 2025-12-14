@@ -8,13 +8,13 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"gorat/pkg/clients"
 	"gorat/pkg/protocol"
+	"gorat/pkg/proxy"
 	"gorat/pkg/storage"
 
 	"github.com/gorilla/websocket"
@@ -925,342 +925,80 @@ func (pm *ProxyManager) RestoreProxiesForClient(clientID string) {
 	}
 }
 
-// HandleProxyCreate handles creating a new proxy connection via HTTP
-func (s *Server) HandleProxyCreate(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
+// --- Adapter methods for pkg/proxy interface ---
 
-	var rawReq map[string]interface{}
-	if err := json.NewDecoder(r.Body).Decode(&rawReq); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
-		return
-	}
-
-	// Extract fields, supporting both snake_case and camelCase
-	clientID := ""
-	remoteHost := ""
-	remotePort := 0
-	localPort := 0
-	protocol := ""
-
-	// Try snake_case first
-	if v, ok := rawReq["client_id"].(string); ok {
-		clientID = v
-	} else if v, ok := rawReq["clientId"].(string); ok {
-		clientID = v
-	}
-
-	if v, ok := rawReq["remote_host"].(string); ok {
-		remoteHost = v
-	} else if v, ok := rawReq["remoteHost"].(string); ok {
-		remoteHost = v
-	}
-
-	if v, ok := rawReq["remote_port"].(float64); ok {
-		remotePort = int(v)
-	} else if v, ok := rawReq["remotePort"].(float64); ok {
-		remotePort = int(v)
-	}
-
-	if v, ok := rawReq["local_port"].(float64); ok {
-		localPort = int(v)
-	} else if v, ok := rawReq["localPort"].(float64); ok {
-		localPort = int(v)
-	}
-
-	if v, ok := rawReq["protocol"].(string); ok {
-		protocol = v
-	}
-
-	// Validate required fields
-	if clientID == "" {
-		http.Error(w, "Missing client_id", http.StatusBadRequest)
-		return
-	}
-	if remoteHost == "" {
-		http.Error(w, "Missing remote_host", http.StatusBadRequest)
-		return
-	}
-	if remotePort == 0 {
-		http.Error(w, "Missing remote_port", http.StatusBadRequest)
-		return
-	}
-	if localPort == 0 {
-		http.Error(w, "Missing local_port", http.StatusBadRequest)
-		return
-	}
-
-	if protocol == "" {
-		protocol = "tcp"
-	}
-
-	// Create proxy manager if not exists
-	if s.proxyManager == nil {
-		s.proxyManager = NewProxyManager(s.manager, s.store)
-	}
-
-	conn, err := s.proxyManager.CreateProxyConnection(
-		clientID, remoteHost, remotePort, localPort, protocol)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(conn)
-}
-
-// HandleProxyList lists proxy connections via HTTP
-func (s *Server) HandleProxyList(w http.ResponseWriter, r *http.Request) {
-	// Support both snake_case and camelCase
-	clientID := r.URL.Query().Get("clientId")
-	if clientID == "" {
-		clientID = r.URL.Query().Get("client_id")
-	}
-
-	if s.proxyManager == nil {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode([]ProxyConnection{})
-		return
-	}
-
-	var connections []*ProxyConnection
-	if clientID != "" {
-		connections = s.proxyManager.ListProxyConnections(clientID)
-	} else {
-		connections = s.proxyManager.ListAllProxyConnections()
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(connections)
-}
-
-// HandleProxyClose closes a proxy connection via HTTP
-func (s *Server) HandleProxyClose(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	id := r.URL.Query().Get("id")
-	if id == "" {
-		http.Error(w, "Missing proxy ID", http.StatusBadRequest)
-		return
-	}
-
-	if s.proxyManager == nil {
-		http.Error(w, "Proxy not found", http.StatusNotFound)
-		return
-	}
-
-	if err := s.proxyManager.CloseProxyConnection(id); err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "closed"})
-}
-
-// HandleProxySuggestPorts suggests available ports for a new proxy
-func (s *Server) HandleProxySuggestPorts(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	basePort := 10000 // Default base port
-	if bp := r.URL.Query().Get("basePort"); bp != "" {
-		if p, err := strconv.Atoi(bp); err == nil {
-			basePort = p
-		}
-	}
-
-	count := 5 // Default number of suggestions
-	if c := r.URL.Query().Get("count"); c != "" {
-		if n, err := strconv.Atoi(c); err == nil && n > 0 && n <= 20 {
-			count = n
-		}
-	}
-
-	if s.proxyManager == nil {
-		s.proxyManager = NewProxyManager(s.manager, s.store)
-	}
-
-	suggested := s.proxyManager.GetSuggestedPorts(basePort, count)
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"basePort":       basePort,
-		"suggestedPorts": suggested,
-	})
-}
-
-// HandleProxyEdit updates an existing proxy connection via HTTP
-func (s *Server) HandleProxyEdit(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	var rawReq map[string]interface{}
-	if err := json.NewDecoder(r.Body).Decode(&rawReq); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
-		return
-	}
-
-	// Extract fields
-	proxyID := ""
-	remoteHost := ""
-	remotePort := 0
-	localPort := 0
-	protocol := ""
-
-	// Try snake_case and camelCase
-	if v, ok := rawReq["proxy_id"].(string); ok {
-		proxyID = v
-	} else if v, ok := rawReq["proxyId"].(string); ok {
-		proxyID = v
-	}
-
-	if v, ok := rawReq["remote_host"].(string); ok {
-		remoteHost = v
-	} else if v, ok := rawReq["remoteHost"].(string); ok {
-		remoteHost = v
-	}
-
-	if v, ok := rawReq["remote_port"].(float64); ok {
-		remotePort = int(v)
-	} else if v, ok := rawReq["remotePort"].(float64); ok {
-		remotePort = int(v)
-	}
-
-	if v, ok := rawReq["local_port"].(float64); ok {
-		localPort = int(v)
-	} else if v, ok := rawReq["localPort"].(float64); ok {
-		localPort = int(v)
-	}
-
-	if v, ok := rawReq["protocol"].(string); ok {
-		protocol = v
-	}
-
-	// Validate required fields
-	if proxyID == "" {
-		http.Error(w, "Missing proxy_id", http.StatusBadRequest)
-		return
-	}
-	if remoteHost == "" {
-		http.Error(w, "Missing remote_host", http.StatusBadRequest)
-		return
-	}
-	if remotePort == 0 {
-		http.Error(w, "Missing remote_port", http.StatusBadRequest)
-		return
-	}
-	if localPort == 0 {
-		http.Error(w, "Missing local_port", http.StatusBadRequest)
-		return
-	}
-
-	if protocol == "" {
-		protocol = "tcp"
-	}
-
-	if s.proxyManager == nil {
-		http.Error(w, "Proxy manager not initialized", http.StatusInternalServerError)
-		return
-	}
-
-	if err := s.proxyManager.UpdateProxyConnection(proxyID, remoteHost, remotePort, localPort, protocol); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	conn := s.proxyManager.GetProxyConnection(proxyID)
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(conn)
-}
-
-// HandleProxyStats retrieves statistics for a proxy connection
-func (s *Server) HandleProxyStats(w http.ResponseWriter, r *http.Request) {
-	id := r.URL.Query().Get("id")
-	if id == "" {
-		http.Error(w, "Missing proxy ID", http.StatusBadRequest)
-		return
-	}
-
-	if s.proxyManager == nil {
-		http.Error(w, "Proxy not found", http.StatusNotFound)
-		return
-	}
-
-	conn := s.proxyManager.GetProxyConnection(id)
-	if conn == nil {
-		http.Error(w, "Proxy connection not found", http.StatusNotFound)
-		return
-	}
-
-	// Build enhanced stats response
+// toProxyConnectionInfo converts ProxyConnection to ProxyConnectionInfo for API responses
+func (conn *ProxyConnection) toProxyConnectionInfo() proxy.ProxyConnectionInfo {
 	conn.mu.RLock()
-	stats := map[string]interface{}{
-		"id":            conn.ID,
-		"client_id":     conn.ClientID,
-		"local_port":    conn.LocalPort,
-		"remote_host":   conn.RemoteHost,
-		"remote_port":   conn.RemotePort,
-		"protocol":      conn.Protocol,
-		"bytes_in":      conn.BytesIn,
-		"bytes_out":     conn.BytesOut,
-		"created_at":    conn.CreatedAt,
-		"last_active":   conn.LastActive,
-		"user_count":    conn.UserCount,
-		"uptime":        time.Since(conn.CreatedAt).Seconds(),
-		"idle_time":     time.Since(conn.LastActive).Seconds(),
-		"max_idle_time": conn.MaxIdleTime.Seconds(),
-	}
+	defer conn.mu.RUnlock()
 
-	// Add connection pool stats if available
-	if conn.connPool != nil {
-		stats["pool"] = conn.connPool.Stats()
+	return proxy.ProxyConnectionInfo{
+		ID:          conn.ID,
+		ClientID:    conn.ClientID,
+		LocalPort:   conn.LocalPort,
+		RemoteHost:  conn.RemoteHost,
+		RemotePort:  conn.RemotePort,
+		Protocol:    conn.Protocol,
+		BytesIn:     conn.BytesIn,
+		BytesOut:    conn.BytesOut,
+		CreatedAt:   conn.CreatedAt.Format(time.RFC3339),
+		LastActive:  conn.LastActive.Format(time.RFC3339),
+		UserCount:   conn.UserCount,
+		MaxIdleTime: int64(conn.MaxIdleTime.Seconds()),
 	}
-	conn.mu.RUnlock()
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(stats)
 }
 
-// ProxyFileServer serves files through proxy connections (similar to LanProxy)
-func (s *Server) ProxyFileServer(w http.ResponseWriter, r *http.Request) {
-	clientID := r.URL.Query().Get("client_id")
-	path := r.URL.Query().Get("path")
-
-	if clientID == "" || path == "" {
-		http.Error(w, "Missing parameters", http.StatusBadRequest)
-		return
+// CreateProxyConnectionInfo implements ProxyManagerInterface
+func (pm *ProxyManager) CreateProxyConnectionInfo(clientID, remoteHost string, remotePort, localPort int, protocol string) (proxy.ProxyConnectionInfo, error) {
+	conn, err := pm.CreateProxyConnection(clientID, remoteHost, remotePort, localPort, protocol)
+	if err != nil {
+		return proxy.ProxyConnectionInfo{}, err
 	}
+	return conn.toProxyConnectionInfo(), nil
+}
 
-	client, exists := s.manager.GetClient(clientID)
-	if !exists {
-		http.Error(w, "Client not found", http.StatusNotFound)
-		return
+// ListProxyConnectionsInfo implements ProxyManagerInterface
+func (pm *ProxyManager) ListProxyConnectionsInfo(clientID string) []proxy.ProxyConnectionInfo {
+	conns := pm.ListProxyConnections(clientID)
+	result := make([]proxy.ProxyConnectionInfo, len(conns))
+	for i, conn := range conns {
+		result[i] = conn.toProxyConnectionInfo()
 	}
-	_ = client
+	return result
+}
 
-	// Send file request to client
-	msg := map[string]interface{}{
-		"type": "download_file",
-		"path": path,
+// ListAllProxyConnectionsInfo implements ProxyManagerInterface
+func (pm *ProxyManager) ListAllProxyConnectionsInfo() []proxy.ProxyConnectionInfo {
+	conns := pm.ListAllProxyConnections()
+	result := make([]proxy.ProxyConnectionInfo, len(conns))
+	for i, conn := range conns {
+		result[i] = conn.toProxyConnectionInfo()
 	}
+	return result
+}
 
-	data, _ := json.Marshal(msg)
-	_ = data // TODO: Send through websocket and receive file data
+// GetProxyStatsInfo implements ProxyManagerInterface
+func (pm *ProxyManager) GetProxyStatsInfo() map[string]interface{} {
+	pm.mu.RLock()
+	totalConns := len(pm.connections)
+	var totalBytesIn, totalBytesOut int64
+	var totalUsers int
 
-	// Placeholder: Return file data
-	w.Header().Set("Content-Type", "application/octet-stream")
-	io.WriteString(w, "File content placeholder")
+	for _, conn := range pm.connections {
+		conn.mu.RLock()
+		totalBytesIn += conn.BytesIn
+		totalBytesOut += conn.BytesOut
+		totalUsers += conn.UserCount
+		conn.mu.RUnlock()
+	}
+	pm.mu.RUnlock()
+
+	return map[string]interface{}{
+		"total_connections":  totalConns,
+		"total_bytes_in":     totalBytesIn,
+		"total_bytes_out":    totalBytesOut,
+		"total_active_users": totalUsers,
+	}
 }
 
 // HandleClientGet retrieves or deletes a specific client by ID

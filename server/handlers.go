@@ -16,6 +16,7 @@ import (
 	"gorat/pkg/clients"
 	"gorat/pkg/messaging"
 	"gorat/pkg/protocol"
+	"gorat/pkg/proxy"
 	"gorat/pkg/storage"
 
 	"github.com/gin-gonic/gin"
@@ -39,6 +40,7 @@ type Server struct {
 	webHandler         *WebHandler
 	terminalProxy      *TerminalProxy
 	proxyManager       *ProxyManager
+	proxyHandler       *proxy.ProxyHandler
 	adminHandler       *api.AdminHandler
 	dispatcher         messaging.Dispatcher
 	commandResults     map[string]*protocol.CommandResultPayload
@@ -93,6 +95,9 @@ func NewServer(config *Config) *Server {
 		webHandler = nil // Explicitly set to nil
 	}
 
+	// Initialize ProxyManager first
+	proxyMgr := NewProxyManager(manager, store)
+
 	server := &Server{
 		manager:            manager,
 		store:              store,
@@ -100,6 +105,8 @@ func NewServer(config *Config) *Server {
 		authenticator:      NewAuthenticator(config.AuthToken),
 		webHandler:         webHandler,
 		terminalProxy:      terminalProxy,
+		proxyManager:       proxyMgr,
+		proxyHandler:       proxy.NewProxyHandler(manager, store, proxyMgr),
 		adminHandler:       api.NewAdminHandler(manager, store),
 		dispatcher:         messaging.NewDispatcher(),
 		commandResults:     make(map[string]*protocol.CommandResultPayload),
@@ -188,6 +195,7 @@ func NewServerWithServices(services *Services) (*Server, error) {
 		webHandler:         webHandler, // Properly initialize the webHandler
 		terminalProxy:      services.TermProxy,
 		proxyManager:       services.ProxyMgr,
+		proxyHandler:       proxy.NewProxyHandler(manager, store, services.ProxyMgr),
 		adminHandler:       api.NewAdminHandler(manager, store),
 		dispatcher:         messaging.NewDispatcher(),
 		commandResults:     make(map[string]*protocol.CommandResultPayload),
@@ -403,27 +411,27 @@ func (s *Server) ginHandleTerminalWebSocket(c *gin.Context) {
 }
 
 func (s *Server) ginHandleProxyCreate(c *gin.Context) {
-	s.HandleProxyCreate(c.Writer, c.Request)
+	s.proxyHandler.HandleProxyCreate(c)
 }
 
 func (s *Server) ginHandleProxyList(c *gin.Context) {
-	s.HandleProxyList(c.Writer, c.Request)
+	s.proxyHandler.HandleProxyList(c)
 }
 
 func (s *Server) ginHandleProxyClose(c *gin.Context) {
-	s.HandleProxyClose(c.Writer, c.Request)
+	s.proxyHandler.HandleProxyClose(c)
 }
 
 func (s *Server) ginHandleProxySuggestPorts(c *gin.Context) {
-	s.HandleProxySuggestPorts(c.Writer, c.Request)
+	s.proxyHandler.HandleProxySuggestPorts(c)
 }
 
 func (s *Server) ginHandleProxyEdit(c *gin.Context) {
-	s.HandleProxyEdit(c.Writer, c.Request)
+	s.proxyHandler.HandleProxyEdit(c)
 }
 
 func (s *Server) ginHandleProxyStats(c *gin.Context) {
-	s.HandleProxyStats(c.Writer, c.Request)
+	s.proxyHandler.HandleProxyStats(c)
 }
 
 func (s *Server) ginHandleClientGet(c *gin.Context) {
@@ -477,7 +485,7 @@ func (s *Server) ginHandleSystemInfoAPI(c *gin.Context) {
 }
 
 func (s *Server) ginProxyFileServer(c *gin.Context) {
-	s.ProxyFileServer(c.Writer, c.Request)
+	s.proxyHandler.HandleProxyFileServer(c)
 }
 
 // getClientIP extracts the real client IP from request headers
