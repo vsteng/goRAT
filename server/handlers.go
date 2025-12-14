@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"gorat/pkg/api"
 	"gorat/pkg/auth"
 	"gorat/pkg/clients"
 	"gorat/pkg/messaging"
@@ -38,6 +39,7 @@ type Server struct {
 	webHandler         *WebHandler
 	terminalProxy      *TerminalProxy
 	proxyManager       *ProxyManager
+	adminHandler       *api.AdminHandler
 	dispatcher         messaging.Dispatcher
 	commandResults     map[string]*protocol.CommandResultPayload
 	fileListResults    map[string]*protocol.FileListPayload
@@ -98,6 +100,7 @@ func NewServer(config *Config) *Server {
 		authenticator:      NewAuthenticator(config.AuthToken),
 		webHandler:         webHandler,
 		terminalProxy:      terminalProxy,
+		adminHandler:       api.NewAdminHandler(manager, store),
 		dispatcher:         messaging.NewDispatcher(),
 		commandResults:     make(map[string]*protocol.CommandResultPayload),
 		fileListResults:    make(map[string]*protocol.FileListPayload),
@@ -185,6 +188,7 @@ func NewServerWithServices(services *Services) (*Server, error) {
 		webHandler:         webHandler, // Properly initialize the webHandler
 		terminalProxy:      services.TermProxy,
 		proxyManager:       services.ProxyMgr,
+		adminHandler:       api.NewAdminHandler(manager, store),
 		dispatcher:         messaging.NewDispatcher(),
 		commandResults:     make(map[string]*protocol.CommandResultPayload),
 		fileListResults:    make(map[string]*protocol.FileListPayload),
@@ -310,21 +314,21 @@ func (s *Server) Start() error {
 	router.GET("/api/proxy-file", s.ginProxyFileServer)
 
 	// Admin API endpoints (new)
-	router.GET("/admin/api/clients", s.AdminClientHandler)
-	router.GET("/admin/api/proxies", s.AdminProxyHandler)
-	router.GET("/admin/api/users", s.AdminUserHandler)
-	router.DELETE("/admin/api/client/:id", s.AdminDeleteClientHandler)
-	router.DELETE("/admin/api/proxy/:id", s.AdminDeleteProxyHandler)
-	router.GET("/admin/api/stats", s.AdminStatsHandler)
+	router.GET("/admin/api/clients", s.adminHandler.HandleClientsList)
+	router.GET("/admin/api/proxies", s.adminHandler.HandleProxyList)
+	router.GET("/admin/api/users", s.adminHandler.HandleUsersList)
+	router.DELETE("/admin/api/client/:id", s.adminHandler.HandleDeleteClient)
+	router.DELETE("/admin/api/proxy/:id", s.adminHandler.HandleDeleteProxy)
+	router.GET("/admin/api/stats", s.adminHandler.HandleGetStats)
 
 	// Settings API endpoints
-	router.GET("/admin/api/settings", s.AdminGetSettingsHandler)
-	router.POST("/admin/api/settings", s.AdminSaveSettingsHandler)
+	router.GET("/admin/api/settings", s.adminHandler.HandleGetSettings)
+	router.POST("/admin/api/settings", s.adminHandler.HandleSaveSettings)
 
 	// Public settings API endpoints (for dashboard)
-	router.GET("/api/settings", s.ginHandleGetSettings)
-	router.POST("/api/settings", s.ginHandleSaveSettings)
-	router.POST("/api/push-update", s.ginHandlePushUpdate)
+	router.GET("/api/settings", s.adminHandler.HandleGetSettings)
+	router.POST("/api/settings", s.adminHandler.HandleSaveSettings)
+	router.POST("/api/push-update", s.adminHandler.HandlePushUpdate)
 
 	// Web UI routes (migrate from old handler)
 	if s.webHandler != nil {

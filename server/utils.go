@@ -1,8 +1,7 @@
 package server
 
 import (
-	"log"
-
+	"gorat/pkg/logger"
 	"gorat/pkg/protocol"
 )
 
@@ -22,13 +21,13 @@ func NewAuthenticator(serverToken string) *Authenticator {
 func (a *Authenticator) Authenticate(payload *protocol.AuthPayload) (bool, string) {
 	// Validate token
 	if payload.Token != a.serverToken {
-		log.Printf("Authentication failed for client %s: invalid token", payload.ClientID)
+		logger.Get().WarnWith("authentication failed: invalid token", "clientID", payload.ClientID)
 		return false, ""
 	}
 
 	// Generate new token for this session
 	token := protocol.GenerateToken(payload.ClientID)
-	log.Printf("Client %s authenticated successfully", payload.ClientID)
+	logger.Get().DebugWith("client authenticated successfully", "clientID", payload.ClientID)
 
 	return true, token
 }

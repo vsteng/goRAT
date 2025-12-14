@@ -2,12 +2,12 @@ package server
 
 import (
 	"encoding/json"
-	"log"
 	"net/http"
 	"sync"
 
 	"gorat/pkg/auth"
 	"gorat/pkg/clients"
+	"gorat/pkg/logger"
 	"gorat/pkg/protocol"
 
 	"github.com/gorilla/websocket"
@@ -69,7 +69,7 @@ func (tp *TerminalProxy) HandleTerminalWebSocket(w http.ResponseWriter, r *http.
 	// Upgrade connection
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Printf("Failed to upgrade connection: %v", err)
+		logger.Get().ErrorWithErr("failed to upgrade websocket connection", err)
 		return
 	}
 
@@ -99,7 +99,7 @@ func (tp *TerminalProxy) HandleTerminalWebSocket(w http.ResponseWriter, r *http.
 
 	// Start terminal on client
 	if err := tp.startTerminalOnClient(clientID, sessionID); err != nil {
-		log.Printf("Failed to start terminal on client: %v", err)
+		logger.Get().ErrorWithErr("failed to start terminal on client", err)
 		tp.sendWebError(conn, "Failed to start terminal session")
 		return
 	}
@@ -147,7 +147,7 @@ func (tp *TerminalProxy) handleWebMessages(session *TerminalProxySession) {
 		_, message, err := session.WebConn.ReadMessage()
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				log.Printf("WebSocket error: %v", err)
+				logger.Get().ErrorWithErr("websocket unexpected close", err)
 			}
 			break
 		}
@@ -159,7 +159,7 @@ func (tp *TerminalProxy) handleWebMessages(session *TerminalProxySession) {
 		}
 
 		if err := json.Unmarshal(message, &webMsg); err != nil {
-			log.Printf("Failed to parse web message: %v", err)
+			logger.Get().DebugWith("failed to parse web message", "error", err)
 			continue
 		}
 
@@ -186,12 +186,12 @@ func (tp *TerminalProxy) forwardInputToClient(clientID, sessionID, data string) 
 
 	msg, err := protocol.NewMessage(protocol.MsgTypeTerminalInput, payload)
 	if err != nil {
-		log.Printf("Failed to create terminal input message: %v", err)
+		logger.Get().ErrorWithErr("failed to create terminal input message", err)
 		return
 	}
 
 	if err := tp.clientMgr.SendToClient(clientID, msg); err != nil {
-		log.Printf("Failed to send terminal input to client: %v", err)
+		logger.Get().ErrorWithErr("failed to send terminal input to client", err)
 	}
 }
 
@@ -219,7 +219,7 @@ func (tp *TerminalProxy) HandleTerminalOutput(sessionID, data string, isError bo
 	defer session.mu.Unlock()
 
 	if err := session.WebConn.WriteJSON(response); err != nil {
-		log.Printf("Failed to send output to web UI: %v", err)
+		logger.Get().ErrorWithErr("failed to send output to web UI", err)
 	}
 }
 
