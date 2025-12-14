@@ -31,18 +31,19 @@ type ProxyManagerInterface interface {
 
 // ProxyConnectionInfo represents proxy connection information for API responses
 type ProxyConnectionInfo struct {
-	ID          string `json:"id"`
-	ClientID    string `json:"client_id"`
-	LocalPort   int    `json:"local_port"`
-	RemoteHost  string `json:"remote_host"`
-	RemotePort  int    `json:"remote_port"`
-	Protocol    string `json:"protocol"`
-	BytesIn     int64  `json:"bytes_in"`
-	BytesOut    int64  `json:"bytes_out"`
-	CreatedAt   string `json:"created_at"`
-	LastActive  string `json:"last_active"`
-	UserCount   int    `json:"user_count"`
-	MaxIdleTime int64  `json:"max_idle_time"`
+	ID          string `json:"ID"`
+	ClientID    string `json:"ClientID"`
+	LocalPort   int    `json:"LocalPort"`
+	RemoteHost  string `json:"RemoteHost"`
+	RemotePort  int    `json:"RemotePort"`
+	Protocol    string `json:"Protocol"`
+	BytesIn     int64  `json:"BytesIn"`
+	BytesOut    int64  `json:"BytesOut"`
+	CreatedAt   string `json:"CreatedAt"`
+	LastActive  string `json:"LastActive"`
+	UserCount   int    `json:"UserCount"`
+	MaxIdleTime int64  `json:"MaxIdleTime"`
+	Status      string `json:"Status"`
 }
 
 // NewProxyHandler creates a new ProxyHandler

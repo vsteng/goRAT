@@ -945,6 +945,7 @@ func (conn *ProxyConnection) toProxyConnectionInfo() proxy.ProxyConnectionInfo {
 		LastActive:  conn.LastActive.Format(time.RFC3339),
 		UserCount:   conn.UserCount,
 		MaxIdleTime: int64(conn.MaxIdleTime.Seconds()),
+		Status:      "active",
 	}
 }
 
